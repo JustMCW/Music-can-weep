@@ -1,33 +1,16 @@
-#Hey there ! Why are you here ?
-
+"""
+A music bot :
+  - play music from YOUTUBE URL 
+      -as well keyword searching
+  - pause, resume, looping, restart command
+  - Favourites system allowing user to save songs and play them again
+  - Most of the action can be done with buttons
+"""
 from discord.ext import commands
-
-#Prefix
-default_prefix = ">>"
-from replit import db as database
-async def get_prefix(bot,msg):
-  guild = msg.guild
-  if guild: 
-    id = str(guild.id)
-    return commands.when_mentioned_or(database[id].get("custom_prefix", default_prefix))(bot,msg)
-  return commands.when_mentioned_or(default_prefix)(bot,msg)
-
-#Bot itself
-from discord import Intents
-intents = Intents.default()  
-intents.members = True  
-intents.guilds = True
-
-bot = commands.Bot(
-  command_prefix=get_prefix,
-  intents=intents,
-  help_command=None,
-  case_insensitive=True,
-  owner_id = 812808602997620756
-)
-
-class bot_info:
-  default_prefix = default_prefix
+from os import environ as secret
+class BOT_INFO:
+  default_prefix = ">>"
+  bot_token = secret['token']
   #Logs_channel_id
   cmd_log_id = 923730161864704030
   error_log_id = 923761805619232798
@@ -37,20 +20,42 @@ class bot_info:
     "custom_prefix" : default_prefix,
   }
 
-#Events
-from event import events
-bot.add_cog(events(bot,bot_info))
+#Prefix
+from replit import db as database
+async def get_prefix(bot,msg):
+  guild = msg.guild
+  if guild: 
+    return commands.when_mentioned_or(
+      database[str(guild.id)].get(
+        "custom_prefix",BOT_INFO.default_prefix
+        )
+      )(bot,msg)
+  return commands.when_mentioned_or(BOT_INFO.default_prefix)(bot,msg)
 
-# #On message
-# @bot.event
-# async def on_message(message):
-#   ctx = await bot.get_context(message)
-#   if ctx.author != bot.user: await bot.invoke(ctx)
+#Bot itself
+from discord import Intents
 
-#Keep replit running
-from online import keep_alive as keep_online
-keep_online()
+intents = Intents.default()  
+intents.members = True  
+intents.guilds = True
+BOT = commands.Bot(command_prefix=get_prefix,
+                  intents=intents,
+                  help_command=None,
+                  case_insensitive=True,
+                  owner_id = 812808602997620756)
 
-#Run the bot
-from os import environ as secret
-bot.run(secret['token'])
+def main():
+  print("Started the code")
+  #Add event cog for the BOT
+  from event import events
+  BOT.add_cog(events(BOT,BOT_INFO))
+
+  #Keep replit running so the BOT doesn't go offline
+  from online import keep_online
+  keep_online()
+
+  #Run the BOT
+  BOT.run(BOT_INFO.bot_token)
+
+if __name__ == "__main__":
+  main()

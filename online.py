@@ -7,12 +7,10 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Hello. I am alive!"
-
+    return "web"
 def run():
   app.run(host='0.0.0.0',port=8080)
 
-def keep_alive():
-    print("Web server working")
-    t = Thread(target=run)
-    t.start()
+def keep_online():
+    Thread(target=run).start()
+    print("Web server is set")

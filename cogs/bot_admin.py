@@ -1,65 +1,81 @@
+#These commands are for me to test stuff (and thats why i add "_" in front of it)
+
 from discord.ext import commands
 import discord
 from replit import db
 
 class bot_admin_commands(commands.Cog):
-  def __init__(self,bot,log_id):
+  def __init__(self,bot):
+    print("ADMIM commands is ready")
     self.bot = bot
-    self.log= self.bot.get_channel(log_id)
 
   @commands.is_owner()
-  @commands.command(aliases = ["restartbot","reset"])
-  async def update(self,ctx):
-    await ctx.reply(f"✅ **Successfully restarted {self.bot.user.mention} ⚙️**")
+  @commands.command()
+  async def _say(self,ctx,*,msg):
+    await ctx.send(msg)
+    print(msg)
+  
+  @commands.is_owner()
+  @commands.command()
+  async def _all_server(self,ctx):
+    guildTable = ""
+    for guild in self.bot.guilds:
+      guildTable+=f"{guild.name} : {guild.id}\n"
+    await ctx.send(guildTable)
 
-    #restart the replit / code
+  @commands.is_owner()
+  @commands.command(aliases = ["_restartbot","_reset"])
+  async def _update(self,ctx):
+    await ctx.reply(f"✅ **Restarting - {self.bot.user.mention} ⚙️**")
+
+    #restart / execute the code again
     from os import execv
     from sys import executable,argv
     execv(executable, ['python'] + argv)
 
   @commands.is_owner()
-  @commands.command()
-  async def show_all_db(self,ctx):
-    for i,v in db.items():
-      if i!="favourites":
-        print(i,v)
-
-  @commands.is_owner()
-  @commands.command(aliases=["si"])
-  async def serverinfo(self,ctx,id:int):
+  @commands.command(aliases=["_si"])
+  async def _serverinfo(self,ctx,id:int):
     guild = self.bot.get_guild(id)
     if guild:
       serin = discord.Embed(
         title=guild.name,
-        color=discord.Color.random())
+        color=discord.Color.random(),
+        )
       #print([member.display_name for member in guild.members])
-      serin.add_field(name="Founder 🛠:",value =str(guild.owner), inline=False)
-      serin.add_field(name="Created at 📅:",value =str(guild.created_at)[:-16], inline=False)
-      serin.add_field(name="Location 🌍:",value =str(guild.region), inline=False)
-      serin.add_field(name="ID #️⃣", value=guild.id, inline=False)
-      serin.add_field(name="Members 👨‍👩‍👦",value =str(len([m for m in guild.members if not m.bot])) , inline=True)
-      serin.add_field(name="Bots 🤖",value =str(len([m for m in guild.members if m.bot]) ), inline=True)
-      serin.add_field(name="Roles ☑️",value =str(len(guild.roles)-2), inline=True)
-      serin.add_field(name="Text channels 💬",value =str(len(guild.text_channels)), inline=True)
-      serin.add_field(name="Voice channels 🔊",value =str(len(guild.voice_channels)), inline=True)
-      serin.add_field(name="Emojis 😏",value =str(len(guild.emojis)), inline=True)
+      serin.add_field(name="Founder 🛠:",value =str(guild.owner), inline=True)
+      serin.add_field(name="Created at 📅:",value =str(guild.created_at)[:-16],                   inline=True)
+      serin.add_field(name="Location 🌍:",value =str(guild.region), inline=True)
+      serin.add_field(name="ID #️⃣", value=guild.id, inline=True)
+
+      serin.add_field(name="Members 👨‍👩‍👦",
+                      value =','.join([m.mention for m in guild.members if not m.bot]) or "None" ,
+                      inline=False)
+      serin.add_field(name="Bots 🤖",
+                      value =','.join([m.mention for m in guild.members if m.bot]) or "None",                        
+                      inline=False)
+      serin.add_field(name="Roles ☑️",
+                      value =",".join([role.name for role in guild.roles]) or "None", 
+                      inline=False)
+      
+      serin.add_field(name="Text channels 💬",
+                      value =",".join([txtchan.name for txtchan in guild.text_channels]), 
+                      inline=False)
+      serin.add_field(name="Voice channels 🔊",
+                      value =",".join([vc.name for vc in guild.voice_channels]) or "None",
+                      inline=False)
+      serin.add_field(name="Emojis 😏",
+                      value =",".join([f"<:{emoji.name}:{emoji.id}>" for emoji in guild.emojis]) or "None" , 
+                      inline=False)
+      # <:youtube_icon:937854541666324581>
       #serin.set_thumbnail(url = guild.owner.avator_url)
-      serin.set_image(url=guild.icon_url)
-      await ctx.reply(embed=serin,mention_author=False)
+      serin.set_thumbnail(url=guild.icon_url)
+      await ctx.reply(embed=serin)
     else: await ctx.reply("Failed to get guild")
 
   @commands.is_owner()
-  @commands.command(aliases=["inv"])
-  async def invite(self,ctx,id:int):
-    guild = self.bot.get_guild(id)
-    if not guild: return print("guild not found")
-    channel =guild.system_channel
-    print(dir(channel))
-    link =await channel.create_invite()
-    await ctx.send(link)
-
-  @commands.is_owner()
-  @commands.command(aliases=["allfavourties","allfavs"])
-  async def showallfavourties(self,ctx):
+  @commands.command(aliases=["_allfavourties","_allfavs"])
+  async def _showallfavourties(self,ctx):
     for id in db["favourites"]:
-      print(id,db["favourites"][id])
+      favouritesList = "\n".join(list(db["favourites"][id].keys()))
+      await ctx.send(f'<@{id}> :\n{favouritesList}')
