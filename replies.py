@@ -22,9 +22,9 @@ class replies:
   now_play_msg = "**🎧 Now playing 🎤**"
 
 #Fav_msg
-  added_fav_msg = "👍 `{}` has been added to your favourites !"
+  added_fav_msg = "✅ `{}` has been added to your favourites !"
   removed_fav_msg = "👋 `{}` has been removed from your favourites"
-  already_in_fav_msg = "👍 `{}` is already in your favourites"
+  already_in_fav_msg = "✅ `{}` is already in your favourites"
   fav_empty_msg = "🗒 Your favourite list is currently empty"
 #Errors_msg
   missing_perms_msg = "🚫 You are lacking the permissions to perform this command"

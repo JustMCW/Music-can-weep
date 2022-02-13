@@ -3,9 +3,9 @@ from discord.ext import commands,tasks
 from replit import db
 from replies import replies
 
-PingTime = 60 * 30
-
 #--------------------#
+
+is_down = False
 
 class events(commands.Cog,replies):
   def __init__(self,bot,info):
@@ -28,6 +28,20 @@ class events(commands.Cog,replies):
     if not ctx.guild: return self.default_prefix
     return db[str(ctx.guild.id)].get("custom_prefix", self.default_prefix)
 
+#Self pinging
+  @tasks.loop(seconds=200,reconnect=True)
+  async def pinging(self):
+    from requests import head
+    head("https://Music-can-weep.alt-accounts.repl.co")
+    global is_down
+    if not is_down:
+      is_down = True
+      megasus = head('https://mega-sus-5-star.alt-accounts.repl.co')
+      if megasus.status_code!=200:
+        owner = await self.BOT.fetch_user(self.BOT.owner_id)
+        await owner.send("Mega sus is down L")
+        print("MEga sus down L")
+
 #Change activity / presence
   @tasks.loop(seconds=60,reconnect=True)
   async def changeBotPresence(self):
@@ -44,7 +58,6 @@ class events(commands.Cog,replies):
     ]
 
     await self.BOT.change_presence(activity=randomChoice(presence))
-
 #Setting up
   @commands.Cog.listener()
   async def on_ready(self):
@@ -61,30 +74,18 @@ class events(commands.Cog,replies):
     self.log = self.BOT.get_channel(self.log_id)
     self.error_log = self.BOT.get_channel(self.error_log_id)
 
-    #Add cogs / commands
-    from cogs.music import music_commands
-    from cogs.help import support_commands
-    from cogs.bot_admin import bot_admin_commands
-    
-    self.BOT.add_cog(music_commands(self.BOT,self.log))
-    self.BOT.add_cog(support_commands(self.BOT,self.log))
-    self.BOT.add_cog(bot_admin_commands(self.BOT))
+    cogs =["bot_admin","help","music"]
+    for cog_name in cogs:
+      self.BOT.load_extension(f'cogs.{cog_name}')
 
     #Message that tell us we have logged in
-    log_channel = self.BOT.get_channel(self.log_id)
-    loggin_msg = await log_channel.send(f"`{str(dt.now())[:-7]}` - Logged in as {self.BOT.user.mention} ( running in {len(self.BOT.guilds)} servers ) ;")
+    await self.log.send(f"`{str(dt.now())[:-7]}` - Logged in as {self.BOT.user.mention} ( running in {len(self.BOT.guilds)} servers ) ;")
 
     #Start a loop
     self.changeBotPresence.start()
-
+    
     #Pinging the bot
-    from asyncio import sleep
-    from requests import head
-    while True:
-      await sleep(PingTime)
-      response = head("https://Music-can-weep.alt-accounts.repl.co")
-      if response.status_code != 200:
-        await loggin_msg.reply(f"`{str(dt.now())[:-7]}` - Failed to ping, error:[{response.status_code}];")
+    self.pinging.start()
 
 
   def guess_the_command(self,wrong_cmd,prefix):
@@ -112,11 +113,15 @@ class events(commands.Cog,replies):
     connector = f" / {prefix}"
     return f"Did you mean `{prefix}{connector.join(matchs)}` 🤔"
 
+
+
 #Error handling ( reply and logging)
   @commands.Cog.listener()
   async def on_command_error(self,ctx,commandError):
     log_channel = self.BOT.get_channel(self.log_id)
     error_type = commands.errors
+    print(commandError)
+    await log_channel.send(f"`{str(dt.now())[:-7]}` - {ctx.author} triggered an error : `{str(commandError)}` in [{ctx.guild}] ;")
 
     #Invaild command (command not found)
     if isinstance(commandError,error_type.CommandNotFound):
@@ -159,13 +164,13 @@ class events(commands.Cog,replies):
         await ctx.reply(super().not_playing_msg)
       elif "BotMissingPermission" == customErrorName: 
         await ctx.reply(super().bot_lack_perm_msg)
-
+      else:
+        await self.error_log.send(f"```arm\n{str(dt.now())[:-7]} - Unknwon Error detected : {commandError}\n```")
     #or else it would be the code's error
     else:
       await ctx.reply(f"An error has been captured :\n```coffee\n{commandError}\n```")
-      await self.BOT.get_channel(self.error_log_id).send(f"```arm\n{str(dt.now())[:-7]} - Unknwon Error detected : {commandError}\n```")
-    await log_channel.send(f"`{str(dt.now())[:-7]}` - {ctx.author} triggered an error : `{str(commandError)}` in [{ctx.guild}] ;")
-    print(commandError)
+      await self.error_log.send(f"```arm\n{str(dt.now())[:-7]} - Unknwon Error detected : {commandError}\n```")
+    
 
 #Server joining
   @commands.Cog.listener()
@@ -178,7 +183,9 @@ class events(commands.Cog,replies):
     from discord import Embed
     welcome_embed = Embed(
       title = "**🙌🏻 Thanks for inviting me to this server !**",
-      description = f"This server looks cool! With me, we can make it even better !\nYou are now able to vibe with others in the wave of music 🎶~\n\nyou can already start using the commands ! ( Type {self.default_prefix}help if you need some instructions )")
+      description = f"Type {self.default_prefix}command for some instruction !",
+    )
+      # description = f"This server looks cool! With me, we can make it even better !\nYou are now able to vibe with others in the wave of music 🎶~\n\nyou can already start using the commands ! ( Type {self.default_prefix}help if you need some instructions )")
 
     #Search for a channel to send the Embed
     for channel in guild.text_channels:

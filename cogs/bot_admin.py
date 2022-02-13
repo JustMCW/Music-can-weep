@@ -8,12 +8,18 @@ class bot_admin_commands(commands.Cog):
   def __init__(self,bot):
     print("ADMIM commands is ready")
     self.bot = bot
-
-  @commands.is_owner()
+    
+  @commands.is_owner() 
   @commands.command()
-  async def _say(self,ctx,*,msg):
-    await ctx.send(msg)
-    print(msg)
+  async def _test(self,ctx):
+    pass
+
+
+  @commands.is_owner() 
+  @commands.command()
+  async def _say(self,ctx,message):
+    await ctx.send(message)
+    print(message)
   
   @commands.is_owner()
   @commands.command()
@@ -29,7 +35,8 @@ class bot_admin_commands(commands.Cog):
     await ctx.reply(f"✅ **Restarting - {self.bot.user.mention} ⚙️**")
 
     #restart / execute the code again
-    from os import execv
+    from os import execv,system
+    # system("pip3 freeze --local |sed -rn 's/^([^=# \\t\\\][^ \\t=]*)=.*/echo; echo Processing \1 ...; pip3 install -U \1/p' |sh")
     from sys import executable,argv
     execv(executable, ['python'] + argv)
 
@@ -79,3 +86,6 @@ class bot_admin_commands(commands.Cog):
     for id in db["favourites"]:
       favouritesList = "\n".join(list(db["favourites"][id].keys()))
       await ctx.send(f'<@{id}> :\n{favouritesList}')
+
+def setup(BOT):
+  BOT.add_cog(bot_admin_commands(BOT))

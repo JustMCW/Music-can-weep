@@ -21,11 +21,11 @@ class support_commands(commands.Cog):
     
     await self.log.send(f"`{str(dt.now())[:-7]}` - {ctx.author} just used help command ;")
 
-    if ctx.guild: await ctx.reply("👍🏻 Check your DM")
+    if ctx.guild: await ctx.reply("🙂 I have a lot to tell you, so let's talk in DM !")
     owner = await self.bot.fetch_user(self.bot.owner_id)
 
     botDescription = (
-      "**👋 Hello There ! Glad that you are reading this , highly appreciated !**"+
+      "**👋 Greeting ! Glad that you are reading this , highly appreciated !**"+
       '\n'+
       "\nBy inviting me to your server , you will be able to play music and vibe with your friends ! 🎶 I also offers a cool and useful **BUTTON FEATURE **⏸ ▶ "+
       "\nso you don't have to type to interact with the audio!" +
@@ -63,7 +63,8 @@ class support_commands(commands.Cog):
     try:
       btn = await self.bot.wait_for(event="button_click",
                                     timeout = 60 , 
-                                    check = lambda btn: btn.custom_id == "cmd" and btn.message.id == help_msg.id)
+                                    check = lambda btn:
+                                      btn.message.id == help_msg.id)
     except:
       await help_msg.edit(components = [invBtn])
     else: 
@@ -94,7 +95,7 @@ class support_commands(commands.Cog):
             true_params.append(f"<{parm.replace('=None','')}>")
           else: true_params.append(f"[{parm}]")
 
-        desc = f"```yaml\n{command.description}```"
+        desc = f"```coffee\n{command.description}```"
         final_list += f"\n`{ctx.prefix}{name} {''.join(true_params)}`\n{desc}"
 
     cmd_embed = discord.Embed(
@@ -120,9 +121,9 @@ class support_commands(commands.Cog):
     await ctx.reply(f"**✅ Successfully changed prefix to `{new_prefix}`**")
   
   #status
-  @commands.command(aliases=["info"],description="📊 Display the live status of the bot")
+  @commands.command(aliases=["info","stats"],description="📊 Display the live status of the bot")
   async def status(self,ctx):
-    await self.log.send(f"{str(dt.now())[:-7]}` - {ctx.author} just used status command ;")
+    await self.log.send(f"`{str(dt.now())[:-7]}` - {ctx.author} just used status command ;")
     statusEmbed = discord.Embed(
       title = "**Current Status of the Bot**"
     )
@@ -139,7 +140,7 @@ class support_commands(commands.Cog):
       value = f'{round(self.bot.latency * 1000)}ms',
     )
     statusEmbed.add_field(
-      name = "Last Updated",
+      name = "Last Restarted",
       value = f'<t:{self.lastRestarted}>',
     )
     guild = ctx.guild
@@ -162,3 +163,9 @@ class support_commands(commands.Cog):
     await ctx.reply(
       embed = statusEmbed
     )
+
+
+def setup(BOT):
+  from main import BOT_INFO
+  Log,ErrorLog = BOT_INFO.getLogsChannel(BOT)
+  BOT.add_cog(support_commands(BOT,Log))

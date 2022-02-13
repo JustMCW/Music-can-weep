@@ -15,6 +15,10 @@ class BOT_INFO:
   cmd_log_id = 923730161864704030
   error_log_id = 923761805619232798
 
+  @classmethod
+  def getLogsChannel(CLASS,BOT):
+    return BOT.get_channel(CLASS.cmd_log_id),BOT.get_channel(CLASS.error_log_id)
+
   #Data Base
   default_database = {
     "custom_prefix" : default_prefix,
@@ -46,6 +50,7 @@ BOT = commands.Bot(command_prefix=get_prefix,
 
 def main():
   print("Started the code")
+
   #Add event cog for the BOT
   from event import events
   BOT.add_cog(events(BOT,BOT_INFO))
