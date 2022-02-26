@@ -1,5 +1,5 @@
 #Replies / Message
-class replies:
+class Replies:
   not_in_server_msg = "🏘 This command can only be used in servers ⚜️"
   not_playing_msg = "🔇 No audio playing right now 🎹"
 
@@ -26,6 +26,7 @@ class replies:
   removed_fav_msg = "👋 `{}` has been removed from your favourites"
   already_in_fav_msg = "✅ `{}` is already in your favourites"
   fav_empty_msg = "🗒 Your favourite list is currently empty"
+  
 #Errors_msg
   missing_perms_msg = "🚫 You are lacking the permissions to perform this command"
   missing_arg_msg = "💭 You are missing `{}` for this command to work"

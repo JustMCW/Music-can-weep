@@ -1,13 +1,13 @@
 from datetime import datetime as dt
 from discord.ext import commands,tasks
 from replit import db
-from replies import replies
+from replies import Replies
 
 #--------------------#
 
 is_down = False
 
-class events(commands.Cog,replies):
+class events(commands.Cog,Replies):
   def __init__(self,bot,info):
     self.BOT = bot
     self.default_prefix = info.default_prefix
@@ -119,42 +119,48 @@ class events(commands.Cog,replies):
   @commands.Cog.listener()
   async def on_command_error(self,ctx,commandError):
     log_channel = self.BOT.get_channel(self.log_id)
-    error_type = commands.errors
+    discord_error = commands.errors
     print(commandError)
     await log_channel.send(f"`{str(dt.now())[:-7]}` - {ctx.author} triggered an error : `{str(commandError)}` in [{ctx.guild}] ;")
 
     #Invaild command (command not found)
-    if isinstance(commandError,error_type.CommandNotFound):
+    if isinstance(commandError,discord_error.CommandNotFound):
       wrong_cmd = str(commandError)[9:-14]
       await ctx.reply(super().command_not_found_msg.format(self.guess_the_command(wrong_cmd,self.prefix_str(ctx))))
 
     #Not in server / in private message
-    elif isinstance(commandError,error_type.NoPrivateMessage):
+    elif isinstance(commandError,discord_error.NoPrivateMessage):
       await ctx.reply(super().not_in_server_msg)
 
+    elif isinstance(commandError,discord_error.NotOwner):
+      print(f"{ctx.author} your not owner lol")
+
     #User missing permission (not owner / missing some permisson)
-    elif isinstance(commandError,error_type.NotOwner) or isinstance(commandError,error_type.MissingPermissions):
+    elif isinstance(commandError,discord_error.MissingPermissions):
       await ctx.reply(super().missing_perms_msg)
 
     #Bot missing permsion
-    elif isinstance(commandError,error_type.BotMissingPermissions):
+    elif isinstance(commandError,discord_error.BotMissingPermissions):
       await ctx.reply(super().bot_lack_perm_msg)
 
     #User missing command argument
-    elif isinstance(commandError,error_type.MissingRequiredArgument):
+    elif isinstance(commandError,discord_error.MissingRequiredArgument):
       missed_arg = str(commandError)[:-40]
       await ctx.reply(super().missing_arg_msg.format(missed_arg))
 
     #Input User not found
-    elif isinstance(commandError,error_type.UserNotFound):
+    elif isinstance(commandError,discord_error.UserNotFound):
       await ctx.reply(super().user_not_found_msg)
 
     #Input Channel not found
-    elif isinstance(commandError,error_type.ChannelNotFound):
+    elif isinstance(commandError,discord_error.ChannelNotFound):
       await ctx.reply(super().channel_not_found_msg)
 
+    # elif isinstance(commandError,discord_error.NotFound):
+    #   print("Deleted or idk")
+
     #Custom Errors
-    elif isinstance(commandError,error_type.CommandInvokeError):
+    elif isinstance(commandError,discord_error.CommandInvokeError):
       customErrorName = str(commandError)[29:-2]
       if "UserNotInVoiceChannel" == customErrorName: 
         await ctx.reply(super().user_not_in_vc_msg)

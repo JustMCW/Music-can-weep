@@ -35,7 +35,7 @@ class bot_admin_commands(commands.Cog):
     await ctx.reply(f"✅ **Restarting - {self.bot.user.mention} ⚙️**")
 
     #restart / execute the code again
-    from os import execv,system
+    from os import execv
     # system("pip3 freeze --local |sed -rn 's/^([^=# \\t\\\][^ \\t=]*)=.*/echo; echo Processing \1 ...; pip3 install -U \1/p' |sh")
     from sys import executable,argv
     execv(executable, ['python'] + argv)
@@ -49,7 +49,6 @@ class bot_admin_commands(commands.Cog):
         title=guild.name,
         color=discord.Color.random(),
         )
-      #print([member.display_name for member in guild.members])
       serin.add_field(name="Founder 🛠:",value =str(guild.owner), inline=True)
       serin.add_field(name="Created at 📅:",value =str(guild.created_at)[:-16],                   inline=True)
       serin.add_field(name="Location 🌍:",value =str(guild.region), inline=True)
@@ -74,7 +73,7 @@ class bot_admin_commands(commands.Cog):
       serin.add_field(name="Emojis 😏",
                       value =",".join([f"<:{emoji.name}:{emoji.id}>" for emoji in guild.emojis]) or "None" , 
                       inline=False)
-      # <:youtube_icon:937854541666324581>
+      
       #serin.set_thumbnail(url = guild.owner.avator_url)
       serin.set_thumbnail(url=guild.icon_url)
       await ctx.reply(embed=serin)

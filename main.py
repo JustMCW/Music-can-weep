@@ -1,10 +1,9 @@
 """
 A music bot :
-  - play music from YOUTUBE URL 
-      -as well keyword searching
+  - play music from YOUTUBE URL as well keyword searching
   - pause, resume, looping, restart command
   - Favourites system allowing user to save songs and play them again
-  - Most of the action can be done with buttons
+  - Most of the action can be done with buttons and commands
 """
 from discord.ext import commands
 from os import environ as secret
@@ -17,7 +16,10 @@ class BOT_INFO:
 
   @classmethod
   def getLogsChannel(CLASS,BOT):
-    return BOT.get_channel(CLASS.cmd_log_id),BOT.get_channel(CLASS.error_log_id)
+    return (
+      BOT.get_channel(CLASS.cmd_log_id),
+      BOT.get_channel(CLASS.error_log_id)
+    )
 
   #Data Base
   default_database = {
@@ -28,6 +30,7 @@ class BOT_INFO:
 from replit import db as database
 async def get_prefix(bot,msg):
   guild = msg.guild
+  print(f"{guild} - {msg.author} : {msg.content}")
   if guild: 
     return commands.when_mentioned_or(
       database[str(guild.id)].get(
@@ -50,7 +53,7 @@ BOT = commands.Bot(command_prefix=get_prefix,
 
 def main():
   print("Started the code")
-
+  
   #Add event cog for the BOT
   from event import events
   BOT.add_cog(events(BOT,BOT_INFO))
