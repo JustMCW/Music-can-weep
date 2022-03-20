@@ -39,7 +39,7 @@ class Favourties:
       if len(new_data) < len(old_data):
         with open(FavouritesDir+str(user.id)+".json","w") as jsonfw:
           json.dump(new_data,jsonfw,indent = Indentation)
-      else:
+      elif len(new_data) != len(old_data):
         jsonf.seek(0)
         json.dump(new_data,jsonf,indent = Indentation)
       

@@ -350,7 +350,7 @@ class Function:
         elif (time.perf_counter() - start_time)<1 and looping not in ["stop","restart"]:
           print("403 detected !")
           #Get a new piece of info
-          Track = await SongTrack.create_track(Track.webpage_url)
+          Track = SongTrack.create_track(Track.webpage_url)
         #Looping is off
         elif not looping or looping == "stop":
           self.bot.loop.create_task(self.clear_audio_message(guild,Track.webpage_url))
@@ -679,7 +679,7 @@ class music_commands(commands.Cog,
               from re import findall
               try:
                   index = int(findall(r'\d+', query)[0])
-                  title, link = Favourties.get_track_by_index(author, index)
+                  title, link = Favourties.get_track_by_index(author, index-1)
                   query = link
               except:
                   return await ctx.reply(
@@ -991,8 +991,5 @@ class music_commands(commands.Cog,
       await ctx.reply(embed=favouritesEmbed)
 
 
-
 def setup(BOT):
   BOT.add_cog(music_commands(BOT))
-
-#Code ends here 

@@ -11,8 +11,8 @@ import os,json
 
 class BOT_INFO:
     BOT_TOKEN = os.environ['token']
-  
-    DefaultPrefix = "??"
+  #OTE5NTk3MjgwNTIzMzQ1OTYx.YbYHtA.loRdonvp56WuLDo5vJbdqaC7zGE
+    DefaultPrefix = ">>"
   
     InitialVolume = 0.5
   
@@ -64,7 +64,7 @@ def main():
 
     #Keep replit running so the BOT doesn't go offline
     from online import keep_online
-    # keep_online()
+    keep_online()
 
     #Run the BOT
     from discord import errors as DiscdError
