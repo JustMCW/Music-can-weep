@@ -1,8 +1,9 @@
-from datetime import datetime as dt
 from discord.ext import commands,tasks
-from replit import db
 from replies import Replies
+import json
 
+from log import Logging
+DiscordServerDatabase = "Database/DiscordServers.json"
 #--------------------#
 
 is_down = False
@@ -10,23 +11,33 @@ is_down = False
 class events(commands.Cog,Replies):
   def __init__(self,bot,info):
     self.BOT = bot
-    self.default_prefix = info.default_prefix
-    self.default_database = info.default_database
-    self.log_id = info.cmd_log_id
-    self.error_log_id = info.error_log_id
+    self.DefaultPrefix = info.DefaultPrefix
+    self.DefaultDatabase = info.DefaultDatabase
+
     self.cmd_aliases_list = []
 
 #make sure every server has a database
   def checkDatabase(self):
-    for guild in self.BOT.guilds:
-      if str(guild.id) not in db.keys():
-        print(guild," lacking Database lol")
-        db.set(str(guild.id),self.default_database)
+    with open(DiscordServerDatabase,"r+") as jsonf:
+      data = json.load(jsonf)
+
+      for guild in self.BOT.guilds:
+        if str(guild.id) not in data.keys():
+          print(guild,"lacking Database")
+          data[str(guild.id)] = self.DefaultDatabase
+        elif data[str(guild.id)].keys() != self.DefaultDatabase.keys():
+          data[str(guild.id)] = dict(self.DefaultDatabase , **data[guild.id])
+          print(guild,"has incorrect key")
+      
+      jsonf.seek(0)
+      json.dump(data,jsonf,indent = 3)
+    
 
 #Get prefix in string
   def prefix_str(self,ctx):
-    if not ctx.guild: return self.default_prefix
-    return db[str(ctx.guild.id)].get("custom_prefix", self.default_prefix)
+    if not ctx.guild: return self.DefaultPrefix
+    with open(DiscordServerDatabase,"r") as jsonfr:
+      return json.load(jsonfr)[str(ctx.guild.id)].get("custom_prefix", self.DefaultPrefix)
 
 #Self pinging
   @tasks.loop(seconds=200,reconnect=True)
@@ -71,15 +82,12 @@ class events(commands.Cog,Replies):
     from discord_components import DiscordComponents
     DiscordComponents(self.BOT)
 
-    self.log = self.BOT.get_channel(self.log_id)
-    self.error_log = self.BOT.get_channel(self.error_log_id)
-
     cogs =["bot_admin","help","music"]
     for cog_name in cogs:
-      self.BOT.load_extension(f'cogs.{cog_name}')
+      self.BOT.load_extension(f'Cogs.{cog_name}')
 
     #Message that tell us we have logged in
-    await self.log.send(f"`{str(dt.now())[:-7]}` - Logged in as {self.BOT.user.mention} ( running in {len(self.BOT.guilds)} servers ) ;")
+    await Logging.log(f"Logged in as {self.BOT.user.mention} ( running in {len(self.BOT.guilds)} servers ) ;")
 
     #Start a loop
     self.changeBotPresence.start()
@@ -116,12 +124,11 @@ class events(commands.Cog,Replies):
 
 
 #Error handling ( reply and logging)
-  @commands.Cog.listener()
+  # @commands.Cog.listener()
   async def on_command_error(self,ctx,commandError):
-    log_channel = self.BOT.get_channel(self.log_id)
     discord_error = commands.errors
     print(commandError)
-    await log_channel.send(f"`{str(dt.now())[:-7]}` - {ctx.author} triggered an error : `{str(commandError)}` in [{ctx.guild}] ;")
+    await Logging.log(f"{ctx.author} triggered an error : `{str(commandError)}` in [{ctx.guild}] ;")
 
     #Invaild command (command not found)
     if isinstance(commandError,discord_error.CommandNotFound):
@@ -156,9 +163,6 @@ class events(commands.Cog,Replies):
     elif isinstance(commandError,discord_error.ChannelNotFound):
       await ctx.reply(super().channel_not_found_msg)
 
-    # elif isinstance(commandError,discord_error.NotFound):
-    #   print("Deleted or idk")
-
     #Custom Errors
     elif isinstance(commandError,discord_error.CommandInvokeError):
       customErrorName = str(commandError)[29:-2]
@@ -171,27 +175,29 @@ class events(commands.Cog,Replies):
       elif "BotMissingPermission" == customErrorName: 
         await ctx.reply(super().bot_lack_perm_msg)
       else:
-        await self.error_log.send(f"```arm\n{str(dt.now())[:-7]} - Unknwon Error detected : {commandError}\n```")
+        await Logging.error(str(commandError))
+    
+    elif "NotFound" in str(commandError):
+      pass
+      
     #or else it would be the code's error
     else:
-      await ctx.reply(f"An error has been captured :\n```coffee\n{commandError}\n```")
-      await self.error_log.send(f"```arm\n{str(dt.now())[:-7]} - Unknwon Error detected : {commandError}\n```")
+      await Logging.error(str(commandError))
     
 
 #Server joining
   @commands.Cog.listener()
   async def on_guild_join(self,guild):
-    log_channel = self.BOT.get_channel(self.log_id)
     link = await guild.system_channel.create_invite(xkcd=True, max_age = 0, max_uses = 0)
-    await log_channel.send(f"`{str(dt.now())[:-7]}` - I joined `{guild.name}` ( ID :{guild.id}) <@{self.BOT.owner_id}>;\{link}")
+    await Logging.log(f"Joined `{guild.name}` ( ID :{guild.id}) <@{self.BOT.owner_id}>;{link}")
 
     #welcome embed
     from discord import Embed
     welcome_embed = Embed(
       title = "**🙌🏻 Thanks for inviting me to this server !**",
-      description = f"Type {self.default_prefix}command for some instruction !",
+      description = f"Type {self.DefaultPrefix}command for some instruction !",
     )
-      # description = f"This server looks cool! With me, we can make it even better !\nYou are now able to vibe with others in the wave of music 🎶~\n\nyou can already start using the commands ! ( Type {self.default_prefix}help if you need some instructions )")
+      # description = f"This server looks cool! With me, we can make it even better !\nYou are now able to vibe with others in the wave of music 🎶~\n\nyou can already start using the commands ! ( Type {self.DefaultPrefix}help if you need some instructions )")
 
     #Search for a channel to send the Embed
     for channel in guild.text_channels:
@@ -200,4 +206,10 @@ class events(commands.Cog,Replies):
         break
 
     #Settle the database for the server
-    db[str(guild.id)] = self.default_database
+    with open(DiscordServerDatabase,"r+") as jsonf:
+      data = json.load(jsonf)
+      
+      data[str(guild.id)] = self.DefaultDatabase
+  
+      jsonf.seek(0)
+      json.dump(data,jsonf,indent = 3)

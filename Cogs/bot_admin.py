@@ -2,36 +2,41 @@
 
 from discord.ext import commands
 import discord
-from replit import db
+# from replit import db
 
 class bot_admin_commands(commands.Cog):
   def __init__(self,bot):
     print("ADMIM commands is ready")
     self.bot = bot
-    
+
   @commands.is_owner() 
-  @commands.command()
-  async def _test(self,ctx):
+  @commands.group(invoke_without_command=True)
+  async def admin(ctx):
     pass
+  
+  @commands.is_owner() 
+  @admin.command()
+  async def test(self,ctx):
+    await ctx.send("This is a testing command.")
 
 
   @commands.is_owner() 
-  @commands.command()
-  async def _say(self,ctx,message):
+  @admin.command()
+  async def say(self,ctx,*,message):
     await ctx.send(message)
     print(message)
   
   @commands.is_owner()
-  @commands.command()
-  async def _all_server(self,ctx):
+  @admin.command()
+  async def all_server(self,ctx):
     guildTable = ""
     for guild in self.bot.guilds:
       guildTable+=f"{guild.name} : {guild.id}\n"
     await ctx.send(guildTable)
 
   @commands.is_owner()
-  @commands.command(aliases = ["_restartbot","_reset"])
-  async def _update(self,ctx):
+  @admin.command(aliases = ["restartbot","reset"])
+  async def update(self,ctx):
     await ctx.reply(f"✅ **Restarting - {self.bot.user.mention} ⚙️**")
 
     #restart / execute the code again
@@ -41,8 +46,8 @@ class bot_admin_commands(commands.Cog):
     execv(executable, ['python'] + argv)
 
   @commands.is_owner()
-  @commands.command(aliases=["_si"])
-  async def _serverinfo(self,ctx,id:int):
+  @admin.command(aliases=["si","showserver"])
+  async def serverinfo(self,ctx,id:int):
     guild = self.bot.get_guild(id)
     if guild:
       serin = discord.Embed(
@@ -79,12 +84,12 @@ class bot_admin_commands(commands.Cog):
       await ctx.reply(embed=serin)
     else: await ctx.reply("Failed to get guild")
 
-  @commands.is_owner()
-  @commands.command(aliases=["_allfavourties","_allfavs"])
-  async def _showallfavourties(self,ctx):
-    for id in db["favourites"]:
-      favouritesList = "\n".join(list(db["favourites"][id].keys()))
-      await ctx.send(f'<@{id}> :\n{favouritesList}')
+  # @commands.is_owner()
+  # @admin.command(aliases=["allfavourties","allfavs"])
+  # async def showallfavourties(self,ctx):
+  #   for id in db["favourites"]:
+  #     favouritesList = "\n".join(list(db["favourites"][id].keys()))
+  #     await ctx.send(f'<@{id}> :\n{favouritesList}')
 
 def setup(BOT):
   BOT.add_cog(bot_admin_commands(BOT))

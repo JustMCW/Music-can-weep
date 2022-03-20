@@ -35,3 +35,5 @@ class Replies:
   channel_not_found_msg = f"🔍 Channel was not found 💬"
 
   bot_lack_perm_msg = f"🎹 I am missing the permission to do that !"
+
+#Replies.fav_empty_msg

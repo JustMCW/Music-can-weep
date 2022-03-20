@@ -1,17 +1,19 @@
 #This script is relativly easy , try to figure it out yourself :P
 
-import discord
-from datetime import datetime as dt
-from time import time as epochTime
+import discord,json
+
 from discord.ext import commands
-from replit import db
 from discord_components import Button, ButtonStyle , ActionRow 
 
+from log import Logging
+DiscordServerDatabase = "Database/DiscordServers.json"
+
 class support_commands(commands.Cog):
-  def __init__(self,bot,log):
+  def __init__(self,bot):
     print("HELP commands is ready")
     self.bot = bot
-    self.log = log
+
+    from time import time as epochTime
     self.lastRestarted = round(epochTime())
     super().__init__()
 
@@ -19,7 +21,7 @@ class support_commands(commands.Cog):
   @commands.command(aliases = ["how","setup","h"],description = "👍🏻 Send a message to teach you how to use me")
   async def help(self,ctx):
     
-    await self.log.send(f"`{str(dt.now())[:-7]}` - {ctx.author} just used help command ;")
+    await Logging.log(f"{ctx.author} just used help command")
 
     if ctx.guild: await ctx.reply("🙂 I have a lot to tell you, so let's talk in DM !")
     owner = await self.bot.fetch_user(self.bot.owner_id)
@@ -74,14 +76,16 @@ class support_commands(commands.Cog):
   #show all commands
   @commands.command(aliases = ["cmd","cmds","commandlist"],description = "🗒 Display this message")
   async def command(self,ctx):
-    await self.log.send(f"`{str(dt.now())[:-7]}` - {ctx.author} just used show command list command ;")
+    await Logging.log(f"{ctx.author} viewed the command list")
     final_list = f"**👍🏻 Few things to know before continue reading :**\n\n✅ *[argument] means it's required and <argument> means it's optional*\n✅ *You can mention {self.bot.user.mention} instead of a typing a prefix*"
 
     cogs = self.bot.cogs
 
     for cog_name in cogs:
-      if "bot_admin" in cog_name or "event" in cog_name: continue
+      if "admin" in cog_name in cog_name.lower(): continue
+        
       final_list += f"\n\n**{cog_name.replace('_',' ').upper()}**\n"
+      
       for command in cogs[cog_name].get_commands():
         name = command.name
 
@@ -111,19 +115,24 @@ class support_commands(commands.Cog):
   @commands.has_guild_permissions(administrator=True)
   @commands.command(aliases = ["change_prefix_to","sp","setprefix"],description = "⚙️ change my command prefix to whatever you want , maximum 3 characters \n( you will need to have administration permission in the server to use this command 🔣 )")
   async def set_prefix(self,ctx, *, new_prefix):
-    await self.log.send(f"{str(dt.now())[:-7]}` - {ctx.author} just set prefix to {new_prefix} ;")
-    await self.log.send(f"`{str(dt.now())[:-7]}` - {ctx.author} set my prefix in {ctx.guild} to `{new_prefix}` ;")
+    await Logging.log(f"{ctx.author} just set my prefix to {new_prefix} ;")
 
     if len(new_prefix) > 5: 
       return await ctx.reply("🚫 Prefix cannot be longer than 5 characters")
-
-    db[str(ctx.guild.id)]["custom_prefix"] = new_prefix
+      
+    with open(DiscordServerDatabase,"r+") as jsonf:
+      data = json.load(jsonf)
+      
+      data[str(ctx.guild.id)]["prefix"] = new_prefix
+  
+      with open(DiscordServerDatabase,"w") as jsonfw:
+        json.dump(data,jsonfw,indent = 3)
     await ctx.reply(f"**✅ Successfully changed prefix to `{new_prefix}`**")
   
   #status
   @commands.command(aliases=["info","stats"],description="📊 Display the live status of the bot")
   async def status(self,ctx):
-    await self.log.send(f"`{str(dt.now())[:-7]}` - {ctx.author} just used status command ;")
+    await Logging.log(f"{ctx.author} just used status command ;")
     statusEmbed = discord.Embed(
       title = "**Current Status of the Bot**"
     )
@@ -145,8 +154,8 @@ class support_commands(commands.Cog):
     )
     guild = ctx.guild
     if guild:
-
-      prefix = db[str(guild.id)].get("custom_prefix")
+      with open(DiscordServerDatabase,"r") as jsonf:
+        prefix = json.load(jsonf)[str(guild.id)].get("prefix")
 
       statusEmbed.add_field(
         name = 'Server Prefix',
@@ -165,7 +174,16 @@ class support_commands(commands.Cog):
     )
 
 
+
+  
+  @commands.group(invoke_without_command=True,description="Coming soon !")
+  async def config(self,ctx,*_):
+    await ctx.reply("Configuration coming soon")
+
+  @config.command()
+  async def queuing(self,ctx,*_):
+    
+    pass
+
 def setup(BOT):
-  from main import BOT_INFO
-  Log,ErrorLog = BOT_INFO.getLogsChannel(BOT)
-  BOT.add_cog(support_commands(BOT,Log))
+  BOT.add_cog(support_commands(BOT))
