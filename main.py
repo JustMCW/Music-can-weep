@@ -65,8 +65,8 @@ def main():
     BOT.add_cog(events(BOT, BOT_INFO))
 
     #Keep replit running so the BOT doesn't go offline
-    from online import keep_online
-    keep_online()
+    # from online import keep_online
+    # keep_online()
 
     #Run the BOT
     from discord import errors as DiscdError

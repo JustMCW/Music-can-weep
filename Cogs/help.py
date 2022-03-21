@@ -40,12 +40,12 @@ class support_commands(commands.Cog):
     )
 
     EmbedColor = discord.Color.from_rgb(255,255,255)
-
+    import datetime
     help_embed = discord.Embed(title = "**All about Music Can Weep**",
                               description = botDescription,
                               color = EmbedColor,
-                              timestamp=dt.now()).set_thumbnail(
-                              url = self.bot.user.avatar_url)
+                              timestamp=datetime.datetime.now()
+                            ).set_thumbnail(url = self.bot.user.avatar_url)
 
     DM = await ctx.author.create_dm()
 
