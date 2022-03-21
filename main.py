@@ -9,8 +9,10 @@ A discord music bot :
 from discord.ext import commands
 import os,json
 
+with open("TOKEN.txt","r") as tkf:
+  BOT_TOKEN = tkf.readlines()[0].strip()
+
 class BOT_INFO:
-    BOT_TOKEN = os.environ['token']
   #OTE5NTk3MjgwNTIzMzQ1OTYx.YbYHtA.loRdonvp56WuLDo5vJbdqaC7zGE
     DefaultPrefix = ">>"
   
@@ -69,7 +71,7 @@ def main():
     #Run the BOT
     from discord import errors as DiscdError
     try:
-        BOT.run(BOT_INFO.BOT_TOKEN)
+        BOT.run(BOT_TOKEN)
     except DiscdError.HTTPException:
         print("KILL !!!!!")
         os.system("kill 1")
