@@ -84,6 +84,7 @@ class events(commands.Cog,Replies):
 
     cogs =["bot_admin","help","music"]
     for cog_name in cogs:
+      print(f"Loading {cog_name}")
       self.BOT.load_extension(f'Cogs.{cog_name}')
 
     #Message that tell us we have logged in
@@ -124,7 +125,7 @@ class events(commands.Cog,Replies):
 
 
 #Error handling ( reply and logging)
-  # @commands.Cog.listener()
+  @commands.Cog.listener()
   async def on_command_error(self,ctx,commandError):
     discord_error = commands.errors
     print(commandError)
