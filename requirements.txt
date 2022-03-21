@@ -92,7 +92,6 @@ python-language-server==0.31.10
 pyxel==1.6.9
 referenceqvm==0.3
 regex==2021.8.28
-replit==3.2.4
 requests==2.27.1
 requests-oauthlib==1.3.0
 requests-toolbelt==0.9.1
