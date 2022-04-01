@@ -10,6 +10,7 @@ class Replies:
 
   paused_audio_msg = "⏸ *Paused*"
   resumed_audio_msg = "▶️ *Resumed*"
+  skipped_audio_msg = "⏹ *Skipped*"
   stopped_audio_msg = "⏹ *Stopped playing*"
   restarted_audio_msg = "🔄 *Restarted the song*"
 
@@ -18,7 +19,8 @@ class Replies:
   same_vc_msg = "👍🏻 Already joined {}"
   free_to_use_msg = "🎧 Nothing is playing right now... meaning you are free to use it ! 👍🏻"
 
-  loop_audio_msg = "🔂 looping has been set to {}"
+  loop_audio_msg = "🔂 Looping has been set to {}"
+  queue_loop_audio_msg = "🔂 Queue looping has been set to {}"
   now_play_msg = "**🎧 Now playing 🎤**"
 
 #Fav_msg
@@ -33,6 +35,8 @@ class Replies:
   command_not_found_msg = "💭 This command was not found ( {} )"
   user_not_found_msg = f"🔍 User was not found 👻"
   channel_not_found_msg = f"🔍 Channel was not found 💬"
+  
+  queue_empty_msg = "📦 Queue is empty ... play some songs !"
 
   bot_lack_perm_msg = f"🎹 I am missing the permission to do that !"
 

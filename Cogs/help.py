@@ -177,12 +177,11 @@ class support_commands(commands.Cog):
 
   
   @commands.group(invoke_without_command=True,description="Coming soon !")
-  async def config(self,ctx,*_):
+  async def config(self,ctx):
     await ctx.reply("Configuration coming soon")
 
   @config.command()
-  async def queuing(self,ctx,*_):
-    
+  async def queuing(self,ctx,m):
     pass
 
 def setup(BOT):

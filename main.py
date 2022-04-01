@@ -9,8 +9,8 @@ A discord music bot :
 from discord.ext import commands
 import os,json
 
-with open("TOKEN.txt","r") as tkf:
-  BOT_TOKEN = tkf.readlines()[0].strip()
+# with open("TOKEN.txt","r") as tkf:
+#   BOT_TOKEN = tkf.readlines()[0].strip()
 
 class BOT_INFO:
   #OTE5NTk3MjgwNTIzMzQ1OTYx.YbYHtA.loRdonvp56WuLDo5vJbdqaC7zGE
@@ -18,7 +18,7 @@ class BOT_INFO:
   
     InitialVolume = 0.5
   
-    InitialLooping = True
+    InitialLooping = False
     InitialQueueLooping = True
   
     InitialQueuing = True
@@ -64,20 +64,14 @@ def main():
     from event import events
     BOT.add_cog(events(BOT, BOT_INFO))
 
-    #Keep replit running so the BOT doesn't go offline
-    # from online import keep_online
-    # keep_online()
-
-    #Run the BOT
-    from discord import errors as DiscdError
-    try:
-        BOT.run(BOT_TOKEN)
-    except DiscdError.HTTPException:
-        print("KILL !!!!!")
-        os.system("kill 1")
-        
+    from discord import opus
+    if not opus.is_loaded():
+      print("Loading opus ...")
+      opus.load_opus("/Users/xwong/Desktop/lib/libopus.dylib")
+    
+    BOT.run("OTMxMDA3NTcxOTQ1NDcyMDcx.Yd-KXg.OZYMCXnD2PlT8-m3pTM39jSoYUs")
+      
 
 
 if __name__ == "__main__":
     main()
-  

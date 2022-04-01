@@ -1,3 +1,4 @@
+import queue
 import discord, asyncio, time
 from datetime import datetime
 from discord.ext import commands
@@ -65,8 +66,9 @@ class Embeds:
     NowplayingEmbed.add_field(name="Volume 📶",
                               value=f"{self.get_volume_percentage(guild)}",
                               inline=True)
+
     NowplayingEmbed.add_field(name="Looping 🔂",
-                              value=f'**{self.get_deco_loop(guild)}**',
+                              value=f'**{Convert.bool_to_str(self.get_loop(guild))}**',
                               inline=True)
 
     return NowplayingEmbed
@@ -91,10 +93,10 @@ class Buttons:
                           custom_id="resume",
                           style=ButtonStyle.green,
                           emoji="▶️")
-    StopButton = Button(label="Stop",
-                        custom_id="stop",
-                        style=ButtonStyle.red,
-                        emoji="⛔")
+    SkipButton = Button(label="Skip",
+                        custom_id="Skip",
+                        style=ButtonStyle.blue,
+                        emoji="⏩")
     RestartButton = Button(label="Restart",
                             custom_id="restart",
                             style=ButtonStyle.grey,
@@ -118,7 +120,7 @@ class Buttons:
                               emoji="🎧")
 
     AudioControllerButtons=[
-        [PauseButton,ResumeButton,StopButton,RestartButton],
+        [PauseButton,ResumeButton,SkipButton,RestartButton],
         [FavouriteButton,LoopButton,SubtitlesButton]
       ].copy()
 
@@ -152,9 +154,9 @@ class Buttons:
         self.resume_audio(btn.guild)
         await self.inform_changes(btn,Replies.resumed_audio_msg)
 
-    async def on_stop_btn_press(self,btn):
+    async def on_skip_btn_press(self,btn):
       await btn.edit_origin(content=btn.message.content)
-      await self.stop_audio(btn.guild)
+      await self.skip_audio(btn.guild)
       await self.inform_changes(btn,Replies.stopped_audio_msg)
 
     async def on_restart_btn_press(self,btn):
@@ -167,7 +169,7 @@ class Buttons:
       current_loop = self.get_loop(btn.guild)
       self.get_queue(btn.guild).looping = not current_loop
       await self.inform_changes(btn,
-        Replies.loop_audio_msg.format(self.get_deco_loop(btn.guild)
+        Replies.loop_audio_msg.format(Convert.bool_to_str(self.get_loop(btn.guild))
         )
       )
 
@@ -228,7 +230,6 @@ class Buttons:
           f"{''.join(self.extract_subtitles(languages,selected_language))}"
         )
 
-
     async def on_play_again_btn_press(self,btn):
       ctx = await self.bot.get_context(btn.message)
       guild = btn.guild
@@ -273,25 +274,19 @@ class Function:
         raise error_type.NotInVoiceChannel
       guild.voice_client.resume()
 
-    async def stop_audio(self,guild):
+    async def skip_audio(self,guild):
       if not guild.voice_client: 
         raise error_type.NotInVoiceChannel
 
-      orginalValue = self.get_loop(guild)
-      self.get_queue(guild).looping = "stop"
+      self.get_queue(guild).audio_control_status = "SKIP"
       guild.voice_client.stop()
-      await asyncio.sleep(.5)
-      self.get_queue(guild).looping = orginalValue
 
     async def restart_audio(self,guild):
       if not guild.voice_client: 
         raise error_type.NotInVoiceChannel
 
-      orginalValue = self.get_loop(guild)
-      self.get_queue(guild).looping = "restart"
+      self.get_queue(guild).audio_control_status = "RESTART"
       guild.voice_client.stop()
-      await asyncio.sleep(.5)
-      self.get_queue(guild).looping = orginalValue
 
     #Search Audio fromm Youtube
     @staticmethod
@@ -338,35 +333,125 @@ class Function:
                     if len(FilteredQueryList) == limit: break
 
         return FilteredQueryList
-          
-    async def after_playing(self, guild, start_time,Track:SongTrack):
+
+    async def create_audio_message(self,Track:SongTrack,Target):
+        #Getting the subtitle
+       
+        FoundLyrics = super().find_subtitle_and_language(getattr(Track,"subtitles",None))[0]
+
+        guild = Target.guild
+        #the message for displaying and controling the audio
+
+        AUDIO_EMBED = self.audio_playing_embed(guild,Track.requester,FoundLyrics,Track)
+        CONTROL_BUTTONS = Buttons.AudioControllerButtons
+        
+        #if it's found then dont disable or if is't not found disable it
+        CONTROL_BUTTONS[1][2].disabled = not FoundLyrics 
+
+        if isinstance(Target,discord.Message):
+          await Target.edit(embed=AUDIO_EMBED,
+                            components=CONTROL_BUTTONS)
+
+        elif isinstance(Target,discord.TextChannel):
+          Target = await Target.send(embed=AUDIO_EMBED,
+                                         components=CONTROL_BUTTONS)
+                                            
+
+        self.now_playing[guild.id] = {"message_id":Target.id,
+                                      "channel_id":Target.channel.id,
+                                      "info":Track
+                                    }
+    
+    async def after_playing(self, guild, start_time,FinshedTrack:SongTrack,error = None):
+        
+        if error:
+          return print(error)
+
         voice_client = guild.voice_client
-        looping = self.get_loop(guild)
+
         #Left voice channel
         if not voice_client:
-          self.bot.loop.create_task(self.clear_audio_message(guild,Track.webpage_url))
+          self.bot.loop.create_task(self.clear_audio_message(guild,FinshedTrack.webpage_url))
           return print("Left VC")
-        #counter 403 forbidden error
-        elif (time.perf_counter() - start_time)<1 and looping not in ["stop","restart"]:
-          print("403 detected !")
+
+
+        queue = self.get_queue(guild)
+        looping = queue.looping
+        queue_looping = queue.queue_looping
+        audio_control_status = queue.audio_control_status #None means The song ends naturaly
+
+        NextTrack = FinshedTrack
+
+        #counter 403 forbidden error (an error that try cannot catch)
+        if (time.perf_counter() - start_time) < 0.5 and audio_control_status is None:
+
+          print("Http error detected ! :",time.perf_counter() - start_time)
           #Get a new piece of info
-          Track = SongTrack.create_track(Track.webpage_url)
+          NextTrack = SongTrack.create_track(query = FinshedTrack.webpage_url,
+                                            requester=FinshedTrack.requester)
+          
+          if queue[0] == FinshedTrack:
+            queue[0].formats = NextTrack.formats
+                                                  
         #Looping is off
-        elif not looping or looping == "stop":
-          self.bot.loop.create_task(self.clear_audio_message(guild,Track.webpage_url))
-          voice_client.stop()
-          return print(f"Loop off or stopped")
-   
+        elif (looping == False or audio_control_status == "SKIP") and audio_control_status != "RESTART":
+
+          #if queue loop is on
+          if queue_looping:
+            queue.move_first_to_last()    
+          else:
+            queue -= 0
+
+          NextTrack = queue[0]
+
+          #To prevent sending the same audio message again
+          if NextTrack != FinshedTrack:
+            
+            #Get the next song
+            
+            if NextTrack is None:
+              self.bot.loop.create_task(self.clear_audio_message(guild,FinshedTrack.webpage_url))
+              return print("Queue is empty")
+
+            async def display_next():
+              now_playing = self.now_playing[guild.id]
+
+              target = self.bot.get_channel(now_playing["channel_id"])
+              history = target.history(limit = 5)
+              history = await history.flatten()
+
+              for msg in history:
+                if msg.id == now_playing["message_id"]:
+                  target = await target.fetch_message(msg.id)
+
+              if isinstance(target,discord.TextChannel):
+                self.bot.loop.create_task(
+                  self.clear_audio_message(guild,FinshedTrack.webpage_url)
+                )
+              await self.create_audio_message(Track = NextTrack,
+                                              Target = target)
+              
+            
+            self.bot.loop.create_task(display_next())
+          
+          elif audio_control_status == "SKIP" and queue_looping:
+
+            return print("Skipped the only song in the queue")
+
+        #To show that we have handle the control
+        queue.audio_control_status = None
+
         new_start_time =float(time.perf_counter())
 
         #Play the audio
-        Track.play(voice_client,
-                  after=lambda error: asyncio.run(self.after_playing(guild,new_start_time,Track)),
-                  volume=self.get_volume(guild)
-                )
+        NextTrack.play(voice_client,
+                      after=lambda error: asyncio.run(self.after_playing(guild,new_start_time,NextTrack,error)),
+                      volume=self.get_volume(guild)
+                    )
 
     async def update_audio_msg(self,guild):
-        if not self.is_playing(guild): return
+        if not self.is_playing(guild): 
+          return
         audio_msg = self.get_now_playing(guild)
         if not audio_msg: 
           return
@@ -389,7 +474,7 @@ class Function:
                                   value=f"{self.get_volume_percentage(guild)}")
         new_embed.insert_field_at(index=5,
                                   name="Looping 🔂",
-                                  value=f"**{self.get_deco_loop(guild)}**")
+                                  value=f"**{Convert.bool_to_str(self.get_loop(guild))}**")
 
         #Apply the changes                  
         await audio_msg.edit(embed=new_embed)
@@ -411,7 +496,10 @@ class Function:
         for _ in range(4):
           newEmbed.remove_field(2)
 
+        content = now_playing_msg.content if len(now_playing_msg.content) >1 else "☕️ Audio playing before :"
+
         await now_playing_msg.edit(
+          content = content,
           embed=newEmbed,
           components=Buttons.AfterAudioButtons)
         
@@ -488,7 +576,8 @@ class music_commands(commands.Cog,
         voice_client = ctx.voice_client
 
         #Not in a voice voice_client
-        if not voice_client: raise error_type.NotInVoiceChannel
+        if not voice_client: 
+          raise error_type.NotInVoiceChannel
 
         #Disconnect from voice_client
         await voice_client.disconnect()
@@ -510,7 +599,8 @@ class music_commands(commands.Cog,
         #Checking
         if not ctx.voice_client:
             raise error_type.NotInVoiceChannel
-        if not super().is_playing(ctx.guild):
+
+        if not ctx.voice_client.is_playing():
             raise error_type.NoAudioPlaying
 
         super().pause_audio(ctx.guild)
@@ -528,7 +618,7 @@ class music_commands(commands.Cog,
         #Checking
         if not ctx.voice_client:
             raise error_type.NotInVoiceChannel
-        if not super().is_playing(ctx.guild):
+        if not ctx.voice_client.is_playing():
             raise error_type.NoAudioPlaying
 
         super().resume_audio(ctx.guild)
@@ -539,6 +629,23 @@ class music_commands(commands.Cog,
         )
 
     @commands.guild_only()
+    @commands.command(aliases=["next"],
+                      description='⏩ skip to the next audio in the queue')
+    async def skip(self, ctx):
+
+        #Checking
+        if not ctx.voice_client:
+            raise error_type.NotInVoiceChannel
+        if not ctx.voice_client.is_playing():
+            raise error_type.NoAudioPlaying
+
+        await self.skip_audio(ctx.guild)
+
+        await ctx.reply(Replies.skipped_audio_msg)
+        await Logging.log(
+            f"{ctx.author} used stop command in [{ctx.guild}] ;"
+        )
+    @commands.guild_only()
     @commands.command(aliases=["stop_playing"],
                       description='⏹ stop the current audio from playing 🚫')
     async def stop(self, ctx):
@@ -546,15 +653,17 @@ class music_commands(commands.Cog,
         #Checking
         if not ctx.voice_client:
             raise error_type.NotInVoiceChannel
-        if not super().is_playing(ctx.guild):
+        if not ctx.voice_client.is_playing():
             raise error_type.NoAudioPlaying
+        
+        await ctx.voice_client.disconnect()
 
-        await super().stop_audio(ctx.guild)
+        await ctx.reply(Replies.stopped_audio_msg)
 
-        await ctx.reply(super().stopped_audio_msg)
         await Logging.log(
             f"{ctx.author} used stop command in [{ctx.guild}] ;"
         )
+
 
     @commands.guild_only()
     @commands.command(aliases=["replay", "re"],
@@ -564,12 +673,12 @@ class music_commands(commands.Cog,
         #Checking
         if not ctx.voice_client:
             raise error_type.NotInVoiceChannel
-        if not super().is_playing(ctx.guild):
+        if not ctx.voice_client.is_playing():
             raise error_type.NoAudioPlaying
 
-        await super().restart_audio(ctx.guild)
+        await self.restart_audio(ctx.guild)
 
-        await ctx.reply(super().restarted_audio_msg)
+        await ctx.reply(Replies.restarted_audio_msg)
         await Logging.log(
             f"{ctx.author} used restart command in [{ctx.guild}] ;"
         )
@@ -602,38 +711,61 @@ class music_commands(commands.Cog,
         true_volume = volume_percentage / 100 * BOT_INFO.InitialVolume
         
         self.get_queue(ctx.guild).volume = true_volume
-        await super().update_audio_msg(ctx.guild)
+
+        await self.update_audio_msg(ctx.guild)
         vc = ctx.voice_client
-        if vc:
-          audio = vc.source
-          if audio: 
-            audio.volume = true_volume
+        if vc and vc.source:
+          vc.source.volume = true_volume
             
         await ctx.reply(f"🔊 Volume has been set to {round(volume_percentage,2)}%")
 #Set looping
 
     @commands.guild_only()
-    @commands.command(aliases=["looping",'setloop','setlooping','setloopingto',"toggleloop","toggle_looping",'changelooping','set_loop' ,"repeat", 'lop'],
-                      description='🔂 Enable / Disable looping')
+    @commands.command(aliases=["looping","single_loop",'setloop','setlooping','setloopingto',"toggleloop","toggle_looping",'changelooping','set_loop' ,"repeat", 'lop'],
+                      description='🔂 Enable / Disable looping, when enabled song will restart after playing')
     async def loop(self, ctx, mode=None):
         guild = ctx.guild
       
         new_loop = self.get_loop(guild)
-      
+
         #if not specified a mode
         if not mode:
           new_loop = not new_loop
         else:
           new_loop = Convert.str_to_bool(mode)
           if new_loop is None:
-            await ctx.reply("🪗 Enter a vaild looping mode : `on / off`")
-    
-        self.get_queue(guild).looping = new_loop or BOT_INFO.InitialLooping
-        await ctx.reply(super().loop_audio_msg.format(Convert.bool_to_str(new_loop)))
+            return await ctx.reply("🪗 Enter a vaild looping mode : `on / off`")
+
+        self.get_queue(guild).looping = new_loop
+        await ctx.reply(Replies.loop_audio_msg.format(
+            Convert.bool_to_str(self.get_loop(guild))
+        ))
         await super().update_audio_msg(guild)
 
         await Logging.log(f"{ctx.author} set loop to `{new_loop}` in [{guild}] ;")
         
+    @commands.guild_only()
+    @commands.command(aliases=["queue_looping","quelop7","ql"],
+                      description='🔂 Enable / Disable queue looping, \
+      when enabled song will be moved to the last from the queue after finsh playing')
+    async def queue_loop(self,ctx,mode=None):
+        guild = ctx.guild
+      
+        new_qloop = self.get_queue_loop(guild)
+
+        #if not specified a mode
+        if not mode:
+          new_qloop = not new_qloop
+        else:
+          new_qloop = Convert.str_to_bool(mode)
+          if new_qloop is None:
+            return await ctx.reply("🪗 Enter a vaild looping mode : `on / off`")
+            
+        self.get_queue(guild).queue_looping = new_qloop
+        await ctx.reply(Replies.queue_loop_audio_msg.format(Convert.bool_to_str(self.get_queue_loop(guild))))
+
+        await Logging.log(f"{ctx.author} set queue loop to `{new_qloop}` in [{guild}] ;")
+    
 #----------------------------------------------------------------#
 #Playing the audio
 
@@ -663,10 +795,7 @@ class music_commands(commands.Cog,
             return await btn.respond(type=4,
                                     content=Replies.user_not_in_vc_msg)
         elif btn:
-          try:
-            await btn.edit_origin(content=btn.message.content)
-          except discord.errors.NotFound as _:
-            pass
+          await btn.edit_origin(content=btn.message.content)
           
         reply_msg = await ctx.reply(
           content=f"🎻 {btn.author.mention} requests to play this song again 👍"
@@ -674,6 +803,7 @@ class music_commands(commands.Cog,
       
         
         if not btn:
+
           #Get song from favourites if user want song from their fav
           if 'fav' in query.lower():
               from re import findall
@@ -686,13 +816,15 @@ class music_commands(commands.Cog,
                       "❌ Failed to get song from your favourite list")
               else:
                   reply_msg = await ctx.send(
-                      f"🎧 Track **#{index}** in {author.mention}'s' favourites has been selected"
+                      f"🎧 Track **#{index}** in {author.mention}'s favourites has been selected"
                   )
                 
           #If URL
           elif query.startswith("https://"):
               if query.startswith("https://www.youtube.com/watch?v="): 
-                reply_msg = await ctx.send(f"{Emojis.YOUTUBE_ICON} A Youtube link is selected ✅")
+                reply_msg = await ctx.send(
+                  f"{Emojis.YOUTUBE_ICON} A Youtube link is selected"
+                )
               #Not youtube video link
               else:
                 return await ctx.send("💿 Sorry ! But only Youtube video links can be played !")
@@ -702,7 +834,10 @@ class music_commands(commands.Cog,
               await ctx.trigger_typing()
               #Searching
               searchResult = super().searchAudio(query,limit=5)
-  
+
+              if not searchResult:
+                return await ctx.reply("An error hass been captured when searching for the audio ! ( Try again )")
+
               #Add the buttons and texts for user to see
               choicesString = ""
               selectButtons = []
@@ -713,9 +848,7 @@ class music_commands(commands.Cog,
                   selectButtons.append(Button(label=str(i+1),
                                               custom_id=str(i),
                                               style=ButtonStyle.blue))
-              if not selectButtons:
-                print(searchResult)
-                return await ctx.reply("An error hass been captured when searching for the audio !")
+              
               #Send those buttons and texts
               selectMsg = await ctx.send(embed=discord.Embed(
                   title="🎵  Select a song you would like to play : ( click the button below )",
@@ -745,10 +878,21 @@ class music_commands(commands.Cog,
                   query = f'https://www.youtube.com/watch?v={searchResult[int(btn.custom_id)]["videoId"]}'
 
         #------
+        #Stop current audio if in voice channel
+        if guild.voice_client: 
+          pass
+            # await super().skip_audio(guild)
+        #Join Voice channel
+        elif author.voice:
+            await super().join_voice_channel(guild=guild,
+                                            vc=author.voice.channel)
 
-        #Getting the audio file + it's information
+        #Create the track
         try:
-            NewTrack = SongTrack.create_track(query)
+            NewTrack = await self.bot.loop.run_in_executor(
+              None,
+              lambda: SongTrack.create_track(query=query,
+                                            requester=author))
         #If failed
         except BaseException as expection:
             await Logging.log(f"an error captured when trying to get info from `{query}` : {expection} ;")
@@ -757,50 +901,72 @@ class music_commands(commands.Cog,
             )
         #if success
         else:
-          #Stop current audio if in voice channel
-          if guild.voice_client: 
-            await super().stop_audio(guild)
-            
-          #Join Voice channel
-          elif author.voice:
-              await super().join_voice_channel(guild=guild,
-                                              vc=author.voice.channel)
-
+          queue = self.get_queue(guild)
+          queue += NewTrack
+      
+          if queue[1] is not None:         
+            await reply_msg.edit(f"{reply_msg.content} | {NewTrack.title} has been added to the queue at **#{len(queue)-1}**")
+            if self.is_playing(guild):
+              return
+            else:
+              NewTrack = queue[0]
+          
           #Repeat function after the audio
           start_time = float(time.perf_counter())
           repeat = lambda error: asyncio.run(
-            self.after_playing(guild,start_time,NewTrack))
+            self.after_playing(guild,start_time,NewTrack,error))
 
           #Play the audio
           NewTrack.play(guild.voice_client,
                         volume = self.get_volume(guild),
                         after=repeat)
           
-          #Getting the subtitle
-          FoundLyrics = super().find_subtitle_and_language(getattr(NewTrack,"subtitles",None))[0]
+          await self.create_audio_message(NewTrack,reply_msg)
+#----------------------------------------------------------------#
+    @commands.guild_only()
+    @commands.command(aliases = ["que","qeueu","q"],
+                      description="Display the queue")
+    async def queue(self,ctx):
+      queue = self.get_queue(ctx.guild)
+      if len(queue) ==0: raise error_type.QueueEmpty
+      await ctx.send(
+        embed = discord.Embed(
+          title = f"Current Queue | Track Count : {len(queue)} | Full Length : {Convert.length_format(queue.total_length)}",
+          description = "\n".join([f"**{f'[ {i} ]' if i > 0 else '[▶︎]'}** {track.title}\
+              \n> `{Convert.length_format(track.duration)}` | {track.requester.mention}" for i,track in enumerate(list(queue))]),
 
-          #the message for displaying and controling the audio
+          color=discord.Color.from_rgb(255, 255, 255),
+          timestamp=datetime.now()
+        )
+      )
 
-          AUDIO_EMBED = self.audio_playing_embed(guild,author,FoundLyrics,NewTrack)
-          CONTROL_BUTTONS = Buttons.AudioControllerButtons
-          
-          #if it's found then dont disable or if is't not found disable it
-          CONTROL_BUTTONS[1][2].disabled = not FoundLyrics 
+    @commands.guild_only()
+    @commands.command(
+                      description="Swap the position of two tracks in the queue")
+    async def swap(self,ctx,position_1,position_2):
+      queue = self.get_queue(ctx.guild)
 
-          self.now_playing[guild.id] = {"message_id":reply_msg.id,
-                                        "channel_id":reply_msg.channel.id,
-                                        "info":NewTrack
-                                       }
-          
-          await reply_msg.edit(embed=AUDIO_EMBED,
-                              components=CONTROL_BUTTONS)
+      if len(queue) ==0: raise error_type.QueueEmpty
+
+      try:
+        queue.swap(int(position_1),int(position_2))
+      except (ValueError,IndexError):
+        await ctx.reply("❌ Invaild index")
+      else:
+        await ctx.reply("Swapped !")
 
 
-    # @commands.command()
-    # async def queue(self,ctx):
-    #   guild_queue = self.queues.get(ctx.guild.id)
-    #   if guild_queue:
-    #     await ctx.send(content ="\n".join([track.title for track in list(guild_queue)]))
+
+    @commands.guild_only()
+    @commands.command(aliases = ["shuffle_queue","sfl"],
+                      description="Shuffle the queue")
+    async def shuffle(self,ctx):
+      queue = self.get_queue(ctx.guild)
+
+      if len(queue) ==0: raise error_type.QueueEmpty
+
+      queue.shuffle()
+      await ctx.reply("🎲 Queue has been *shuffled*")
 #----------------------------------------------------------------#
     @commands.Cog.listener()
     async def on_voice_state_update(self,member, before, after):
@@ -847,7 +1013,7 @@ class music_commands(commands.Cog,
         
         if btn.responded or not btn.guild: return
         
-        now_playing = super().get_now_playing(btn.guild)
+        now_playing = self.get_now_playing(btn.guild)
         #Buttons ( Read their name )
         if btn.custom_id == Buttons.FavouriteButton.custom_id:
           await super().on_favourite_btn_press(btn)
@@ -878,8 +1044,8 @@ class music_commands(commands.Cog,
 
         elif btn.custom_id == Buttons.RestartButton.custom_id:
           await super().on_restart_btn_press(btn)
-        elif btn.custom_id == Buttons.StopButton.custom_id:
-          await super().on_stop_btn_press(btn)
+        elif btn.custom_id == Buttons.SkipButton.custom_id:
+          await super().on_skip_btn_press(btn)
 
 #----------------------------------------------------------------#
 #Now playing

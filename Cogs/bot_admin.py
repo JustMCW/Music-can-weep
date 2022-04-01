@@ -19,6 +19,15 @@ class bot_admin_commands(commands.Cog):
   async def test(self,ctx):
     await ctx.send("This is a testing command.")
 
+  @admin.command()
+  async def cleanup(self,ctx):
+    try:
+      ctx.guild.voice_client.source.cleanup()
+    except AttributeError:
+      await ctx.reply("Not playing")
+    else:
+      await ctx.reply("Success")
+
 
   @commands.is_owner() 
   @admin.command()
@@ -44,6 +53,11 @@ class bot_admin_commands(commands.Cog):
     # system("pip3 freeze --local |sed -rn 's/^([^=# \\t\\\][^ \\t=]*)=.*/echo; echo Processing \1 ...; pip3 install -U \1/p' |sh")
     from sys import executable,argv
     execv(executable, ['python'] + argv)
+
+  @admin.command()
+  async def shutdown(self,ctx):
+    await ctx.reply("Shutdown !")
+    await self.bot.close()
 
   @commands.is_owner()
   @admin.command(aliases=["si","showserver"])

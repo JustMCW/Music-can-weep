@@ -7,3 +7,5 @@ class custom_errors:
   class NoAudioPlaying(Exception): pass
   
   class UserNotInVoiceChannel(Exception): pass
+
+  class QueueEmpty(Exception): pass

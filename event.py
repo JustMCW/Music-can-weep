@@ -37,21 +37,7 @@ class events(commands.Cog,Replies):
   def prefix_str(self,ctx):
     if not ctx.guild: return self.DefaultPrefix
     with open(DiscordServerDatabase,"r") as jsonfr:
-      return json.load(jsonfr)[str(ctx.guild.id)].get("custom_prefix", self.DefaultPrefix)
-
-#Self pinging
-  @tasks.loop(seconds=200,reconnect=True)
-  async def pinging(self):
-    from requests import head
-    head("https://Music-can-weep.alt-accounts.repl.co")
-    global is_down
-    if not is_down:
-      is_down = True
-      megasus = head('https://mega-sus-5-star.alt-accounts.repl.co')
-      if megasus.status_code!=200:
-        owner = await self.BOT.fetch_user(self.BOT.owner_id)
-        await owner.send("Mega sus is down L")
-        print("MEga sus down L")
+      return json.load(jsonfr)[str(ctx.guild.id)].get("prefix", self.DefaultPrefix)
 
 #Change activity / presence
   @tasks.loop(seconds=60,reconnect=True)
@@ -62,7 +48,7 @@ class events(commands.Cog,Replies):
     presence = [
       Activity(type=ActivityType.listening, 
               name="Music 🎧~ | >>help"),
-      Game(name=f"with {len(self.BOT.guilds)} servers | >>help"),
+      # Game(name=f"with {len(self.BOT.guilds)} servers | >>help"),
       Activity(type=ActivityType.watching,
               name="MCW sleeping | >>help"),
       Game(name="Music 🎧 | >>help"),
@@ -92,9 +78,6 @@ class events(commands.Cog,Replies):
 
     #Start a loop
     self.changeBotPresence.start()
-    
-    #Pinging the bot
-    self.pinging.start()
 
 
   def guess_the_command(self,wrong_cmd,prefix):
@@ -175,6 +158,8 @@ class events(commands.Cog,Replies):
         await ctx.reply(super().not_playing_msg)
       elif "BotMissingPermission" == customErrorName: 
         await ctx.reply(super().bot_lack_perm_msg)
+      elif "QueueEmpty" == customErrorName: 
+        await ctx.reply(super().queue_empty_msg)
       else:
         await Logging.error(str(commandError))
     
