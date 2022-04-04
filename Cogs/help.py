@@ -11,11 +11,11 @@ from convert import Convert
 
 DiscordServerDatabase = "Database/DiscordServers.json"
 
-def read_server_databases() -> dict[str,Any]:
+def read_server_databases() -> dict:
     with open(DiscordServerDatabase,"r") as SVDBjson_r:
         return json.load(SVDBjson_r)
 
-def overwrite_server_database(guildId:int,key:str,value:Any) -> dict[str,Any]:
+def overwrite_server_database(guildId:int,key:str,value:Any) -> dict:
     Data = read_server_databases()
     Data[str(guildId)][key] = value
 
