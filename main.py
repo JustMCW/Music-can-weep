@@ -60,10 +60,10 @@ def main():
     from event import events
     BOT.add_cog(events(BOT, BOT_INFO))
 
-    from discord import opus
-    if not opus.is_loaded():
-        print("Loading opus ...")
-        opus.load_opus("/Users/xwong/Documents/Daily/Learning/Computing/exe/libopus.0.dylib")
+    # from discord import opus
+    # if not opus.is_loaded():
+    #     print("Loading opus ...")
+    #     opus.load_opus("/Users/xwong/Documents/Daily/Learning/Computing/exe/libopus.0.dylib")
     
     try:
         with open("../.tokens.txt","r") as TKF:

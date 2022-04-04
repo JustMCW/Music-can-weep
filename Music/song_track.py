@@ -56,7 +56,7 @@ class SongTrack:
           "options": f"-vn -ss {position}"
         }
 
-        audio_source = discord.PCMVolumeTransformer(original = discord.FFmpegPCMAudio(executable="/Users/xwong/Documents/Daily/Learning/Computing/exe/ffmpeg",
+        audio_source = discord.PCMVolumeTransformer(original = discord.FFmpegPCMAudio(#executable="/Users/xwong/Documents/Daily/Learning/Computing/exe/ffmpeg",
                                                                                       source=self.formats[0].get("url"), **FFMPEG_OPTION),
                                                     volume = volume)
 
