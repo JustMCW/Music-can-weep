@@ -65,19 +65,19 @@ def main():
     #     print("Loading opus ...")
     #     opus.load_opus("/Users/xwong/Documents/Daily/Learning/Computing/exe/libopus.0.dylib")
     
-    try:
-        with open("../.tokens.txt","r") as TKF:
-            BOT_TOKEN = dict(re.findall("(.*) = (.*)",
-                                        TKF.read() )) ["Music-can-weep-beta"]
-    except FileNotFoundError:
-        from boto.s3.connection import S3Connection
-        BOT_TOKEN = S3Connection(os.environ['TOKEN'])
-        print("Successfully loaded token from heroku var")
-    else:
-        print("Successfully loaded token from token file ")
+    # try:
+    #     with open("../.tokens.txt","r") as TKF:
+    #         BOT_TOKEN = dict(re.findall("(.*) = (.*)",
+    #                                     TKF.read() )) ["Music-can-weep-beta"]
+    # except FileNotFoundError:
+    #     from boto.s3.connection import S3Connection
+    #     BOT_TOKEN = S3Connection(os.environ['TOKEN'])
+    #     print("Successfully loaded token from heroku var")
+    # else:
+    #     print("Successfully loaded token from token file ")
         
 
-    BOT.run(BOT_TOKEN)
+    BOT.run("OTE5NTk3MjgwNTIzMzQ1OTYx.YbYHtA.loRdonvp56WuLDo5vJbdqaC7zGE")
     print("Program exited")
       
 
