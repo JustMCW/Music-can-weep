@@ -1,6 +1,5 @@
 #This script is relativly easy , try to figure it out yourself :P
 
-from turtle import color, title
 from typing import Any
 import discord,json
 from discord.ext import commands
