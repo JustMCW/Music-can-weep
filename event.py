@@ -6,8 +6,6 @@ from log import Logging
 DiscordServerDatabase = "Database/DiscordServers.json"
 #--------------------#
 
-is_down = False
-
 class events(commands.Cog,Replies):
   def __init__(self,bot,info):
     self.BOT = bot
@@ -160,6 +158,8 @@ class events(commands.Cog,Replies):
         await ctx.reply(super().bot_lack_perm_msg)
       elif "QueueEmpty" == customErrorName: 
         await ctx.reply(super().queue_empty_msg)
+      elif "QueueDisabled" == customErrorName:
+        await ctx.reply(super().queue_disabled_msg.format(ctx.prefix))
       else:
         await Logging.error(str(commandError))
     

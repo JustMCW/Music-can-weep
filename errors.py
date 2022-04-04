@@ -1,4 +1,4 @@
-#I mean ... just look at their name Ovo
+#I mean ... just look at their name lol Ovo
 
 class custom_errors:
   
@@ -9,3 +9,5 @@ class custom_errors:
   class UserNotInVoiceChannel(Exception): pass
 
   class QueueEmpty(Exception): pass
+
+  class QueueDisabled(Exception): pass

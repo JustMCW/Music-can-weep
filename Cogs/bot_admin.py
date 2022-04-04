@@ -10,14 +10,16 @@ class bot_admin_commands(commands.Cog):
     self.bot = bot
 
   @commands.is_owner() 
-  @commands.group(invoke_without_command=True)
-  async def admin(ctx):
-    pass
-  
+  @commands.group()
+  async def admin(self,ctx:commands.Context):
+      if ctx.invoked_subcommand is None:
+          await ctx.reply(f"Haha you idk the subcommands : {','.join([f'{command.name},{str(command.clean_params)}' for command in ctx.command.walk_commands()])}")
+    
+
   @commands.is_owner() 
   @admin.command()
-  async def test(self,ctx):
-    await ctx.send("This is a testing command.")
+  async def test(self,ctx,optional = None):
+      await ctx.send("This is a testing command.")
 
   @admin.command()
   async def cleanup(self,ctx):
@@ -54,9 +56,9 @@ class bot_admin_commands(commands.Cog):
     from sys import executable,argv
     execv(executable, ['python'] + argv)
 
-  @admin.command()
+  @admin.command(aliases = ["sd"])
   async def shutdown(self,ctx):
-    await ctx.reply("Shutdown !")
+    await ctx.reply("Sayonara !")
     await self.bot.close()
 
   @commands.is_owner()

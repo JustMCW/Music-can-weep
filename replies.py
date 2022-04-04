@@ -10,7 +10,9 @@ class Replies:
 
   paused_audio_msg = "⏸ *Paused*"
   resumed_audio_msg = "▶️ *Resumed*"
-  skipped_audio_msg = "⏹ *Skipped*"
+  rewind_audio_msg = "⏪ *Rewinded*"
+  skipped_audio_msg = "⏩ *Skipped*"
+  
   stopped_audio_msg = "⏹ *Stopped playing*"
   restarted_audio_msg = "🔄 *Restarted the song*"
 
@@ -36,7 +38,9 @@ class Replies:
   user_not_found_msg = f"🔍 User was not found 👻"
   channel_not_found_msg = f"🔍 Channel was not found 💬"
   
+  invaild_mode_msg = "🪗 Enter a vaild looping mode : `on / off`"
   queue_empty_msg = "📦 Queue is empty ... play some songs !"
+  queue_disabled_msg = "This server has queuing disabled, run \"{}config queue on\" to turn it on again (needs admin permission)"
 
   bot_lack_perm_msg = f"🎹 I am missing the permission to do that !"
 

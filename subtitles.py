@@ -3,7 +3,7 @@ from urllib.request import urlopen
 #Thing that mess with subtitle
 class Subtitles:
     @staticmethod
-    def find_subtitle_and_language(sub_catergory:dict=None)->(bool,list):
+    def find_subtitle_and_language(sub_catergory:dict=None)->tuple:
         if sub_catergory:
             if len(sub_catergory) > 0:
                 return True, sub_catergory
