@@ -7,13 +7,12 @@ import requests
 class Logging:
   @classmethod
   async def log(self,message:str):
-    pass
-    # from datetime import datetime
-    # requests.post(
-    #   "https://discord.com/api/webhooks/954928052767457350/BVexILQ8JmXeUKrR2WdWPkW6TSZVxTRsMYSqBsrbbkzdO6kc2uMnRB_UfpsH5rsMT0w-",
-    #   data = {
-    #     "content":f"`{datetime.now()}` - {message}"
-    #   })
+    from datetime import datetime
+    requests.post(
+      "https://discord.com/api/webhooks/954928052767457350/BVexILQ8JmXeUKrR2WdWPkW6TSZVxTRsMYSqBsrbbkzdO6kc2uMnRB_UfpsH5rsMT0w-",
+      data = {
+        "content":f"`{datetime.now()}` - {message}"
+      })
 
   @classmethod
   async def error(self,error_message:str):
