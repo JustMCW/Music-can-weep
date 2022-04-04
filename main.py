@@ -6,6 +6,7 @@ A discord music bot :
   - Most of the action can be done with buttons and commands
 """
 
+from typing import Type
 from discord.ext import commands
 import os,json,re
 
@@ -61,19 +62,21 @@ def main():
     BOT.add_cog(events(BOT, BOT_INFO))
 
     BOT_TOKEN = os.environ.get("TOKEN")
-    if BOT is not None:
+    
+    if BOT_TOKEN is not None:
         print("Running on heroku")
-
     else:
         print("Running locally")
+        
+        with open("../.tokens.txt","r") as TKF:
+            BOT_TOKEN = dict(re.findall("(.*) = (.*)",TKF.read() )) ["Music-can-weep"]
 
         from discord import opus
         if not opus.is_loaded():
             print("Loading opus ...")
             opus.load_opus("/Users/xwong/Documents/Daily/Learning/Computing/exe/libopus.0.dylib")
 
-        with open("../.tokens.txt","r") as TKF:
-            BOT_TOKEN = dict(re.findall("(.*) = (.*)",TKF.read() )) ["Music-can-weep-beta"]
+        
         
 
     BOT.run(BOT_TOKEN)

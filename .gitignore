@@ -1,3 +1,4 @@
 *.json
 Database/
 .DS_Store
+*.pyc

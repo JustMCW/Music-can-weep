@@ -510,7 +510,7 @@ class music_commands\
         #if already in the that same voice channel
         if ctx.voice_client:
             if channel_to_join == ctx.voice_client.channel:
-                return await ctx.reply(super().same_vc_msg.format(channel_to_join.mention))
+                return await ctx.reply(Replies.same_vc_msg.format(channel_to_join.mention))
 
         #Join
         await super().join_voice_channel(ctx.guild, channel_to_join)
