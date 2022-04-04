@@ -18,8 +18,13 @@ class BOT_INFO:
   
     InitialVolume = 0.5
   
+<<<<<<< Updated upstream
     InitialLooping = True
     InitialQueueLooping = True
+=======
+    InitialLooping = False
+    InitialQueueLooping = False
+>>>>>>> Stashed changes
   
     InitialQueuing = True
   
