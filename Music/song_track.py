@@ -17,7 +17,6 @@ class SongTrack:
       
     
     @classmethod
-
     def create_track(cls,query:str,requester:discord.Member)->object:
         
         #Some options for extracting the audio from YT
