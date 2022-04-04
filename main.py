@@ -15,7 +15,7 @@ class BOT_INFO:
     InitialVolume = 0.5
   
     InitialLooping = False
-    InitialQueueLooping = True
+    InitialQueueLooping = False
   
     InitialQueuing = True
   
