@@ -2,14 +2,13 @@ import discord
 import time
 import asyncio
 from discord.ext import commands
-from collections.abc import Callable
 
 from main import BOT_INFO
 from Music.queue import Queue
 from errors import custom_errors
 
 #DECORATER
-def playing_audio(vcfunc:Callable[[discord.Guild],None]):
+def playing_audio(vcfunc):
   async def wrapper(*args,**kwargs):
       guild = args[-1] if isinstance(args[-1],discord.Guild) else kwargs.get("guild")
       try:
