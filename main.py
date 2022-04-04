@@ -60,24 +60,23 @@ def main():
     from event import events
     BOT.add_cog(events(BOT, BOT_INFO))
 
-    # from discord import opus
-    # if not opus.is_loaded():
-    #     print("Loading opus ...")
-    #     opus.load_opus("/Users/xwong/Documents/Daily/Learning/Computing/exe/libopus.0.dylib")
-    
-    # try:
-    #     with open("../.tokens.txt","r") as TKF:
-    #         BOT_TOKEN = dict(re.findall("(.*) = (.*)",
-    #                                     TKF.read() )) ["Music-can-weep-beta"]
-    # except FileNotFoundError:
-    #     from boto.s3.connection import S3Connection
-    #     BOT_TOKEN = S3Connection(os.environ['TOKEN'])
-    #     print("Successfully loaded token from heroku var")
-    # else:
-    #     print("Successfully loaded token from token file ")
+    BOT_TOKEN = os.environ.get("TOKEN")
+    if BOT is not None:
+        print("Running on heroku")
+
+    else:
+        print("Running locally")
+
+        from discord import opus
+        if not opus.is_loaded():
+            print("Loading opus ...")
+            opus.load_opus("/Users/xwong/Documents/Daily/Learning/Computing/exe/libopus.0.dylib")
+
+        with open("../.tokens.txt","r") as TKF:
+            BOT_TOKEN = dict(re.findall("(.*) = (.*)",TKF.read() )) ["Music-can-weep-beta"]
         
 
-    BOT.run("OTE5NTk3MjgwNTIzMzQ1OTYx.YbYHtA.loRdonvp56WuLDo5vJbdqaC7zGE")
+    BOT.run(BOT_TOKEN)
     print("Program exited")
       
 
