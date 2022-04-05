@@ -55,12 +55,18 @@ class SongTrack:
           "options": f"-vn -ss {position}"
         }
         #
+        src_url = self.formats[0].get("url")
+        
+        if src_url.startswith("https://manifest.googlevideo.com"):
+            print("is fragment url")
+            src_url = self.formats[0]["fragment_base_url"]
+
         try:
-            src = discord.FFmpegPCMAudio(source=self.formats[0].get("url"), **FFMPEG_OPTION)
+            src = discord.FFmpegPCMAudio(source=src_url, **FFMPEG_OPTION)
         except discord.ClientException as e:
             print(e,"So imma look for the ffmpeg locally")
             src = discord.FFmpegPCMAudio(executable="/Users/xwong/Documents/Daily/Learning/Computing/exe/ffmpeg",
-                                         source=self.formats[0].get("url"), **FFMPEG_OPTION)
+                                         source=src_url, **FFMPEG_OPTION)
 
         vol_src = discord.PCMVolumeTransformer(original = src,
                                                 volume = volume)

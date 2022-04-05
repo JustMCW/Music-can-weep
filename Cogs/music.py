@@ -1,3 +1,4 @@
+from logging import exception
 from click import command
 import discord, asyncio, time
 from datetime import datetime
@@ -178,50 +179,54 @@ class Buttons:
       await btn.respond(content=Replies.added_fav_msg.format(title))
 
     async def on_subtitles_btn_press(self,btn):
-      await btn.respond(type=5)
-      CurrentTrack = self.get_queue(btn.guild)[0]
-      found,languages =self.find_subtitle_and_language(getattr(CurrentTrack,"subtitles"))
-      if not found: return
+        await btn.respond(type=5)
+        CurrentTrack = self.get_queue(btn.guild)[0]
 
-      from langcodes import Language
+        languages =getattr(CurrentTrack,"subtitles",None)
+        if languages is None: 
+            return
 
-      options = []
-      for index, lan in enumerate(languages.keys()):
-        languageName = Language.get(lan)
-        if not languageName.is_valid(): continue
-        options.append(
-          SelectOption(label=languageName.display_name(), value=lan))
-        if index == 24: break
+        from langcodes import Language
 
-      title = CurrentTrack.title
+        options = []
+        for lan in languages.keys():
+                languageName = Language.get(lan)
+                if languageName.is_valid(): 
+                    options.append(SelectOption(label=languageName.display_name(), value=lan))
+                    if len(options) == 24: 
+                        break
 
-      
-      await btn.respond(
-        type=4,
-        content = f"🔠 Select subtitles language for ***{title}***",
-        components=[
-          Select(placeholder="select language", options=options)
-        ]
-      )
-      try:
-        option = await self.bot.wait_for(
-          event='select_option',
-          check=lambda opt: opt.author == btn.author,
-          timeout=60)
-      except:
-        pass
-      else:
-        selected_language = option.values[0]
-        modernLanguageName = Language.get(
-        selected_language).display_name()
+        title = CurrentTrack.title
 
-        UserDM = await option.author.create_dm()
-        await UserDM.send(
-          content=f"**{title} [ {modernLanguageName} ] **")
-        await self.send_subtitles(
-          UserDM,
-          f"{''.join(self.extract_subtitles(languages,selected_language))}"
+        
+        await btn.respond(
+            type=4,
+            content = f"🔠 Select subtitles language for ***{title}***",
+            components=[
+            Select(placeholder="select language", options=options)
+            ]
         )
+        try:
+                option = await self.bot.wait_for(
+                event='select_option',
+                check=lambda opt: opt.author == btn.author,
+                timeout=60)
+        except:
+            pass
+        else:
+            selected_language = option.values[0]
+            modernLanguageName = Language.get(
+            selected_language).display_name()
+
+            UserDM = await option.author.create_dm()
+            await UserDM.send(
+            content=f"**{title} [ {modernLanguageName} ] **")
+            url,subtitle_text = self.extract_subtitles(languages,selected_language)
+            await self.send_subtitles(
+            UserDM,
+            f"{''.join(subtitle_text)}"
+            )
+            await UserDM.send(content=f"( The subtitle looks glitched ? View the source text file here : {url})")
 
     async def on_play_again_btn_press(self,btn):
       ctx = await self.bot.get_context(btn.message)
@@ -344,10 +349,11 @@ class Functions:
         if (time.perf_counter() - start_time) < 0.5 and audio_control_status is None:
 
             print("Ignore loop : Http error detected - Time (ns) = ",time.perf_counter() - start_time)
-            
+
             #Get a new piece of info
             NextTrack = SongTrack.create_track(query = FinshedTrack.webpage_url,
-                                              requester=FinshedTrack.requester)
+                                            requester=FinshedTrack.requester)
+
         
         elif not queue.enabled and (not looping or audio_control_status=="SKIP"):
             queue -= 0
@@ -375,9 +381,9 @@ class Functions:
 
             #Check if next track exist, none means the queue is empty
             if NextTrack is None:
-                self.bot.loop.create_task(self.clear_audio_message(guild))
                 queue.audio_control_status = None
-
+                self.bot.loop.create_task(self.clear_audio_message(guild))
+                self.bot.loop.create_task(queue.audio_message.channel.send("All tracks in the queue has been played (if you want to repeat the queue, run \" >>queue repeat on \")"))
                 return print("Queue is empty")
 
             #To prevent sending the same audio message again
@@ -403,8 +409,9 @@ class Functions:
                 self.bot.loop.create_task(display_next())
             
             elif audio_control_status == "SKIP":
-
-              return print("Skipped the only song in the queue")
+                queue.audio_control_status = None
+                self.bot.loop.create_task(self.clear_audio_message(guild))
+                return print("Skipped the only song in the queue")
 
         #To show that we have handle the control
         queue.audio_control_status = None
@@ -581,8 +588,11 @@ class music_commands\
                 queue[0].play(guild.voice_client,
                               volume = self.get_volume(guild),
                               after = after_playing)
-                
-                await self.create_audio_message(queue[0],ctx.channel)
+
+                continue_playing_queue_msg = await ctx.send("▶️ Continue to play tracks in the queue")
+                await self.create_audio_message(queue[0],continue_playing_queue_msg)
+            else:
+                await ctx.reply(Replies.resumed_audio_msg)
         else:
             await self.resume_audio(guild)
             await ctx.reply(Replies.resumed_audio_msg)
@@ -820,15 +830,21 @@ class music_commands\
               lambda: SongTrack.create_track(query=query,
                                              requester=author))
         #Failed
+        
         except BaseException as expection:
+            print(exception.__class__)
             await Logging.log(f"an error captured when trying to get info from `{query}` : {expection} ;")
-            await ctx.send(f" Failed to play track `{query}`, reason\n`{str(expection).replace('ERROR: ','')}`")
+            await ctx.send(f" Failed to play track `{query}`, reason is :\n`{str(expection).replace('ERROR: ','')}`")
         #Success
         else:
             
             queue += NewTrack
         
-            if queue[1] is not None:         
+            if queue[1] is not None:
+                # track_repeated:bool = any([True for track in queue[1:] if track.webpage_url == NewTrack.webpage_url])
+                # if track_repeated:
+                #     await reply_msg.edit(reply_msg.content + "(A)")
+                #     # return await ctx.reply("This song is already in the queue")
                 await reply_msg.edit(embed=discord.Embed(title = f"\"{NewTrack.title}\" has been added to the queue",
                                                          color=discord.Color.from_rgb(255, 255, 255))
                                               .add_field(name="Length ↔️",
@@ -953,11 +969,12 @@ class music_commands\
 
     @commands.guild_only()
     @queue.command(description='🔂 Enable / Disable queue looping.\nWhen enabled, tracks will be moved to the last at the queue after finsh playing',
-                   aliases=["looping","repeat_queue",'setloop','setlooping',"toggleloop","toggle_looping",'changelooping','lop'],)
-    async def loop(self,ctx,mode=None):
+                   aliases=["loop","looping","repeat_queue",'setloop','setlooping',"toggleloop","toggle_looping",'changelooping','lop'],)
+    async def repeat(self,ctx,mode=None):
         guild = ctx.guild
-      
-        new_qloop = self.get_queue_loop(guild)
+
+        queue = self.get_queue(guild)
+        new_qloop = queue.queue_looping
 
         if not queue.enabled:
             raise error_type.QueueDisabled
@@ -969,7 +986,7 @@ class music_commands\
             new_qloop = Convert.str_to_bool(mode)
             if new_qloop is None:
                 return await ctx.reply(Replies.invaild_mode_msg)
-        queue = self.get_queue(guild)
+        
 
         queue.queue_looping = new_qloop
         await ctx.reply(Replies.queue_loop_audio_msg.format(Convert.bool_to_str(self.get_queue_loop(guild))))

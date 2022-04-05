@@ -11,15 +11,11 @@ class Subtitles:
 
     @staticmethod
     def filter_subtitle(content:str)->str:
-        copy = content.encode().decode('unicode-escape')
-        copy = copy.replace('â', '').replace('', '').replace('', '')
-
-        # from re import sub as ReSub
-        # return ReSub(r'\[.*?\]', '', copy)
+        copy = content
         while True:
             try:
                 remove = copy[copy.index('<'):copy.index('>') + 1]
-                copy = copy.replace(remove, '')
+                copy = copy.replace(remove,'')
             except ValueError:
                 return copy
 
@@ -42,15 +38,17 @@ class Subtitles:
             skipKeywords = [
                 "-->", "Kind:", "WEBVTT", "Language", '::cue', '}', 'Style:'
             ]
-            if any(x in str(line) for x in skipKeywords): continue
+            if any(x in str(line) for x in skipKeywords): 
+                continue
+
             if is_complex:
                 line = self.filter_subtitle(line)
                 if len(subtitles) > 2:
-                    if line in subtitles[-1] or line in subtitles[-2]:
+                    if line in subtitles[-1]:
                         continue
             subtitles.append(line)
         subtitles_file.close()
-        return subtitles
+        return subtitles_url,subtitles
 
     @staticmethod
     async def send_subtitles(channel, subtitles_text:str):
