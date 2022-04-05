@@ -69,7 +69,7 @@ def main():
         print("Running locally")
         
         with open("../.tokens.txt","r") as TKF:
-            BOT_TOKEN = dict(re.findall("(.*) = (.*)",TKF.read() )) ["Music-can-weep"]
+            BOT_TOKEN = dict(re.findall("(.*) = (.*)",TKF.read() )) ["Music-can-weep-beta"]
 
         from discord import opus
         if not opus.is_loaded():

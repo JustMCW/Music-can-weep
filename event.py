@@ -56,8 +56,6 @@ class events(commands.Cog,Replies):
 #Setting up
   @commands.Cog.listener()
   async def on_ready(self):
-    from os import system
-    system("clear")
     
     print(f"Running as {self.BOT.user.name} :")
 

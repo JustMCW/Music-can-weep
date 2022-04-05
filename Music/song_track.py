@@ -54,12 +54,18 @@ class SongTrack:
           "before_options":"-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
           "options": f"-vn -ss {position}"
         }
+        #
+        try:
+            src = discord.FFmpegPCMAudio(source=self.formats[0].get("url"), **FFMPEG_OPTION)
+        except discord.ClientException as e:
+            print(e,"So imma look for the ffmpeg locally")
+            src = discord.FFmpegPCMAudio(executable="/Users/xwong/Documents/Daily/Learning/Computing/exe/ffmpeg",
+                                         source=self.formats[0].get("url"), **FFMPEG_OPTION)
 
-        audio_source = discord.PCMVolumeTransformer(original = discord.FFmpegPCMAudio(#executable="/Users/xwong/Documents/Daily/Learning/Computing/exe/ffmpeg",
-                                                                                      source=self.formats[0].get("url"), **FFMPEG_OPTION),
-                                                    volume = volume)
+        vol_src = discord.PCMVolumeTransformer(original = src,
+                                                volume = volume)
 
-        voice_client.play(audio_source,after=after)
+        voice_client.play(vol_src,after=after)
     
     @property
     def requester(self):
