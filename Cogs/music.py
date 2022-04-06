@@ -855,6 +855,8 @@ class music_commands\
                                     )
                 if self.is_playing(guild):
                     return
+                    
+                reply_msg = reply_msg.channel
 
                 NewTrack = queue[0]
             
