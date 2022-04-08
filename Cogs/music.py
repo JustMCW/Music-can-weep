@@ -1,10 +1,7 @@
-from logging import exception
-from click import command
 import discord, asyncio, time
 from datetime import datetime
 from discord.ext import commands
 from discord_components import Select, SelectOption, Button, ButtonStyle
-
 from main import BOT_INFO
 from log import Logging
 from convert import Convert
@@ -832,7 +829,6 @@ class music_commands\
         #Failed
         
         except BaseException as expection:
-            print(exception.__class__)
             await Logging.log(f"an error captured when trying to get info from `{query}` : {expection} ;")
             await ctx.send(f" Failed to play track `{query}`, reason is :\n`{str(expection).replace('ERROR: ','')}`")
         #Success
