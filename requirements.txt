@@ -11,4 +11,4 @@ requests>=2.27.1
 beautifulsoup4~=4.10.0
 typing-extensions>=4.1.1
 
-youtube-dl==2021.12.17.tar.
+youtube-dl==2021.12.17
