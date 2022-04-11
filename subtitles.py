@@ -2,6 +2,7 @@ from urllib.request import urlopen
 
 #Thing that mess with subtitle
 class Subtitles:
+
     @staticmethod
     def find_subtitle_and_language(sub_catergory:dict=None)->tuple:
         if sub_catergory:
@@ -11,15 +12,17 @@ class Subtitles:
 
     @staticmethod
     def filter_subtitle(content:str)->str:
-        copy = content
         while True:
+            #<color1234> my Text </color1234>
             try:
-                remove = copy[copy.index('<'):copy.index('>') + 1]
-                copy = copy.replace(remove,'')
+                content = content.replace(
+                    content[content.index('<'):content.index('>') + 1],
+                    ''
+                )
             except ValueError:
-                return copy
+                return content
 
-    @classmethod
+    @staticmethod
     def extract_subtitles(self,subtitles_list:list, language:str)->list:
         language_catergory = subtitles_list.get(language)
         if not language_catergory:
@@ -42,7 +45,7 @@ class Subtitles:
                 continue
 
             if is_complex:
-                line = self.filter_subtitle(line)
+                line = Subtitles.filter_subtitle(line)
                 if len(subtitles) > 2:
                     if line in subtitles[-1]:
                         continue

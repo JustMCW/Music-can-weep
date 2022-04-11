@@ -4,6 +4,8 @@ from Music.song_track import SongTrack
 from errors import custom_errors
 from main import BOT_INFO
 
+from collections import deque
+
 DiscordServerDatabase = "Database/DiscordServers.json"
 
 def require_queue_enabled(func):
@@ -13,7 +15,7 @@ def require_queue_enabled(func):
         func(self,*args,**kwargs)
     return wrapper
 
-class Queue:
+class SongQueue:
     def __init__(self,guild:discord.Guild=None):
         self.guild = guild
 

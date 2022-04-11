@@ -1,13 +1,16 @@
 import discord
 from youtube_dl import YoutubeDL
 
-RequiredAttr = ["title","webpage_url","duration",
+RequiredAttr = ("title","webpage_url","duration",
                 "thumbnail","channel","channel_url",
-                "subtitles","formats"]
+                "subtitles","formats")
 
 
 class SongTrack:
-    def __init__(self,requester:discord.Member,**info):
+
+    __slots__ = RequiredAttr
+
+    def __init__(self,requester:discord.Member,**info:dict):
 
       self._requester = requester
       

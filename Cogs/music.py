@@ -2,13 +2,14 @@ import discord, asyncio, time
 from datetime import datetime
 from discord.ext import commands
 from discord_components import Select, SelectOption, Button, ButtonStyle
+
 from main import BOT_INFO
 from log import Logging
 from convert import Convert
 from favourites import Favourties
 from subtitles import Subtitles
 
-from Music.queue import Queue
+from Music.queue import SongQueue
 from Music.song_track import SongTrack
 from Music.voice_state import VoiceState
 
@@ -28,55 +29,33 @@ TimeOutSeconds = 60 * 2
 class Embeds:
 
 
-  #The embed that display the audio's infomation + status
-  def audio_playing_embed(self, guild,requester,foundLyrics:bool,SongTrack) -> discord.Embed:
-    NowplayingEmbed = discord.Embed(title=getattr(SongTrack,"title"),
-                                    url=getattr(SongTrack,"webpage_url"),
-                                    color=discord.Color.from_rgb(255, 255, 255))
+    #The embed that display the audio's infomation + status
+    def audio_playing_embed(self, guild,requester,foundLyrics:bool,SongTrackPlaying:SongTrack) -> discord.Embed:
+        return discord.Embed(title= SongTrackPlaying.title,
+                            url= SongTrackPlaying.webpage_url,
+                            color=discord.Color.from_rgb(255, 255, 255))\
+                \
+                .set_author(name=f"Requested by {requester.display_name}",
+                            icon_url=requester.avatar_url)\
+                .set_thumbnail(url = SongTrackPlaying.thumbnail)\
+                \
+                .add_field(name=f"YT Channel  {Emojis.YOUTUBE_ICON}",
+                            value="[{}]({})".format(getattr(SongTrackPlaying,"channel"),getattr(SongTrackPlaying,"channel_url")))\
+                .add_field(name="Length ↔️",
+                            value=f'`{Convert.length_format(getattr(SongTrackPlaying,"duration"))}`')\
+                .add_field(name="Lyrics 📝",
+                            value=f'*{"Available" if foundLyrics else "Unavailable"}*')\
+                \
+                .add_field(name="Voice Channel 🔊",
+                            value=f"{self.get_current_vc(guild).mention}")\
+                .add_field(name="Volume 📶",
+                            value=f"{self.get_volume_percentage(guild)}")\
+                .add_field(name="Looping 🔂",
+                            value=f'**{Convert.bool_to_str(self.get_loop(guild))}**')
 
-                                    
-    NowplayingEmbed.set_author(name=f"Requested by {requester.display_name}",
-                              icon_url=requester.avatar_url)
-    # NowplayingEmbed.set_footer(text = f"This song was playing at")
-
-    #Infomation about the video
-    NowplayingEmbed.add_field(name=f"YT Channel  {Emojis.YOUTUBE_ICON}",
-                              value="[{}]({})".format(getattr(SongTrack,"channel"),getattr(SongTrack,"channel_url")),
-                              inline=True)
-    NowplayingEmbed.add_field(name="Length ↔️",
-                              value=f'`{Convert.length_format(getattr(SongTrack,"duration"))}`',
-                              inline=True)
-
-    # NowplayingEmbed.add_field(name="Upload Date 📆",value=self.date_format(info.get("upload_date","Unknown")),inline=True)
-    # NowplayingEmbed.add_field(name="Views 👀",value=self.number_format(info.get("view_count","Unknown")),inline=True)
-    # NowplayingEmbed.add_field(name="Likes 👍",value=self.number_format(info.get("like_count","Unknown")),inline=True)
-    
-    NowplayingEmbed.add_field(name="Lyrics 📝",
-                              value=f'*{"Available" if foundLyrics else "Unavailable"}*',
-                              inline=True)
-
-    #NowplayingEmbed.set_image(url = info["thumbnail"])
-    NowplayingEmbed.set_thumbnail(url = getattr(SongTrack,"thumbnail"))
-
-    #Audio status
-    NowplayingEmbed.add_field(name="Voice Channel 🔊",
-                              value=f"{self.get_current_vc(guild).mention}",
-                              inline=True)
-    NowplayingEmbed.add_field(name="Volume 📶",
-                              value=f"{self.get_volume_percentage(guild)}",
-                              inline=True)
-
-    NowplayingEmbed.add_field(name="Looping 🔂",
-                              value=f'**{Convert.bool_to_str(self.get_loop(guild))}**',
-                              inline=True)
-
-    return NowplayingEmbed
-
-  NoTrackSelectedEmbed = discord.Embed(
-    title=f"{Emojis.cute_panda} No track was selected !",
-    description=f"You thought for too long ( {TimeOutSeconds//60} minutes ), use the command again !",
-    color=discord.Color.from_rgb(255, 255, 255)
-  )
+    NoTrackSelectedEmbed = discord.Embed(title=f"{Emojis.cute_panda} No track was selected !",
+                                        description=f"You thought for too long ( {TimeOutSeconds//60} minutes ), use the command again !",
+                                        color=discord.Color.from_rgb(255, 255, 255))
 #----------------------------------------------------------------#
 
 #BUTTONS
@@ -124,10 +103,10 @@ class Buttons:
   #Buttons functionality 
     
     @classmethod
-    async def inform_changes(self,btn,msg):
-      if len(self.get_non_bot_vc_members(btn.guild)) > 1:
-        await btn.message.reply(content=f"{msg} by {btn.author.mention}",
-                                delete_after=del_after_sec)
+    async def inform_changes(self,btn,msg:str):
+        if len(self.get_non_bot_vc_members(btn.guild)) > 1:
+            await btn.message.reply(content=f"{msg} by {btn.author.mention}",
+                                    delete_after=del_after_sec)
 
     async def on_pause_btn_press(self,btn):
       if self.is_paused(btn.guild):
@@ -168,11 +147,8 @@ class Buttons:
       await btn.respond(type=5)
       title = btn.message.embeds[0].title
       url = btn.message.embeds[0].url
-      # try:
       Favourties.add_track(btn.author, title, url)
-      # except:
-      #   await btn.respond(content="🎧 You cannot have more than 25 songs in your favourites")
-      # else:
+
       await btn.respond(content=Replies.added_fav_msg.format(title))
 
     async def on_subtitles_btn_press(self,btn):
@@ -204,11 +180,11 @@ class Buttons:
             ]
         )
         try:
-                option = await self.bot.wait_for(
-                event='select_option',
-                check=lambda opt: opt.author == btn.author,
-                timeout=60)
-        except:
+            option = await self.bot.wait_for(
+            event='select_option',
+            check=lambda opt: opt.author == btn.author,
+            timeout=60)
+        except asyncio.TimeoutError:
             pass
         else:
             selected_language = option.values[0]
@@ -218,8 +194,8 @@ class Buttons:
             UserDM = await option.author.create_dm()
             await UserDM.send(
             content=f"**{title} [ {modernLanguageName} ] **")
-            url,subtitle_text = self.extract_subtitles(languages,selected_language)
-            await self.send_subtitles(
+            url,subtitle_text = Subtitles.extract_subtitles(languages,selected_language)
+            await Subtitles.send_subtitles(
             UserDM,
             f"{''.join(subtitle_text)}"
             )
@@ -243,7 +219,9 @@ class Functions:
 
     #Search Audio fromm Youtube
     @staticmethod
-    def search_from_youtube(query:str, ResultLengthLimit=5,DurationLimit=3*3600) -> list:
+    def search_from_youtube(query:str, 
+                            ResultLengthLimit:int=5,
+                             DurationLimit:int=3*3600) -> list:
         from requests import get
         from bs4 import BeautifulSoup
         from json import loads
@@ -283,7 +261,7 @@ class Functions:
     async def create_audio_message(self,Track:SongTrack,Target):
 
         #Getting the subtitle
-        FoundLyrics = super().find_subtitle_and_language(getattr(Track,"subtitles",None))[0]
+        FoundLyrics = Subtitles.find_subtitle_and_language(getattr(Track,"subtitles",None))[0]
 
         guild = Target.guild
         queue = self.get_queue(guild)
@@ -314,7 +292,7 @@ class Functions:
             return print("Voice error :",voice_error)
 
         voice_client:discord.VoiceClient = guild.voice_client
-        queue:Queue = self.get_queue(guild)
+        queue:SongQueue = self.get_queue(guild)
         audio_control_status:str = queue.audio_control_status #None , "RESTART" , "SKIP"
         FinshedTrack:SongTrack = queue[0]
 
@@ -475,7 +453,6 @@ class music_commands\
   commands.Cog, 
   Functions, 
   Embeds,
-  Subtitles,
   VoiceState,
   Buttons
 ):
@@ -485,16 +462,15 @@ class music_commands\
         self.bot = bot
 
         #Hash maps
-        self.queues = {int:Queue}
+        self.queues = {int:SongQueue}
 
         super().__init__()
 
 #CHANGING BOT'S VOICE CHANNEL
     @commands.bot_has_guild_permissions(connect=True, speak=True)
-    @commands.command(
-        aliases=["enter", "come", "move", "j"],
-        description='🎧 Connect to your current voice channel or a given voice channel if specified')
-    async def join(self, ctx,*,ChannelName=None):
+    @commands.command(aliases=["enter", "come", "move", "j"],
+                    description='🎧 Connect to your current voice channel or a given voice channel if specified')
+    async def join(self, ctx:commands.Context,*,ChannelName=None):
         author = ctx.author
         channel_to_join = None
         #if specified a channel
@@ -530,7 +506,7 @@ class music_commands\
     @commands.command(
         aliases=["leave", "bye", 'dis', "lev","leav", "lve", 'l'],
         description='👋 Disconnect from the current voice channel i am in')
-    async def disconnect(self, ctx):
+    async def disconnect(self, ctx:commands.Context):
         voice_client = ctx.voice_client
 
         #Not in a voice voice_client
@@ -550,7 +526,7 @@ class music_commands\
     @commands.guild_only()
     @commands.command(aliases=["wait"],
                       description='⏸ Pause the current audio')
-    async def pause(self, ctx):
+    async def pause(self, ctx:commands.Context):
 
         await self.pause_audio(ctx.guild)
 
@@ -562,7 +538,7 @@ class music_commands\
     @commands.guild_only()
     @commands.command(aliases=["continue", "unpause"],
                       description='▶️ Resume the current audio')
-    async def resume(self, ctx):
+    async def resume(self, ctx:commands.Context):
         guild = ctx.guild
         queue = self.get_queue(guild)      
 
@@ -571,11 +547,12 @@ class music_commands\
             try:
                 await self.resume_audio(guild)       
             except (error_type.NotInVoiceChannel,error_type.NoAudioPlaying):
-                try:
-                    if guild.voice_client is None:
+
+                if guild.voice_client is None:
+                    try:
                         await self.join_voice_channel(guild, ctx.author.voice.channel)
-                except AttributeError:
-                    raise error_type.NotInVoiceChannel
+                    except AttributeError:
+                        raise error_type.NotInVoiceChannel
 
                 #Repeat function after the audio
                 start_time = float(time.perf_counter())
@@ -600,7 +577,7 @@ class music_commands\
     @commands.guild_only()
     @commands.command(aliases=["previous"],
                       description="⏪ Return to the last song played")
-    async def last(self, ctx):
+    async def last(self, ctx:commands.Context):
 
         await self.rewind_audio(ctx.guild)
 
@@ -610,7 +587,7 @@ class music_commands\
     @commands.guild_only()
     @commands.command(aliases=["next"],
                       description='⏩ skip to the next audio in the queue')
-    async def skip(self, ctx):
+    async def skip(self, ctx:commands.Context):
 
         await self.skip_audio(ctx.guild)
 
@@ -620,7 +597,7 @@ class music_commands\
     @commands.guild_only()
     @commands.command(aliases=["stop_playing"],
                       description='⏹ stop the current audio from playing 🚫')
-    async def stop(self, ctx):
+    async def stop(self, ctx:commands.Context):
 
         #Checking
         if not ctx.voice_client:
@@ -639,7 +616,7 @@ class music_commands\
     @commands.guild_only()
     @commands.command(aliases=["replay", "re"],
                       description='🔄 restart the current audio')
-    async def restart(self, ctx):
+    async def restart(self, ctx:commands.Context):
 
         await self.restart_audio(ctx.guild)
 
@@ -651,7 +628,7 @@ class music_commands\
     @commands.command(
         aliases=["set_volume",'setvolume','setvolumeto','set_volume_to',"changevolume", "vol"],
         description='📶 set audio volume to a percentage (0% - 150%)')
-    async def volume(self, ctx, volume_to_set):
+    async def volume(self, ctx:commands.Context, volume_to_set):
 
         #Try getting the volume_percentage from the message
         try:
@@ -686,7 +663,7 @@ class music_commands\
     @commands.guild_only()
     @commands.command(aliases=["looping","single_loop",'setloop','setlooping','setloopingto',"toggleloop","toggle_looping",'changelooping','set_loop' ,"repeat", 'lop'],
                       description='🔂 Enable / Disable looping, when enabled song will restart after playing')
-    async def loop(self, ctx, mode=None):
+    async def loop(self, ctx:commands.Context, mode=None):
         guild = ctx.guild
       
         new_loop = self.get_loop(guild)
@@ -760,9 +737,8 @@ class music_commands\
                     index = int(findall(r'\d+', query)[0])
                     _,link = Favourties.get_track_by_index(author, index-1)
                     query = link
-                except:
-                    return await ctx.reply(
-                        "❌ Failed to get song from your favourite list")
+                except (ValueError,IndexError):
+                    return await ctx.reply("❌ Failed to get song from your favourite list")
                 else:
                     reply_msg = await ctx.send(f"🎧 Track **#{index}** in {author.mention}'s favourites has been selected")
                         
@@ -799,7 +775,7 @@ class music_commands\
                                                   timeout=TimeOutSeconds,
                                                   check=lambda btn: btn.author == author and btn.message.id == choicesMsg.id)
                 #Not pressed for ammount of time
-                except:
+                except asyncio.TimeoutError:
                     return await choicesMsg.edit(embed=self.NoTrackSelectedEmbed,
                                                 components=[])
                 #Received option
@@ -1048,15 +1024,14 @@ class music_commands\
 
         #Clearing glitched messages
         elif queue[0] is None or queue.audio_message is None or queue.audio_message.id != btn.message.id or not self.is_playing(guild):
-          if not btn.custom_id.isnumeric() and not btn.responded and btn.message.embeds:
-            
-            new_embed = btn.message.embeds[0]
-            
-            for _ in range(4):
-              new_embed.remove_field(2)
+            if not btn.custom_id.isnumeric() and not btn.responded and btn.message.embeds:
+                new_embed:discord.Embed = btn.message.embeds[0]
+                if len(new_embed.fields) == 6:
+                    for _ in range(4):
+                        new_embed.remove_field(2)
 
-            await btn.edit_origin(embed = new_embed,
-                                  components=Buttons.AfterAudioButtons)
+                    await btn.edit_origin(embed = new_embed,
+                                         components=Buttons.AfterAudioButtons)
 
         elif btn.custom_id == Buttons.SubtitlesButton.custom_id:
           await super().on_subtitles_btn_press(btn)
@@ -1077,28 +1052,29 @@ class music_commands\
     @commands.guild_only()
     @commands.command(aliases=["np", "nowplaying", "now"],
                       description='🔊 Display the current audio playing in the server')
-    async def now_playing(self, ctx):
+    async def now_playing(self, ctx:commands.Context):
         await Logging.log(f"{ctx.author} used now playing command in [{ctx.guild}] ;")
 
         queue = self.get_queue(ctx.guild)
-        audio_message = queue.audio_message
+        audio_message:discord.Message = queue.audio_message
         #No audio playing (not found the now playing message)
         if audio_message is None:
             return await ctx.reply(Replies.free_to_use_msg)
-        
+        elif ctx.voice_client is None:
+            return await ctx.reply(Replies.free_to_use_msg + "| not in a voice channel")
+
         #if same text channel
-        try:
-            await audio_message.reply("*🎧 This is the audio playing right now ~*")
+        if audio_message.channel == ctx.channel:
+            return await audio_message.reply("*🎧 This is the audio playing right now ~*")
         #Or not
-        except:
-            await ctx.send(f"🎶 Now playing in {self.get_current_vc(ctx.guild).mention} - **{queue[0].get('title')}**")
+        await ctx.send(f"🎶 Now playing in {self.get_current_vc(ctx.guild).mention} - **{queue[0].get('title')}**")
 #----------------------------------------------------------------#
 #Favourites
 
     @commands.guild_only()
     @commands.command(aliases=['addtofav', "save", "savesong", "fav"],
                       description='👍🏻 Add the current song playing to your favourites')
-    async def favourite(self, ctx):
+    async def favourite(self, ctx:commands.Context):
         #No audio playing
         if not self.is_playing(ctx.guild):
             return await ctx.reply(Replies.free_to_use_msg)
@@ -1108,10 +1084,7 @@ class music_commands\
         await Logging.log(f"`{ctx.author}` added `[{Track.title}]` to the fav list in [{ctx.guild}] ;")
 
         #Add to the list
-        try:
-            Favourties.add_track(ctx.author, Track.title, Track.webpage_url)
-        except:
-            return await ctx.reply("🎧 You cannot have more than 25 songs in your favourites")
+        Favourties.add_track(ctx.author, Track.title, Track.webpage_url)
 
         #Responding
         await ctx.reply(Replies.added_fav_msg.format(Track.title))
@@ -1120,7 +1093,7 @@ class music_commands\
 
     @commands.command(aliases=['unfav', 'removefromfav'],
                       description='❣🗒 Remove a song from your favourites')
-    async def unfavourite(self, ctx, index):
+    async def unfavourite(self, ctx:commands.Context, index):
         await Logging.log(f"`{ctx.author}` removed `[{index}]` from the fav list in [{ctx.guild}] ;")
         try:
             from re import findall
@@ -1140,7 +1113,7 @@ class music_commands\
         'showfav', "favlist", "myfavourites", "myfavourite", "myfavs", "myfav"
     ],
                       description='❣🗒 Display every song in your favourites')
-    async def display_favourites(self, ctx):
+    async def display_favourites(self, ctx:commands.Context):
       await Logging.log(f"{ctx.author} used display_favourites command in [{ctx.guild}] ;")
 
       #Grouping the list in string

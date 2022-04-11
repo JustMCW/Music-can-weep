@@ -21,7 +21,7 @@ class Replies:
   same_vc_msg = "👍🏻 Already joined {}"
   free_to_use_msg = "🎧 Nothing is playing right now... meaning you are free to use it ! 👍🏻"
 
-  loop_audio_msg = "🔂 Looping has been set to {}"
+  loop_audio_msg = "🔂 Single track looping has been set to {}"
   queue_loop_audio_msg = "🔂 Queue looping has been set to {}"
   now_play_msg = "**🎧 Now playing 🎤**"
 

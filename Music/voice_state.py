@@ -1,10 +1,11 @@
+from xml.dom.minidom import Attr
 import discord
 import time
 import asyncio
 from discord.ext import commands
 
 from main import BOT_INFO
-from Music.queue import Queue
+from Music.queue import SongQueue
 from errors import custom_errors
 
 #DECORATER
@@ -24,58 +25,59 @@ def playing_audio(vcfunc):
 class VoiceState:
 
     @staticmethod
-    def is_playing(guild)-> bool:
+    def is_playing(guild:discord.Guild)-> bool:
         if not guild.voice_client: 
             return False
         return guild.voice_client.source is not None
 
     @classmethod
-    def is_paused(self,guild)->bool:
+    def is_paused(self,guild:discord.Guild)->bool:
         if not self.is_playing(guild):
             return True
         return guild.voice_client.is_paused()
 
-    def get_now_playing(self,guild) -> dict:
+    def get_now_playing(self,guild:discord.Guild) -> dict:
         return self.now_playing.get(guild.id)
 
-    def get_queue(self,guild) ->Queue:
+    def get_queue(self,guild:discord.Guild) ->SongQueue:
         if self.queues.get(guild.id) is None:
-            self.queues[guild.id] = Queue(guild)
+            self.queues[guild.id] = SongQueue(guild)
         return self.queues.get(guild.id)
 
-    def get_queue_loop(self,guild)->bool:
+    def get_queue_loop(self,guild:discord.Guild)->bool:
         return self.get_queue(guild).queue_looping
 
-    def get_loop(self,guild)->bool:
+    def get_loop(self,guild:discord.Guild)->bool:
         return self.get_queue(guild).looping
     
     @staticmethod
-    def get_current_vc(guild)->discord.VoiceChannel:
-        return guild.voice_client.channel
+    def get_current_vc(guild:discord.Guild)->discord.VoiceChannel:
+        try:
+            return guild.voice_client.channel
+        except AttributeError:
+            return None
     
-    def get_volume(self,guild)->float:
+    def get_volume(self,guild:discord.Guild)->float:
         return self.get_queue(guild).volume
 
-    def get_volume_percentage(self,guild)->str:
+    def get_volume_percentage(self,guild:discord.Guild)->str:
         return f'{round(self.get_volume(guild) / BOT_INFO.InitialVolume * 100)}%'
 
     @staticmethod
-    def get_non_bot_vc_members(guild)->list:
-        if guild.voice_client:
+    def get_non_bot_vc_members(guild:discord.Guild)->list:
+        try:
             return [member for member in guild.voice_client.channel.members if not member.bot]
-        return None
+        except AttributeError:
+            raise custom_errors.NotInVoiceChannel
     
 #
 
     @staticmethod
     async def join_voice_channel(guild:discord.Guild, vc):
-        try:
-            if guild.voice_client is None: 
-                await vc.connect()
-            else: 
-                await guild.voice_client.move_to(vc)
-        except: 
-            raise commands.errors.BotMissingPermissions({"connect"})
+        if guild.voice_client is None: 
+            await vc.connect()
+        else: 
+            await guild.voice_client.move_to(vc)
 
     @staticmethod
     @playing_audio
@@ -117,4 +119,4 @@ class VoiceState:
         new_start_time =float(time.perf_counter())
         queue[0].play(voice_client,
                       volume=queue.volume,
-                      after=lambda e: asyncio.run(self.after_playing(guild,new_start_time,e)) )
+                      after= lambda voice_error: asyncio.run(self.after_playing(guild,new_start_time,voice_error)) )
