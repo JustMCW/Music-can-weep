@@ -380,7 +380,7 @@ class Functions:
             if NextTrack is None:
                 queue.audio_control_status = None
                 self.bot.loop.create_task(self.clear_audio_message(guild))
-                self.bot.loop.create_task(queue.audio_message.channel.send("All tracks in the queue has been played (if you want to repeat the queue, run \" >>queue repeat on \")"))
+                self.bot.loop.create_task(queue.audio_message.channel.send("\\☑️ All tracks in the queue has been played (if you want to repeat the queue, run \" >>queue repeat on \")",delete_after=30))
                 return print("Queue is empty")
 
             #To prevent sending the same audio message again
@@ -528,7 +528,7 @@ class music_commands\
 
     @commands.guild_only()
     @commands.command(
-        aliases=["leave", "bye", 'dis', "lev", "lve", 'l'],
+        aliases=["leave", "bye", 'dis', "lev","leav", "lve", 'l'],
         description='👋 Disconnect from the current voice channel i am in')
     async def disconnect(self, ctx):
         voice_client = ctx.voice_client
