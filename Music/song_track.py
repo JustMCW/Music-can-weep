@@ -3,7 +3,7 @@ from youtube_dl import YoutubeDL
 
 RequiredAttr = ("title","webpage_url","duration",
                 "thumbnail","channel","channel_url",
-                "subtitles","formats")
+                "subtitles","formats","requester")
 
 
 class SongTrack:
@@ -12,7 +12,7 @@ class SongTrack:
 
     def __init__(self,requester:discord.Member,**info:dict):
 
-      self._requester = requester
+      self.requester = requester
       
       for key,value in info.items():
           if key in RequiredAttr:
@@ -75,7 +75,3 @@ class SongTrack:
                                                 volume = volume)
 
         voice_client.play(vol_src,after=after)
-    
-    @property
-    def requester(self):
-        return self._requester
