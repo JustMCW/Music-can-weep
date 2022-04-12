@@ -379,8 +379,8 @@ class Functions:
                             if msg.id == queue.audio_message.id:
                                 target = await target.fetch_message(msg.id)
 
-                        if isinstance(target,discord.TextChannel):
-                            await self.clear_audio_message(guild)
+                    if isinstance(target,discord.TextChannel):
+                        await self.clear_audio_message(guild)
                             
                     await self.create_audio_message(Track = NextTrack,
                                                     Target = target)
