@@ -1,4 +1,3 @@
-from xml.dom.minidom import Attr
 import discord
 import time
 import asyncio
@@ -106,17 +105,25 @@ class VoiceState:
         guild.voice_client.stop()
 
     @playing_audio
-    async def restart_audio(self,guild:discord.Guild):
+    async def restart_audio(self,guild:discord.Guild,position:float=0):
+        
+        queue = self.get_queue(guild)
+
+        if position:
+            if position >= queue[0].duration:
+                raise OverflowError("Seek out of range")
 
         voice_client = guild.voice_client
 
-        queue = self.get_queue(guild)
+        
 
         queue.audio_control_status = "RESTART"
 
         voice_client.stop()
         
+
         new_start_time =float(time.perf_counter())
         queue[0].play(voice_client,
                       volume=queue.volume,
-                      after= lambda voice_error: asyncio.run(self.after_playing(guild,new_start_time,voice_error)) )
+                      after = lambda voice_error: self.after_playing(guild,new_start_time,voice_error) ,
+                      position = position)

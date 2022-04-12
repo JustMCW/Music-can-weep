@@ -23,7 +23,7 @@ class Subtitles:
                 return content
 
     @staticmethod
-    def extract_subtitles(self,subtitles_list:list, language:str)->list:
+    def extract_subtitles(subtitles_list:list, language:str)->list:
         language_catergory = subtitles_list.get(language)
         if not language_catergory:
             language_catergory = list(subtitles_list.values())[0]
@@ -47,7 +47,7 @@ class Subtitles:
             if is_complex:
                 line = Subtitles.filter_subtitle(line)
                 if len(subtitles) > 2:
-                    if line in subtitles[-1]:
+                    if line == subtitles[-1] or line == subtitles[-2]:
                         continue
             subtitles.append(line)
         subtitles_file.close()

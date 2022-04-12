@@ -1,10 +1,10 @@
-import discord, asyncio, time
+import discord, asyncio,time
 from datetime import datetime
 from discord.ext import commands
 from discord_components import Select, SelectOption, Button, ButtonStyle
-
 from main import BOT_INFO
 from log import Logging
+
 from convert import Convert
 from favourites import Favourties
 from subtitles import Subtitles
@@ -30,13 +30,15 @@ class Embeds:
 
 
     #The embed that display the audio's infomation + status
-    def audio_playing_embed(self, guild,requester,foundLyrics:bool,SongTrackPlaying:SongTrack) -> discord.Embed:
+    def audio_playing_embed(queue:SongQueue,foundLyrics:bool) -> discord.Embed:
+        SongTrackPlaying:SongTrack = queue[0]
+
         return discord.Embed(title= SongTrackPlaying.title,
                             url= SongTrackPlaying.webpage_url,
                             color=discord.Color.from_rgb(255, 255, 255))\
                 \
-                .set_author(name=f"Requested by {requester.display_name}",
-                            icon_url=requester.avatar_url)\
+                .set_author(name=f"Requested by {SongTrackPlaying.requester.display_name}",
+                            icon_url=SongTrackPlaying.requester.avatar_url)\
                 .set_thumbnail(url = SongTrackPlaying.thumbnail)\
                 \
                 .add_field(name=f"YT Channel  {Emojis.YOUTUBE_ICON}",
@@ -47,11 +49,11 @@ class Embeds:
                             value=f'*{"Available" if foundLyrics else "Unavailable"}*')\
                 \
                 .add_field(name="Voice Channel 🔊",
-                            value=f"{self.get_current_vc(guild).mention}")\
+                            value=f"{queue.guild.voice_client.channel.mention}")\
                 .add_field(name="Volume 📶",
-                            value=f"{self.get_volume_percentage(guild)}")\
+                            value=f"`{round(queue.volume / BOT_INFO.InitialVolume * 100)}%`")\
                 .add_field(name="Looping 🔂",
-                            value=f'**{Convert.bool_to_str(self.get_loop(guild))}**')
+                            value=f'**{Convert.bool_to_str(queue.looping)}**')
 
     NoTrackSelectedEmbed = discord.Embed(title=f"{Emojis.cute_panda} No track was selected !",
                                         description=f"You thought for too long ( {TimeOutSeconds//60} minutes ), use the command again !",
@@ -100,9 +102,8 @@ class Buttons:
 
     AfterAudioButtons=[[PlayAgainButton,FavouriteButton]].copy()
 
-  #Buttons functionality 
+    #Buttons functionality 
     
-    @classmethod
     async def inform_changes(self,btn,msg:str):
         if len(self.get_non_bot_vc_members(btn.guild)) > 1:
             await btn.message.reply(content=f"{msg} by {btn.author.mention}",
@@ -138,17 +139,13 @@ class Buttons:
       await btn.edit_origin(content=btn.message.content)
       current_loop = self.get_loop(btn.guild)
       self.get_queue(btn.guild).looping = not current_loop
-      await self.inform_changes(btn,
-        Replies.loop_audio_msg.format(Convert.bool_to_str(self.get_loop(btn.guild))
-        )
-      )
+      await self.inform_changes(btn,Replies.loop_audio_msg.format(Convert.bool_to_str(self.get_loop(btn.guild))))
 
     async def on_favourite_btn_press(self,btn):
       await btn.respond(type=5)
       title = btn.message.embeds[0].title
       url = btn.message.embeds[0].url
       Favourties.add_track(btn.author, title, url)
-
       await btn.respond(content=Replies.added_fav_msg.format(title))
 
     async def on_subtitles_btn_press(self,btn):
@@ -267,55 +264,57 @@ class Functions:
         queue = self.get_queue(guild)
         #the message for displaying and controling the audio
 
-        AUDIO_EMBED = self.audio_playing_embed(guild,Track.requester,FoundLyrics,Track)
+        AUDIO_EMBED = Embeds.audio_playing_embed(queue,FoundLyrics)
         CONTROL_BUTTONS = Buttons.AudioControllerButtons
         
         #if it's found then dont disable or if is't not found disable it
         CONTROL_BUTTONS[1][2].disabled = not FoundLyrics 
 
         if isinstance(Target,discord.Message):
-          await Target.edit(embed=AUDIO_EMBED,
-                            components=CONTROL_BUTTONS)
-          Target = await Target.channel.fetch_message(Target.id)
+            await Target.edit(embed=AUDIO_EMBED,
+                                components=CONTROL_BUTTONS)
+            Target = await Target.channel.fetch_message(Target.id)
 
         elif isinstance(Target,discord.TextChannel):
-          Target = await Target.send(embed=AUDIO_EMBED,
-                                         components=CONTROL_BUTTONS)
+            Target = await Target.send(embed=AUDIO_EMBED,
+                                            components=CONTROL_BUTTONS)
         
         queue.audio_message = Target
 
-    async def after_playing(self,guild:discord.Guild, 
-                                start_time:float,
-                                voice_error:str = None):
+    def after_playing(self,
+                    guild:discord.Guild, 
+                    start_time:float,
+                    voice_error:str = None):
         
-        if voice_error:
+        if voice_error is not None:
             return print("Voice error :",voice_error)
 
         voice_client:discord.VoiceClient = guild.voice_client
         queue:SongQueue = self.get_queue(guild)
-        audio_control_status:str = queue.audio_control_status #None , "RESTART" , "SKIP"
+        audio_control_status:str = queue.audio_control_status
+
         FinshedTrack:SongTrack = queue[0]
 
-        #Some checks before continue
+        queue.audio_control_status = None
 
-        
+        #Some checks before continue
         #Ensure in voice chat
         if not voice_client:
             self.bot.loop.create_task(self.clear_audio_message(guild))
+
             if not queue.enabled:
-                queue -= 0
-            return print("Ignore loop : Not in voice channel")
+                queue.popleft()
+
+            return print("Ignore loop : NOT IN VOICE CHANNEL")
         
-        #Ignore if some command is trigger
+        #Ignore if some commands are triggered
         if audio_control_status == "RESTART":
-            print(f"Ignore loop : {audio_control_status}")
-            queue.audio_control_status = None
-            return 
+
+            return print(f"Ignore loop : RESTART")
+
         elif audio_control_status == "CLEAR":
             self.bot.loop.create_task(self.clear_audio_message(guild))
-            queue.clear()
-            queue.audio_control_status = None
-            return print("Ignore loop : Cleared the queue")
+            return print("Ignore loop : CLEAR QUEUE")
            
         NextTrack:SongTrack = None
         looping:bool = queue.looping
@@ -323,15 +322,17 @@ class Functions:
         #Counter 403 forbidden error (an error that try cannot catch, it makes the audio ends instantly)
         if (time.perf_counter() - start_time) < 0.5 and audio_control_status is None:
 
-            print("Ignore loop : Http error detected - Time (ns) = ",time.perf_counter() - start_time)
+            print("Ignore loop : HTTP ERROR, Time (ns) = ",time.perf_counter() - start_time)
 
             #Get a new piece of info
             NextTrack = SongTrack.create_track(query = FinshedTrack.webpage_url,
-                                            requester=FinshedTrack.requester)
+                                               requester=FinshedTrack.requester)
 
+            #Replace the old info
+            queue[0].formats = NextTrack.formats
         
         elif not queue.enabled and (not looping or audio_control_status=="SKIP"):
-            queue -= 0
+            queue.popleft()
             self.bot.loop.create_task(self.clear_audio_message(guild))
             return print("Queue disabled")
 
@@ -345,38 +346,42 @@ class Functions:
 
             #if queue loop is on
             if audio_control_status == "REWIND":
-                queue.move_last_to_first()
+                queue.rotate(1)
             elif queue_looping:
-                queue.move_first_to_last()    
+                queue.rotate(-1)    
             else:
-                queue -= 0
+                queue.popleft()
 
             #Get the next song ( first song in the queue )
-            NextTrack = queue[0]
+            NextTrack = queue.get(0)
 
-            #Check if next track exist, none means the queue is empty
+            #No song in the queue
             if NextTrack is None:
-                queue.audio_control_status = None
+                
                 self.bot.loop.create_task(self.clear_audio_message(guild))
                 self.bot.loop.create_task(queue.audio_message.channel.send("\\☑️ All tracks in the queue has been played (if you want to repeat the queue, run \" >>queue repeat on \")",delete_after=30))
                 return print("Queue is empty")
 
             #To prevent sending the same audio message again
             if NextTrack != FinshedTrack:
-              
+                print("Next track !")
+
                 async def display_next():
 
                     target = queue.audio_message.channel
-                    history = target.history(limit = 5)
-                    history = await history.flatten()
 
-                    for msg in history:
-                        if msg.id == queue.audio_message.id:
-                            target = await target.fetch_message(msg.id)
+                    if queue.audio_message.content:
 
-                    if isinstance(target,discord.TextChannel):
-                        await self.clear_audio_message(guild)
+                        history = target.history(limit = 2)
+                        history = await history.flatten()
                         
+                        for msg in history:
+                            if msg.id == queue.audio_message.id:
+                                target = await target.fetch_message(msg.id)
+
+                        if isinstance(target,discord.TextChannel):
+                            await self.clear_audio_message(guild)
+                            
                     await self.create_audio_message(Track = NextTrack,
                                                     Target = target)
                   
@@ -384,26 +389,25 @@ class Functions:
                 self.bot.loop.create_task(display_next())
             
             elif audio_control_status == "SKIP":
-                queue.audio_control_status = None
+                
                 self.bot.loop.create_task(self.clear_audio_message(guild))
                 return print("Skipped the only song in the queue")
 
         #To show that we have handle the control
-        queue.audio_control_status = None
+        
 
         new_start_time =float(time.perf_counter())
 
         #Play the audio
         NextTrack.play(voice_client,
-                      after=lambda error: asyncio.run(self.after_playing(guild,new_start_time,error)),
-                      volume=self.get_volume(guild)
-                    )
+                      after=lambda error: self.after_playing(guild,new_start_time,error),
+                      volume=self.get_volume(guild))
 
     async def update_audio_msg(self,guild):
         if not self.is_playing(guild): 
             return
 
-        audio_msg = self.get_queue(guild).audio_message
+        audio_msg:discord.Message = self.get_queue(guild).audio_message
 
         if audio_msg is None: 
             return
@@ -428,22 +432,23 @@ class Functions:
         await audio_msg.edit(embed=new_embed)
         
     async def clear_audio_message(self,guild):
-      queue = self.get_queue(guild)
-      audio_message = queue.audio_message
-      if audio_message is None:  
-          return print("Audio message is none")
+        queue = self.get_queue(guild)
+        audio_message:discord.Message = queue.audio_message
 
-      newEmbed:discord.Embed = audio_message.embeds[0]
-      for _ in range(4):
-        newEmbed.remove_field(2)
+        if audio_message is None:  
+            return print("Audio message is none")
 
-      content = audio_message.content if len(audio_message.content) >1 else "☕️ Audio playing before :"
+        newEmbed:discord.Embed = audio_message.embeds[0]
+        for _ in range(4):
+            newEmbed.remove_field(2)
 
-      await audio_message.edit(content = content,
-                                embed=newEmbed,
-                                components=Buttons.AfterAudioButtons)
-    
-      queue.audio_message = None
+        content = audio_message.content #if len(audio_message.content) >1 else "☕️ Audio playing before :"
+
+        await audio_message.edit(content = content,
+                                    embed=newEmbed,
+                                    components=Buttons.AfterAudioButtons)
+        print("Succesfully removed audio messsage.")
+        queue.audio_message = None
 
 #----------------------------------------------------------------#
 
@@ -452,7 +457,6 @@ class music_commands\
 (
   commands.Cog, 
   Functions, 
-  Embeds,
   VoiceState,
   Buttons
 ):
@@ -478,7 +482,7 @@ class music_commands\
             SelectedVC = discord.utils.get(ctx.guild.voice_channels,
                                           name=ChannelName)
             if not SelectedVC:  #Channel not found
-              raise commands.errors.ChannelNotFound(ChannelName)
+                raise commands.errors.ChannelNotFound(ChannelName)
             channel_to_join = SelectedVC
           
         #User not in a voice channel
@@ -496,10 +500,8 @@ class music_commands\
         await super().join_voice_channel(ctx.guild, channel_to_join)
 
         #Response
-        await ctx.reply(super().join_msg.format(channel_to_join.mention))
-        await Logging.log(
-            f"{author} just make me joined `{channel_to_join}` in [{ctx.guild}] ;"
-        )
+        await ctx.reply(Replies.join_msg.format(channel_to_join.mention))
+        await Logging.log(f"{author} just make me joined `{channel_to_join}` in [{ctx.guild}] ;")
         await super().update_audio_msg(ctx.guild)
 
     @commands.guild_only()
@@ -543,7 +545,7 @@ class music_commands\
         queue = self.get_queue(guild)      
 
         #Not playing anything but the queue has something
-        if queue[0] is not None:
+        if queue.get(0) is not None:
             try:
                 await self.resume_audio(guild)       
             except (error_type.NotInVoiceChannel,error_type.NoAudioPlaying):
@@ -556,7 +558,7 @@ class music_commands\
 
                 #Repeat function after the audio
                 start_time = float(time.perf_counter())
-                after_playing = lambda voice_error: asyncio.run(self.after_playing(guild,start_time,voice_error))
+                after_playing = lambda voice_error: self.after_playing(guild,start_time,voice_error)
 
                 #Play the audio
                 queue[0].play(guild.voice_client,
@@ -584,15 +586,33 @@ class music_commands\
         await ctx.reply(Replies.rewind_audio_msg)
         await Logging.log(f"{ctx.author} used rewind command in [{ctx.guild}] ;")
 
+
+
     @commands.guild_only()
     @commands.command(aliases=["next"],
                       description='⏩ skip to the next audio in the queue')
     async def skip(self, ctx:commands.Context):
-
+        
         await self.skip_audio(ctx.guild)
 
         await ctx.reply(Replies.skipped_audio_msg)
         await Logging.log(f"{ctx.author} used skip command in [{ctx.guild}] ;")
+
+    @commands.guild_only()
+    @commands.command(aliases=["jump","jumpto"],
+                      description="⏏️ Move the time position of the current audio, format : [Hours:Minutes:Seconds] or literal seconds like 3600 (an hour). This is a experimental command.")
+    async def seek(self,ctx:commands.Context,*,time_position):
+
+        try:
+            position_sec:float = Convert.time_to_sec(time_position)
+            await self.restart_audio(ctx.guild,position=position_sec)
+        except ValueError:
+            await ctx.reply(f"Invaild time position, format : {ctx.prefix}{ctx.invoked_with} [Hours:Minutes:Seconds]")
+        except OverflowError:
+            await ctx.reply("This time position is longer than the duration of the current track playing")
+        else:
+            await ctx.reply(f"⏏️ Successfully moved audio's time position to `{Convert.length_format(position_sec)}`")
+
 
     @commands.guild_only()
     @commands.command(aliases=["stop_playing"],
@@ -745,7 +765,7 @@ class music_commands\
             #Keyword
             else:
                 #Searching
-                searchResult = super().search_from_youtube(query,ResultLengthLimit=5)
+                searchResult = super().search_from_youtube(query)
 
                 if not searchResult:
                     return await ctx.reply("An error hass been captured when searching for the audio ! ( Try again )")
@@ -754,7 +774,8 @@ class music_commands\
                 choicesString:str = ""
                 choicesButtons = []
                 
-                for i, video in enumerate(searchResult):
+                for i in range(5):
+                    video = searchResult[i]
                     title = video["title"]["runs"][0]["text"]
                     length = video["lengthText"]["simpleText"]
                     choicesString += f'{i+1}: {title} `[{length}]`\n'
@@ -772,19 +793,22 @@ class music_commands\
                 #Get which button user pressed
                 try:
                     choicesInteraction = await self.bot.wait_for("button_click",
-                                                  timeout=TimeOutSeconds,
-                                                  check=lambda btn: btn.author == author and btn.message.id == choicesMsg.id)
+                                                                timeout=TimeOutSeconds,
+                                                                check=lambda btn: btn.author == author and btn.message.id == choicesMsg.id)
                 #Not pressed for ammount of time
                 except asyncio.TimeoutError:
-                    return await choicesMsg.edit(embed=self.NoTrackSelectedEmbed,
+                    return await choicesMsg.edit(embed=Embeds.NoTrackSelectedEmbed,
                                                 components=[])
                 #Received option
                 else:
-                    index = int(choicesInteraction.custom_id)
-                    await choicesInteraction.edit_origin(content=f"{Emojis.YOUTUBE_ICON} Song **#{index+1}** in the youtube search result has been selected",
-                                                         components = [])
-                    reply_msg = await ctx.fetch_message(choicesMsg.id)
-                    query = f'https://www.youtube.com/watch?v={searchResult[index]["videoId"]}'
+                    try:
+                        index = int(choicesInteraction.custom_id)
+                        await choicesInteraction.edit_origin(content=f"{Emojis.YOUTUBE_ICON} Song **#{index+1}** in the youtube search result has been selected",
+                                                            components = [])
+                        reply_msg = await ctx.fetch_message(choicesMsg.id)
+                        query = f'https://www.youtube.com/watch?v={searchResult[index]["videoId"]}'
+                    except ValueError:
+                        print("Value error")
               
         
         queue = self.get_queue(guild)
@@ -810,9 +834,10 @@ class music_commands\
         #Success
         else:
             
-            queue += NewTrack
-        
-            if queue[1] is not None:
+            queue.append(NewTrack)
+            
+
+            if queue.get(1) is not None:
                 # track_repeated:bool = any([True for track in queue[1:] if track.webpage_url == NewTrack.webpage_url])
                 # if track_repeated:
                 #     await reply_msg.edit(reply_msg.content + "(A)")
@@ -834,7 +859,7 @@ class music_commands\
             
             #Repeat function after the audio
             start_time = float(time.perf_counter())
-            after_playing = lambda voice_error: asyncio.run(self.after_playing(guild,start_time,voice_error))
+            after_playing = lambda voice_error: self.after_playing(guild,start_time,voice_error)
 
             #Play the audio
 
@@ -850,16 +875,20 @@ class music_commands\
                     aliases = ["que","qeueu","q"])
     async def queue(self,ctx):
         await Logging.log(f"{ctx.author} used queue command : {ctx.subcommand_passed} in [{ctx.guild}] ;")
+        
         if not self.get_queue(ctx.guild).enabled:
             raise error_type.QueueDisabled
-        def get_params_str(cmd)->str:
-            if list(cmd.clean_params):
-                return f"`[{']` `['.join(list(cmd.clean_params))}]`"
-            return ""
 
         if ctx.invoked_subcommand is None:
+
+            def get_params_str(cmd)->str:
+                if list(cmd.clean_params):
+                    return f"`[{']` `['.join(list(cmd.clean_params))}]`"
+                return ""
+
+
             await ctx.reply(embed=discord.Embed(
-                title = "Queue commands : (New feature)",
+                title = "Queue commands :",
                 description = "\n".join([f"{ctx.prefix}queue **{cmd.name}** {get_params_str(cmd)}" for cmd in ctx.command.walk_commands() ]),
                 color = discord.Color.from_rgb(255,255,255)
               ) 
@@ -890,8 +919,6 @@ class music_commands\
     async def remove(self,ctx,position):
         queue = self.get_queue(ctx.guild)
 
-        if not queue.enabled:
-            raise error_type.QueueDisabled
         if len(queue) ==0:
             raise error_type.QueueEmpty
 
@@ -899,8 +926,9 @@ class music_commands\
             position = int(position)
             if position ==0 and ctx.voice_client.source:
                 raise IndexError("Cannot remove current song")
-            poped_track = queue[position]
-            queue -= position
+            poped_track = queue.get(position)
+
+            queue.pop(position)
         except (TypeError,IndexError) as e:
             await ctx.reply(f"❌ Invaild position, {e}")
         else:
@@ -910,15 +938,15 @@ class music_commands\
     @queue.command(description="Removes every track in the queue",
                    aliases=["empty","clr"],)
     async def clear(self,ctx):
-        queue = self.get_queue(ctx.guild)
-
-        if not queue.enabled:
-            raise error_type.QueueDisabled
+        queue:SongQueue = self.get_queue(ctx.guild)
 
         queue.audio_control_status = "CLEAR"
+        queue.clear()
+        await self.clear_audio_message(ctx.guild)
         if ctx.voice_client:
             ctx.voice_client.stop()
-        await ctx.reply("The queue has been cleared")
+
+        await ctx.reply("🗒 The queue has been cleared")
 
     @commands.guild_only()
     @queue.command(description="Swap the position of two tracks in the queue")
@@ -933,13 +961,23 @@ class music_commands\
             await ctx.reply(f"Swapped **#{position_1}** with **#{position_2}** in the queue")
 
     @commands.guild_only()
-    @queue.command(description="Randomize the position of every track in the queue",
-                   aliases = ["shuffle_queue","sfl"],)
-    async def shuffle(self,ctx):
-      queue = self.get_queue(ctx.guild)
-      queue.shuffle()
+    @queue.command()
+    async def reverse(self,ctx):
+        queue:SongQueue = self.get_queue(ctx.guild)
+        playing:SongTrack = queue.popleft()
+        queue.reverse()
+        queue.appendleft(playing)
 
-      await ctx.reply("🎲 The queue has been *shuffled*")
+        await ctx.reply("🔃 The queue has been *reversed*")
+
+    @commands.guild_only()
+    @queue.command(description="Randomize the position of every track in the queue",
+                   aliases = ["shuffle_queue","random","randomize","sfl"],)
+    async def shuffle(self,ctx):
+        queue = self.get_queue(ctx.guild)
+        queue.shuffle()
+
+        await ctx.reply("🎲 The queue has been *shuffled*")
 
     @commands.guild_only()
     @queue.command(description='🔂 Enable / Disable queue looping.\nWhen enabled, tracks will be moved to the last at the queue after finsh playing',
@@ -949,9 +987,6 @@ class music_commands\
 
         queue = self.get_queue(guild)
         new_qloop = queue.queue_looping
-
-        if not queue.enabled:
-            raise error_type.QueueDisabled
             
         #if not specified a mode
         if not mode:
@@ -974,22 +1009,24 @@ class music_commands\
         voice_client = guild.voice_client
 
         if not voice_client: 
-          return 
+            return 
 
         #If it is a user leaving a vc
-        if not member.bot and before.channel: 
+        if not member.bot and before.channel and before.channel != after.channel: 
             #The bot is in that voice channel that the user left
             if guild.me in before.channel.members:
                 #And no one is in the vc anymore
                 if not self.get_non_bot_vc_members(guild):
-            
+                    print("Nobody is in vc with me")
+
                     #Pause if it's playing stuff
-                    if voice_client.source:
+                    try:
                         channel = self.get_queue(guild).audio_message.channel
-                        await channel.send(
-                          f"⏸ Paused since nobody is in {before.channel.mention} ( leaves after 30 seconds )",
-                          delete_after=30)
+                        await channel.send(f"⏸ Paused since nobody is in {before.channel.mention} ( leaves after 30 seconds )",
+                                            delete_after=30)
                         voice_client.pause()
+                    except AttributeError: 
+                        pass
                     
                     #Leave the vc if after 30 second still no one is in vc
                     await asyncio.sleep(30)
@@ -1001,7 +1038,7 @@ class music_commands\
             if before.channel and after.channel:
                 if before.channel.id != after.channel.id: #Moving channel
                     if voice_client:
-                        print("Pasued but idk why")
+                        print("Pasued because moved")
                         guild.voice_client.pause()
 
 #Button detecting
@@ -1017,13 +1054,13 @@ class music_commands\
 
         #Buttons
         if btn.custom_id == Buttons.FavouriteButton.custom_id:
-          await super().on_favourite_btn_press(btn)
+            await super().on_favourite_btn_press(btn)
 
         elif btn.custom_id == Buttons.PlayAgainButton.custom_id:
-          await super().on_play_again_btn_press(btn)
+            await super().on_play_again_btn_press(btn)
 
         #Clearing glitched messages
-        elif queue[0] is None or queue.audio_message is None or queue.audio_message.id != btn.message.id or not self.is_playing(guild):
+        elif queue.get(0) is None or queue.audio_message is None or queue.audio_message.id != btn.message.id or not self.is_playing(guild):
             if not btn.custom_id.isnumeric() and not btn.responded and btn.message.embeds:
                 new_embed:discord.Embed = btn.message.embeds[0]
                 if len(new_embed.fields) == 6:
@@ -1034,18 +1071,18 @@ class music_commands\
                                          components=Buttons.AfterAudioButtons)
 
         elif btn.custom_id == Buttons.SubtitlesButton.custom_id:
-          await super().on_subtitles_btn_press(btn)
+            await super().on_subtitles_btn_press(btn)
         elif btn.custom_id == Buttons.PauseButton.custom_id:
-          await super().on_pause_btn_press(btn)
+            await super().on_pause_btn_press(btn)
         elif btn.custom_id == Buttons.ResumeButton.custom_id:
-          await super().on_resume_btn_press(btn)
+            await super().on_resume_btn_press(btn)
         elif btn.custom_id == Buttons.LoopButton.custom_id:
-          await super().on_loop_btn_press(btn)
-          await super().update_audio_msg(guild)
+            await super().on_loop_btn_press(btn)
+            await super().update_audio_msg(guild)
         elif btn.custom_id == Buttons.RestartButton.custom_id:
-          await super().on_restart_btn_press(btn)
+            await super().on_restart_btn_press(btn)
         elif btn.custom_id == Buttons.SkipButton.custom_id:
-          await super().on_skip_btn_press(btn)
+            await super().on_skip_btn_press(btn)
 #----------------------------------------------------------------#
 #Now playing
 
@@ -1131,8 +1168,7 @@ class music_commands\
                                       description=wholeList,
                                       color=discord.Color.from_rgb(255, 255, 255),
                                       timestamp=datetime.now()
-                                      ).set_footer(
-                                      text="Your favourites would be the available in every server")
+                        ).set_footer(text="Your favourites would be the available in every server")
 
       #sending the embed
       await ctx.reply(embed=favouritesEmbed)

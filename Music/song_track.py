@@ -48,16 +48,16 @@ class SongTrack:
         return cls(requester,**info)
     
     def play(self,
-            voice_client,
+            voice_client:discord.VoiceClient,
             after:callable(str)=None,
-            volume=1,
+            volume:float=1,
             position:float=0):
       
         FFMPEG_OPTION = {
           "before_options":"-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
           "options": f"-vn -ss {position}"
         }
-        #
+        
         src_url = self.formats[0].get("url")
         
         if src_url.startswith("https://manifest.googlevideo.com"):

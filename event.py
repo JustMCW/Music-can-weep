@@ -1,3 +1,4 @@
+from click import command
 from discord.ext import commands,tasks
 from replies import Replies
 import json
@@ -41,7 +42,7 @@ class events(commands.Cog,Replies):
   @tasks.loop(seconds=60,reconnect=True)
   async def changeBotPresence(self):
     from discord import Streaming,Game,Activity,ActivityType
-    from random import choice as randomChoice
+    
 
     presence = [
       Activity(type=ActivityType.listening, 
@@ -52,6 +53,7 @@ class events(commands.Cog,Replies):
       Game(name="Music 🎧 | >>help"),
     ]
 
+    from random import choice as randomChoice
     await self.BOT.change_presence(activity=randomChoice(presence))
 #Setting up
   @commands.Cog.listener()
@@ -65,9 +67,15 @@ class events(commands.Cog,Replies):
     DiscordComponents(self.BOT)
 
     cogs =["bot_admin","help","music"]
-    for cog_name in cogs:
-      print(f"Loading {cog_name}")
-      self.BOT.load_extension(f'Cogs.{cog_name}')
+    try:
+      for cog_name in cogs:
+        print(f"Loading {cog_name}")
+        self.BOT.load_extension(f'Cogs.{cog_name}')
+    except commands.errors.ExtensionAlreadyLoaded:
+      pass
+    except commands.errors.ExtensionFailed as ExtFailure:
+      print(ExtFailure)
+      self.BOT.logout()
 
     #Message that tell us we have logged in
     await Logging.log(f"Logged in as {self.BOT.user.mention} ( running in {len(self.BOT.guilds)} servers ) ;")
@@ -161,6 +169,9 @@ class events(commands.Cog,Replies):
       else:
         await Logging.error(str(commandError))
     
+    elif isinstance(commandError,discord_error.CheckFailure):
+      await ctx.reply(super().queue_disabled_msg.format(ctx.prefix))
+
     elif "NotFound" in str(commandError):
       pass
       
