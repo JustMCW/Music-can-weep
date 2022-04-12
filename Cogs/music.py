@@ -370,9 +370,9 @@ class Functions:
 
                     target = queue.audio_message.channel
 
-                    if queue.audio_message.content:
+                    if not queue.audio_message.content:
 
-                        history = target.history(limit = 2)
+                        history = target.history(limit = 3)
                         history = await history.flatten()
                         
                         for msg in history:
