@@ -658,7 +658,7 @@ class music_commands\
 
         #Try getting the volume_percentage from the message
         try:
-            volume_percentage = float(re.findall(r"\d+")[0])
+            volume_percentage = float(re.findall(r"\d+",volume_to_set)[0])
             if volume_percentage < 0: 
                 raise ValueError
         except IndexError:
@@ -748,7 +748,7 @@ class music_commands\
         else:
             #URL
             if query.startswith("https://") or query.startswith("HTTP://"):
-                query = re.sub(r"(https|HTTP)://(youtu\.be|www.youtube.com)(/shorts)?/(watch\?v=)?([A-Za-z0-9_]{11})",r"https://www.youtube.com/watch?v=\5",query)
+                query = re.sub(r"( https|HTTP)://(youtu\.be|www.youtube.com)(/shorts)?/(watch\?v=)?([A-Za-z0-9_]{11})",r"https://www.youtube.com/watch?v=\5",query)
 
                 if query.startswith("https://www.youtube.com/watch?v="): 
                     reply_msg = await ctx.send(f"{Emojis.YOUTUBE_ICON} A Youtube link is selected")
