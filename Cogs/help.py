@@ -8,7 +8,7 @@ class MCWHelpCommand(commands.HelpCommand):
     async def send_bot_help(self, mapping):
         channel:discord.DMChannel = self.get_destination()
     
-        description = "\n".join([f'**{cog.qualified_name.replace("_"," ")}**\n{", ".join(f"`{cmd.name}`" for cmd in cog.get_commands())}\n' for cog in mapping if cog is not None and len(cog.get_commands()) != 0])
+        description = "\n".join([f'**{cog.qualified_name.replace("_"," ")}**\n{", ".join(f"`{cmd.name}`" for cmd in cog.get_commands())}\n' for cog in mapping if cog is not None and len(cog.get_commands()) != 0 and cog.name != "bot_admin_commands"])
 
         await channel.send(embed= discord.Embed(title="🎶 This is a simple music bot ~",
                                                 description = f"Run `{self.clean_prefix}help command` for more infomation about that command\n\n"+description,
@@ -17,7 +17,7 @@ class MCWHelpCommand(commands.HelpCommand):
     async def send_command_help(self, command:commands.Command):
         channel:discord.DMChannel = self.get_destination()
 
-        aliases = f"\nAlternatives : `{'`, `'.join(command.aliases)}`" if command.aliases else ""
+        aliases = f"\n\nAlternatives : `{'`, `'.join(command.aliases)}`" if command.aliases else ""
         description = command.description or "No description"
 
         await channel.send(embed= discord.Embed(title=f"🌟 Usage of command : {command.qualified_name}",

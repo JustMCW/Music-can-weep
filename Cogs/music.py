@@ -747,7 +747,9 @@ class music_commands\
       
         else:
             #URL
-            if query.startswith("https://"):
+            if query.startswith("https://") or query.startswith("HTTP://"):
+                query = re.sub(r"(https|HTTP)://(youtu\.be|www.youtube.com)(/shorts)?/(watch\?v=)?([A-Za-z0-9_]{11})",r"https://www.youtube.com/watch?v=\5",query)
+
                 if query.startswith("https://www.youtube.com/watch?v="): 
                     reply_msg = await ctx.send(f"{Emojis.YOUTUBE_ICON} A Youtube link is selected")
                     
@@ -833,8 +835,22 @@ class music_commands\
         #Failed
         
         except BaseException as expection:
-            await Logging.log(f"an error captured when trying to get info from `{query}` : {expection} ;")
-            await ctx.send(f" Failed to play track `{query}`, reason is :\n`{str(expection).replace('ERROR: ','')}`")
+
+            error_dict:dict = {
+                "Sign in to confirm your age":"Youtube has marked this video as inappropriate content.",
+                "Unable to recognize tab page":"the video link was invalid, please double check it.",
+                "Video unavailable":expection,
+                "requested format not available":"Live stream cannot be played.",
+                "No video formats found":"429 too many request, this error has been reported automatically."
+            }
+            await Logging.log(f"An error captured when trying to gather infomation from `{query}` :\n{expection} ;")
+            for error_msg,reply in error_dict.items():
+                if error_msg in str(expection):
+                    if "429" in reply:
+                        await Logging.error("429 429 429 429 429 429 429 429 <@812808602997620756>")
+                    return await ctx.send(f"Unable to play track `{query}` because {reply}")
+            await Logging.error("BIG BIG BIG ERROR : {expection}")
+
         #Success
         else:
             
@@ -983,7 +999,7 @@ class music_commands\
 
     @commands.guild_only()
     @queue.command(description="🎲 Randomize the position of every track in the queue",
-                   aliases = ["shuffle_queue","random","randomize","sfl"],
+                   aliases = ["random","randomize","sfl"],
                    usage="{}queue shuffle")
     async def shuffle(self,ctx):
         queue = self.get_queue(ctx.guild)
