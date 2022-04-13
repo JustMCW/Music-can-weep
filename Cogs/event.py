@@ -1,7 +1,7 @@
 
 from discord.ext import commands,tasks
 from replies import Replies
-import json
+import json,os
 
 from log import Logging
 DiscordServerDatabase = "Database/DiscordServers.json"
@@ -66,17 +66,18 @@ class events(commands.Cog,Replies):
     from discord_components import DiscordComponents
     DiscordComponents(self.BOT)
 
-    cogs =["bot_admin","help","music"]
+    cogs = [pyf.replace(".py","") for pyf in filter(lambda name: name.endswith(".py"),os.listdir("./Cogs"))]
     try:
       for cog_name in cogs:
-        print(f"Loading {cog_name}")
         self.BOT.load_extension(f'Cogs.{cog_name}')
     except commands.errors.ExtensionAlreadyLoaded:
       pass
     except commands.errors.ExtensionFailed as ExtFailure:
       print(ExtFailure)
-      self.BOT.logout()
-
+      await self.BOT.close()
+    
+    self.BOT.get_command("help").description = "☁️ Send guides about this bot and it's commands"
+    self.BOT.get_command("help").usage = "{}help play"
     #Message that tell us we have logged in
     await Logging.log(f"Logged in as {self.BOT.user.mention} ( running in {len(self.BOT.guilds)} servers ) ;")
 
@@ -208,3 +209,7 @@ class events(commands.Cog,Replies):
   
       jsonf.seek(0)
       json.dump(data,jsonf,indent = 3)
+
+
+def setup(*_):
+    pass

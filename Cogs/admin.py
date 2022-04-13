@@ -1,13 +1,12 @@
-#These commands are for me to test stuff (and thats why i add "_" in front of it)
+#These commands are for me to test stuff
 
 from discord.ext import commands
 import discord
-# from replit import db
 
-class bot_admin_commands(commands.Cog):
+class bot_admin_commands(commands.Cog,command_attrs=dict(hidden=True)):
     def __init__(self,bot):
-      print("ADMIM commands is ready")
-      self.bot = bot
+        print("ADMIN commands is ready")
+        self.bot = bot
 
     @commands.is_owner() 
     @commands.group()

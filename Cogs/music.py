@@ -1,4 +1,4 @@
-import discord, asyncio,time
+import discord, asyncio,time,re
 from datetime import datetime
 from discord.ext import commands
 from discord_components import Select, SelectOption, Button, ButtonStyle
@@ -472,8 +472,9 @@ class music_commands\
 
 #CHANGING BOT'S VOICE CHANNEL
     @commands.bot_has_guild_permissions(connect=True, speak=True)
-    @commands.command(aliases=["enter", "come", "move", "j"],
-                    description='🎧 Connect to your current voice channel or a given voice channel if specified')
+    @commands.command(aliases=["enter", "j"],
+                    description='🎧 Connect to your current voice channel or a given voice channel name',
+                    usage = "{}join Music channel")
     async def join(self, ctx:commands.Context,*,ChannelName=None):
         author = ctx.author
         channel_to_join = None
@@ -505,9 +506,9 @@ class music_commands\
         await super().update_audio_msg(ctx.guild)
 
     @commands.guild_only()
-    @commands.command(
-        aliases=["leave", "bye", 'dis', "lev","leav", "lve", 'l'],
-        description='👋 Disconnect from the current voice channel i am in')
+    @commands.command(aliases=["leave", "bye", 'dis', "lev",'l'],
+                    description='👋 Disconnect from the current voice channel i am in',
+                    usage="{}leave")
     async def disconnect(self, ctx:commands.Context):
         voice_client = ctx.voice_client
 
@@ -527,7 +528,8 @@ class music_commands\
 
     @commands.guild_only()
     @commands.command(aliases=["wait"],
-                      description='⏸ Pause the current audio')
+                      description='⏸ Pause the current audio',
+                      usage="{}pause")
     async def pause(self, ctx:commands.Context):
 
         await self.pause_audio(ctx.guild)
@@ -539,7 +541,8 @@ class music_commands\
 
     @commands.guild_only()
     @commands.command(aliases=["continue", "unpause"],
-                      description='▶️ Resume the current audio')
+                      description='▶️ Resume the current audio',
+                      usage="{}resume")
     async def resume(self, ctx:commands.Context):
         guild = ctx.guild
         queue = self.get_queue(guild)      
@@ -578,7 +581,8 @@ class music_commands\
 
     @commands.guild_only()
     @commands.command(aliases=["previous"],
-                      description="⏪ Return to the last song played")
+                      description="⏪ Return to the last song played",
+                      usage="{}previous")
     async def last(self, ctx:commands.Context):
 
         await self.rewind_audio(ctx.guild)
@@ -586,11 +590,10 @@ class music_commands\
         await ctx.reply(Replies.rewind_audio_msg)
         await Logging.log(f"{ctx.author} used rewind command in [{ctx.guild}] ;")
 
-
-
     @commands.guild_only()
     @commands.command(aliases=["next"],
-                      description='⏩ skip to the next audio in the queue')
+                      description='⏩ skip to the next audio in the queue',
+                      usage="{}skip")
     async def skip(self, ctx:commands.Context):
         
         await self.skip_audio(ctx.guild)
@@ -598,9 +601,11 @@ class music_commands\
         await ctx.reply(Replies.skipped_audio_msg)
         await Logging.log(f"{ctx.author} used skip command in [{ctx.guild}] ;")
 
+
     @commands.guild_only()
-    @commands.command(aliases=["jump","jumpto"],
-                      description="⏏️ Move the time position of the current audio, format : [Hours:Minutes:Seconds] or literal seconds like 3600 (an hour). This is a experimental command.")
+    @commands.command(aliases=["jump"],
+                      description="⏏️ Move the time position of the current audio, format : [Hours:Minutes:Seconds] or literal seconds like 3600 (an hour). This is a experimental command.",
+                      usage="{}seek 2:30")
     async def seek(self,ctx:commands.Context,*,time_position):
 
         try:
@@ -615,8 +620,8 @@ class music_commands\
 
 
     @commands.guild_only()
-    @commands.command(aliases=["stop_playing"],
-                      description='⏹ stop the current audio from playing 🚫')
+    @commands.command(description='⏹ stop the current audio from playing 🚫',
+                      usuge="{}stop")
     async def stop(self, ctx:commands.Context):
 
         #Checking
@@ -635,7 +640,8 @@ class music_commands\
 
     @commands.guild_only()
     @commands.command(aliases=["replay", "re"],
-                      description='🔄 restart the current audio')
+                      description='🔄 restart the current audio track',
+                      usage="{}replay")
     async def restart(self, ctx:commands.Context):
 
         await self.restart_audio(ctx.guild)
@@ -645,19 +651,18 @@ class music_commands\
 #----------------------------------------------------------------#
 
     @commands.guild_only()
-    @commands.command(
-        aliases=["set_volume",'setvolume','setvolumeto','set_volume_to',"changevolume", "vol"],
-        description='📶 set audio volume to a percentage (0% - 150%)')
+    @commands.command(aliases=["vol"],
+                    description='📶 set audio volume to a percentage (0% - 200%)',
+                    usage="{}vol 70")
     async def volume(self, ctx:commands.Context, volume_to_set):
 
         #Try getting the volume_percentage from the message
         try:
-            volume_percentage = float(volume_to_set)
+            volume_percentage = float(re.findall(r"\d+")[0])
             if volume_percentage < 0: 
                 raise ValueError
-        except ValueError:
+        except IndexError:
             return await ctx.reply("🎧 Please enter a vaild volume_percentage 🔊")
-
         await Logging.log(
             f"{ctx.author} set volume to `{round(volume_percentage,2)}%` in [{ctx.guild}] ;")
 
@@ -681,8 +686,9 @@ class music_commands\
         await ctx.reply(f"🔊 Volume has been set to {round(volume_percentage,2)}%")
 
     @commands.guild_only()
-    @commands.command(aliases=["looping","single_loop",'setloop','setlooping','setloopingto',"toggleloop","toggle_looping",'changelooping','set_loop' ,"repeat", 'lop'],
-                      description='🔂 Enable / Disable looping, when enabled song will restart after playing')
+    @commands.command(aliases=["looping","repeat"],
+                      description='🔂 Enable / Disable single audio track looping\nWhen enabled tracks will restart after playing',
+                      usage="{}loop on")
     async def loop(self, ctx:commands.Context, mode=None):
         guild = ctx.guild
       
@@ -708,10 +714,9 @@ class music_commands\
 #Playing audio
 
     @commands.bot_has_guild_permissions(connect=True, speak=True)
-    @commands.command(
-        aliases=["sing",'playsong',"playmusic","play_song",'play_music', "p"],
-        description=
-        '🔎 Search and play audio with a given YOUTUBE link or from keywords 🎧'
+    @commands.command(aliases=["p","music"],
+                    description='🔎 Search and play audio with a given YOUTUBE link or from keywords 🎧',
+                    usage="{0}play https://www.youtube.com/watch?v=GrAchTdepsU\n{0}p mood\n{0}play fav 4"
     )
     async def play(self,ctx,*,query,**kwargs):
 
@@ -752,9 +757,8 @@ class music_commands\
 
             #Favourites
             elif 'fav' in query.lower():
-                from re import findall
                 try:
-                    index = int(findall(r'\d+', query)[0])
+                    index = int(re.findall(r'\d+', query)[0])
                     _,link = Favourties.get_track_by_index(author, index-1)
                     query = link
                 except (ValueError,IndexError):
@@ -868,11 +872,13 @@ class music_commands\
                           after= after_playing)
             
             await self.create_audio_message(NewTrack,reply_msg)
+
 #----------------------------------------------------------------#
 #QUEUE
     @commands.guild_only()
-    @commands.group(description="Access the queue commands",
-                    aliases = ["que","qeueu","q"])
+    @commands.group(description="🔧 You can manage the song queue with this group of command",
+                    aliases = ["que","qeueu","q"],
+                    usage="{0}queue display\n{0}q clear")
     async def queue(self,ctx):
         await Logging.log(f"{ctx.author} used queue command : {ctx.subcommand_passed} in [{ctx.guild}] ;")
         
@@ -895,8 +901,9 @@ class music_commands\
             )
 
     @commands.guild_only()
-    @queue.command(description="Display tracks in the song queue",
-                   aliases=["show","songs","tracks"])
+    @queue.command(description="📋 Display tracks in the song queue",
+                   aliases=["show"],
+                   usage="{}queue display")
     async def display(self,ctx):
       queue = self.get_queue(ctx.guild)
 
@@ -914,8 +921,9 @@ class music_commands\
       )
 
     @commands.guild_only()
-    @queue.command(description="Remove a track from the queue",
-                   aliases=["delete","del"])
+    @queue.command(description=" Remove one track from the queue",
+                   aliases=["rm","delete","del"],
+                   usage="{}queue remove 1")
     async def remove(self,ctx,position):
         queue = self.get_queue(ctx.guild)
 
@@ -923,7 +931,7 @@ class music_commands\
             raise error_type.QueueEmpty
 
         try:
-            position = int(position)
+            position = int(re.findall(r"\d+")[0])
             if position ==0 and ctx.voice_client.source:
                 raise IndexError("Cannot remove current song")
             poped_track = queue.get(position)
@@ -935,8 +943,9 @@ class music_commands\
             await ctx.reply(f"**#{position}** - `{poped_track.title}` has been removed from the queue")
     
     @commands.guild_only()
-    @queue.command(description="Removes every track in the queue",
-                   aliases=["empty","clr"],)
+    @queue.command(description="🧹 Removes every track in the queue",
+                   aliases=["empty","clr"],
+                   usage="{}queue clear")
     async def clear(self,ctx):
         queue:SongQueue = self.get_queue(ctx.guild)
 
@@ -949,7 +958,8 @@ class music_commands\
         await ctx.reply("🗒 The queue has been cleared")
 
     @commands.guild_only()
-    @queue.command(description="Swap the position of two tracks in the queue")
+    @queue.command(description="🔁 Swap the position of two tracks in the queue",
+                   usage="{}queue swap 1 2")
     async def swap(self,ctx,position_1,position_2):
         queue = self.get_queue(ctx.guild)
 
@@ -961,7 +971,8 @@ class music_commands\
             await ctx.reply(f"Swapped **#{position_1}** with **#{position_2}** in the queue")
 
     @commands.guild_only()
-    @queue.command()
+    @queue.command(description="🔃 Reverse the position of the whole queue",
+                    usage="{}queue reverse")
     async def reverse(self,ctx):
         queue:SongQueue = self.get_queue(ctx.guild)
         playing:SongTrack = queue.popleft()
@@ -971,8 +982,9 @@ class music_commands\
         await ctx.reply("🔃 The queue has been *reversed*")
 
     @commands.guild_only()
-    @queue.command(description="Randomize the position of every track in the queue",
-                   aliases = ["shuffle_queue","random","randomize","sfl"],)
+    @queue.command(description="🎲 Randomize the position of every track in the queue",
+                   aliases = ["shuffle_queue","random","randomize","sfl"],
+                   usage="{}queue shuffle")
     async def shuffle(self,ctx):
         queue = self.get_queue(ctx.guild)
         queue.shuffle()
@@ -981,7 +993,8 @@ class music_commands\
 
     @commands.guild_only()
     @queue.command(description='🔂 Enable / Disable queue looping.\nWhen enabled, tracks will be moved to the last at the queue after finsh playing',
-                   aliases=["loop","looping","repeat_queue",'setloop','setlooping',"toggleloop","toggle_looping",'changelooping','lop'],)
+                   aliases=["loop","looping","repeat_queue",'setloop','setlooping',"toggleloop","toggle_looping",'changelooping','lop'],
+                   usage="{}queue repeat on")
     async def repeat(self,ctx,mode=None):
         guild = ctx.guild
 
@@ -1088,7 +1101,8 @@ class music_commands\
 
     @commands.guild_only()
     @commands.command(aliases=["np", "nowplaying", "now"],
-                      description='🔊 Display the current audio playing in the server')
+                      description='🔊 Display the current audio playing in the server',
+                      usage="{}np")
     async def now_playing(self, ctx:commands.Context):
         await Logging.log(f"{ctx.author} used now playing command in [{ctx.guild}] ;")
 
@@ -1109,8 +1123,9 @@ class music_commands\
 #Favourites
 
     @commands.guild_only()
-    @commands.command(aliases=['addtofav', "save", "savesong", "fav"],
-                      description='👍🏻 Add the current song playing to your favourites')
+    @commands.command(aliases=["save", "fav"],
+                      description='👍🏻 Add the current song playing to your favourites',
+                      usage="{}fav")
     async def favourite(self, ctx:commands.Context):
         #No audio playing
         if not self.is_playing(ctx.guild):
@@ -1128,13 +1143,13 @@ class music_commands\
 
 #Unfavouriting song
 
-    @commands.command(aliases=['unfav', 'removefromfav'],
-                      description='❣🗒 Remove a song from your favourites')
+    @commands.command(aliases=['unfav'],
+                      description='❣🗒 Remove a song from your favourites',
+                      usage="{}unfav 3")
     async def unfavourite(self, ctx:commands.Context, index):
         await Logging.log(f"`{ctx.author}` removed `[{index}]` from the fav list in [{ctx.guild}] ;")
         try:
-            from re import findall
-            index = int(findall(r'\d+', index)[0]) - 1
+            index = int(re.findall(r'\d+', index)[0]) - 1
             removedTrackTitle = Favourties.get_track_by_index(ctx.author,index)[0]
             Favourties.remove_track(ctx.author,index)
         except (IndexError,ValueError):
@@ -1146,10 +1161,9 @@ class music_commands\
         
 #Display Favourites
 
-    @commands.command(aliases=[
-        'showfav', "favlist", "myfavourites", "myfavourite", "myfavs", "myfav"
-    ],
-                      description='❣🗒 Display every song in your favourites')
+    @commands.command(aliases=["favlist", "myfav"],
+                      description='❣🗒 Display every song in your favourites',
+                      usage="{}myfav")
     async def display_favourites(self, ctx:commands.Context):
       await Logging.log(f"{ctx.author} used display_favourites command in [{ctx.guild}] ;")
 
