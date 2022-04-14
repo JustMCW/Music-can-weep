@@ -445,14 +445,13 @@ class Functions:
         #Apply the changes                  
         await audio_msg.edit(embed=new_embed)
         
-    async def clear_audio_message(self,guild):
+    async def clear_audio_message(self,guild:discord.Guild=None,specific_message:discord.Message = None):
 
         """
         Edit the audio message to give it play again button and shorten it
         """
 
-        queue = self.get_queue(guild)
-        audio_message:discord.Message = queue.audio_message
+        audio_message:discord.Message = specific_message or self.get_queue(guild).audio_message
 
         if audio_message is None:  
             return print("Audio message is none")
@@ -475,7 +474,9 @@ class Functions:
                                 embed=newEmbed,
                                 components=Buttons.AfterAudioButtons)
         print("Succesfully removed audio messsage.")
-        queue.audio_message = None
+
+        if not specific_message:
+            self.get_queue(guild).audio_message = None
 
 #----------------------------------------------------------------#
 
@@ -1198,12 +1199,9 @@ class music_commands\
         elif queue.get(0) is None or queue.audio_message is None or queue.audio_message.id != btn.message.id or not self.is_playing(guild):
             if not btn.custom_id.isnumeric() and not btn.responded and btn.message.embeds:
                 new_embed:discord.Embed = btn.message.embeds[0]
+                await btn.edit_origin(content=btn.message.content)
                 if len(new_embed.fields) == 6:
-                    for _ in range(4):
-                        new_embed.remove_field(2)
-
-                    await btn.edit_origin(embed = new_embed,
-                                         components=Buttons.AfterAudioButtons)
+                    await self.clear_audio_message(specific_message=btn.message)
 
         elif btn.custom_id == Buttons.SubtitlesButton.custom_id:
             await super().on_subtitles_btn_press(btn)
