@@ -31,6 +31,7 @@ class Embeds:
 
     #The embed that display the audio's infomation + status
     def audio_playing_embed(queue:SongQueue,foundLyrics:bool) -> discord.Embed:
+        """the discord embed for displaying the audio that is playing"""
         SongTrackPlaying:SongTrack = queue[0]
 
         return discord.Embed(title= SongTrackPlaying.title,
@@ -219,6 +220,9 @@ class Functions:
     def search_from_youtube(query:str, 
                             ResultLengthLimit:int=5,
                              DurationLimit:int=3*3600) -> list:
+        """
+        Search youtube videos with a given string
+        """
         from requests import get
         from bs4 import BeautifulSoup
         from json import loads
@@ -251,10 +255,16 @@ class Functions:
                 FilteredQueryList.append(VidRend)
                 
                 #Result length
-                if len(FilteredQueryList) == ResultLengthLimit: 
-                    return FilteredQueryList
+                if len(FilteredQueryList) >= ResultLengthLimit: 
+                    break
+
+        return FilteredQueryList 
 
     async def create_audio_message(self,Track:SongTrack,Target):
+        
+        """
+        Create the discord message for displaying audio playing, including buttons and the embed
+        """
 
         #Getting the subtitle
         FoundLyrics = Subtitles.find_subtitle_and_language(getattr(Track,"subtitles",None))[0]
@@ -284,7 +294,9 @@ class Functions:
                     guild:discord.Guild, 
                     start_time:float,
                     voice_error:str = None):
-        
+        """
+        Do stuff after playing the audio like removing it from the queue
+        """
         if voice_error is not None:
             return print("Voice error :",voice_error)
 
@@ -401,6 +413,11 @@ class Functions:
                       volume=self.get_volume(guild))
 
     async def update_audio_msg(self,guild):
+
+        """
+        Updates the audio message's embed (volume , voice channel, looping)
+        """
+
         if not self.is_playing(guild): 
             return
 
@@ -429,6 +446,11 @@ class Functions:
         await audio_msg.edit(embed=new_embed)
         
     async def clear_audio_message(self,guild):
+
+        """
+        Edit the audio message to give it play again button and shorten it
+        """
+
         queue = self.get_queue(guild)
         audio_message:discord.Message = queue.audio_message
 
@@ -777,10 +799,10 @@ class music_commands\
             #Keyword
             else:
                 #Searching
-                searchResult = super().search_from_youtube(query)
-
-                if not searchResult:
-                    return await ctx.reply("An error hass been captured when searching for the audio ! ( Try again )")
+                try:
+                    searchResult = super().search_from_youtube(query)
+                except IndexError:
+                    return await ctx.reply("No search result was found for that ...")
 
                 #Add the buttons and texts for user to see
                 choicesString:str = ""
