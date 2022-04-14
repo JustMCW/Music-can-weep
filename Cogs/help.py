@@ -5,7 +5,7 @@ class MCWHelpCommand(commands.HelpCommand):
     def __init__(self):
         super().__init__()
 
-    def get_params(self,cmd:commands.Command) -> list[str]:
+    def get_params(self,cmd:commands.Command) -> list:
 
         result:list[str] = []
 
