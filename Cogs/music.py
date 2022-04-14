@@ -296,7 +296,7 @@ class Functions:
         #Some checks before continue
 
         #Ensure in voice chat
-        if not voice_client:
+        if not voice_client or not voice_client.is_connected:
             self.bot.loop.create_task(self.clear_audio_message(guild))
 
             if not queue.enabled:
