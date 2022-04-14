@@ -616,7 +616,7 @@ class music_commands\
         except OverflowError:
             await ctx.reply("This time position is longer than the duration of the current track playing")
         else:
-            await ctx.reply(f"⏏️ Successfully moved audio's time position to `{Convert.length_format(position_sec)}`")
+            await ctx.reply(f"⏏️ Moving audio's time position to `{Convert.length_format(position_sec)}` (It might take a while depend on the length of the audio)")
 
 
     @commands.guild_only()
@@ -747,15 +747,16 @@ class music_commands\
       
         else:
             #URL
-            if query.startswith("https://") or query.startswith("HTTP://"):
-                query = re.sub(r"( https|HTTP)://(youtu\.be|www.youtube.com)(/shorts)?/(watch\?v=)?([A-Za-z0-9_]{11})",r"https://www.youtube.com/watch?v=\5",query)
-
-                if query.startswith("https://www.youtube.com/watch?v="): 
-                    reply_msg = await ctx.send(f"{Emojis.YOUTUBE_ICON} A Youtube link is selected")
-                    
+            youtube_link_match_result = re.findall(r"(https|HTTP)://(youtu\.be|www.youtube.com)(/shorts)?/(watch\?v=)?([A-Za-z0-9_]{11})",query)
+            
+            if "https://" in query or "HTTP://" in query:
                 #Not youtube video link
-                else:
+                if not youtube_link_match_result: 
                     return await ctx.send("💿 Sorry ! But only Youtube video links can be played !")
+                query = "https://www.youtube.com/watch?v="+youtube_link_match_result[0][4]
+
+                reply_msg = await ctx.send(f"{Emojis.YOUTUBE_ICON} A Youtube link is selected")
+                    
 
             #Favourites
             elif 'fav' in query.lower():
@@ -937,27 +938,91 @@ class music_commands\
       )
 
     @commands.guild_only()
-    @queue.command(description=" Remove one track from the queue",
-                   aliases=["rm","delete","del"],
-                   usage="{}queue remove 1")
-    async def remove(self,ctx,position):
+    @queue.group(description=" Remove one song track by position in the queue, or remove all song tracks that apply to the statement ",
+                aliases=["rm","delete","del"],
+                usage="{0}queue remove 1\n{0}q rm dup")
+    async def remove(self,ctx:commands.Context):
+        
         queue = self.get_queue(ctx.guild)
 
         if len(queue) ==0:
             raise error_type.QueueEmpty
 
-        try:
-            position = int(re.findall(r"\d+")[0])
-            if position ==0 and ctx.voice_client.source:
-                raise IndexError("Cannot remove current song")
-            poped_track = queue.get(position)
+        if ctx.invoked_subcommand is None:     
 
-            queue.pop(position)
-        except (TypeError,IndexError) as e:
-            await ctx.reply(f"❌ Invaild position, {e}")
-        else:
-            await ctx.reply(f"**#{position}** - `{poped_track.title}` has been removed from the queue")
+            position = ctx.subcommand_passed
+
+            if not position:
+                raise commands.errors.MissingRequiredArgument("position")
+
+            try:
+                position = int(re.findall(r"\d+")[0])
+                if position ==0 and ctx.voice_client.source:
+                    raise IndexError("Cannot remove current song")
+                poped_track = queue.get(position)
+
+                queue.pop(position)
+            except (TypeError,IndexError) as e:
+                # if any([True for w in ["duplicate","dup","repeated"] if w in position]):
+                #     return await self.duplicate(ctx)
+                await ctx.reply(f"❌ Invaild position")
+            else:
+                await ctx.reply(f"**#{position}** - `{poped_track.title}` has been removed from the queue")
+        
     
+    @commands.guild_only()
+    @remove.command(description="Remove tracks which are duplicated in the queue",
+                    aliases=["dup","repeated"],
+                    usage="{}queue remove duplicate")
+    async def duplicated(self,ctx):
+        queue = self.get_queue(ctx.guild)
+
+        appeared_url:list[str] = [] #for url that already appeared once
+        index_to_be_removed:list[int] = [] #indicate indexes that need to be removed
+
+        #Check whether which are repeated
+        for i,track in enumerate(queue):
+            if track.webpage_url in appeared_url:
+                index_to_be_removed.append(i)
+            else:
+                appeared_url.append(track.webpage_url)
+
+        if not index_to_be_removed:
+            return await ctx.reply("No track is repeated !")
+
+        #Removing them
+        index_to_be_removed.reverse() #Large to small (to prevent iteration errors)
+        for i in index_to_be_removed:
+            del queue[i]
+
+        await ctx.reply(f"Successfully removed {len(index_to_be_removed)} tracks from the queue.")
+    
+    @commands.guild_only()
+    @remove.command(description="Remove tracks which their requester is not in the bot's voice channel",
+                    usage="{}queue remove left")
+    async def left(self,ctx:commands.Context):
+        
+        queue = self.get_queue(ctx.guild)
+        
+        user_in_vc:list[int] = list(map(lambda usr: usr.id, self.get_current_vc(ctx.guild).members))
+
+        index_to_be_removed:list[int] = [] #indicate indexes that need to be removed
+
+        #Check whether which are repeated
+        for i,track in enumerate(queue):
+            if track.requester.id not in user_in_vc:
+                #Large to small (to prevent iteration errors)
+                index_to_be_removed.insert(0,i)
+
+        if not index_to_be_removed:
+            return await ctx.reply("No track is removed !")
+
+        #Removing them
+        for i in index_to_be_removed:
+            del queue[i]
+        
+        await ctx.reply(f"Successfully removed {len(index_to_be_removed)} tracks from the queue.")
+
     @commands.guild_only()
     @queue.command(description="🧹 Removes every track in the queue",
                    aliases=["empty","clr"],

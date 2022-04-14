@@ -45,7 +45,7 @@ class SongQueue(deque):
 
     def swap(self,pos1:int,pos2:int):
         
-        if len(self._queue) ==0: 
+        if len(self) ==0: 
             raise custom_errors.QueueEmpty
 
         #Swapping same item :/
@@ -58,7 +58,7 @@ class SongQueue(deque):
         if pos2 >= len(self) or pos2 == 0:
             raise IndexError(f"pos2 - {pos2} is invaild")
 
-        self._queue[pos1] , self._queue[pos2] = self._queue[pos2] , self._queue[pos1]
+        self[pos1] , self[pos2] = self[pos2] , self[pos1]
     
     def shuffle(self):
 

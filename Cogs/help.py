@@ -5,6 +5,20 @@ class MCWHelpCommand(commands.HelpCommand):
     def __init__(self):
         super().__init__()
 
+    def get_params(self,cmd:commands.Command) -> list[str]:
+
+        result:list[str] = []
+
+        for pname,pvalue in cmd.clean_params.items():
+            if "**" in str(pvalue):
+                continue
+            if "=" in str(pvalue):
+                result.append(pname+" (optional)")
+            else:
+                result.append(pname)
+                
+        return result
+
     async def send_bot_help(self, mapping):
         channel:discord.DMChannel = self.get_destination()
     
@@ -19,9 +33,10 @@ class MCWHelpCommand(commands.HelpCommand):
 
         aliases = f"\n\nAlternatives : `{'`, `'.join(command.aliases)}`" if command.aliases else ""
         description = command.description or "No description"
+        params ='\n\nArguments : `'+'`, `'.join(self.get_params(command))+'`' if command.clean_params else ""
 
         await channel.send(embed= discord.Embed(title=f"🌟 Usage of command : {command.qualified_name}",
-                                                description = f"{description}{aliases}\n\n**Examples:**\n{command.usage.format(self.clean_prefix)}",
+                                                description = f"{description}{params}{aliases}\n\n**Examples:**\n{command.usage.format(self.clean_prefix)}",
                                                 color = discord.Color.from_rgb(255,255,255)))
 
     async def send_group_help(self, group:commands.Group):
