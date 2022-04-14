@@ -39,7 +39,7 @@ class Embeds:
                 \
                 .set_author(name=f"Requested by {SongTrackPlaying.requester.display_name}",
                             icon_url=SongTrackPlaying.requester.avatar_url)\
-                .set_thumbnail(url = SongTrackPlaying.thumbnail)\
+                .set_image(url = SongTrackPlaying.thumbnail)\
                 \
                 .add_field(name=f"YT Channel  {Emojis.YOUTUBE_ICON}",
                             value="[{}]({})".format(getattr(SongTrackPlaying,"channel"),getattr(SongTrackPlaying,"channel_url")))\
@@ -222,7 +222,6 @@ class Functions:
         from requests import get
         from bs4 import BeautifulSoup
         from json import loads
-        from re import search as ReSearch
 
         #Send the request and grab the html text
         httpResponse = get(f"https://www.youtube.com/results?search_query={'+'.join(word for word in query.split())}")
@@ -232,7 +231,7 @@ class Functions:
         scripts = [s for s in htmlSoup.find_all("script") if "videoRenderer" in str(s)][0]
 
         #Find the data we need among the scripts, and load it into json
-        JsonScript = ReSearch('var ytInitialData = (.+)[,;]{1}',str(scripts)).group(1)
+        JsonScript = re.search('var ytInitialData = (.+)[,;]{1}',str(scripts)).group(1)
         JsonData = loads(JsonScript)
 
         #The Path to the search results
@@ -247,7 +246,7 @@ class Functions:
                 longText = VidRend["lengthText"]["accessibility"]["accessibilityData"]["label"]
                 if "hours" in longText:
                     #Remove video with 3+ hours duration
-                    if int(ReSearch(r"(.*) hours", longText).group(1)) > DurationLimit: 
+                    if int(re.search(r"(.*) hours", longText).group(1)) > DurationLimit: 
                         continue
                 FilteredQueryList.append(VidRend)
                 
@@ -292,12 +291,10 @@ class Functions:
         voice_client:discord.VoiceClient = guild.voice_client
         queue:SongQueue = self.get_queue(guild)
         audio_control_status:str = queue.audio_control_status
-
-        FinshedTrack:SongTrack = queue[0]
-
         queue.audio_control_status = None
 
         #Some checks before continue
+
         #Ensure in voice chat
         if not voice_client:
             self.bot.loop.create_task(self.clear_audio_message(guild))
@@ -309,13 +306,13 @@ class Functions:
         
         #Ignore if some commands are triggered
         if audio_control_status == "RESTART":
-
             return print(f"Ignore loop : RESTART")
 
         elif audio_control_status == "CLEAR":
             self.bot.loop.create_task(self.clear_audio_message(guild))
             return print("Ignore loop : CLEAR QUEUE")
-           
+        
+        FinshedTrack:SongTrack = queue[0]
         NextTrack:SongTrack = None
         looping:bool = queue.looping
         
@@ -439,14 +436,22 @@ class Functions:
             return print("Audio message is none")
 
         newEmbed:discord.Embed = audio_message.embeds[0]
+
         for _ in range(4):
             newEmbed.remove_field(2)
 
-        content = audio_message.content #if len(audio_message.content) >1 else "☕️ Audio playing before :"
+        if newEmbed.image:
+            newEmbed.set_thumbnail(url=newEmbed.image.url)
+            newEmbed.set_image(url=discord.Embed.Empty)
+        # if newEmbed.author and not newEmbed.footer:
+        #     newEmbed.set_footer(text=newEmbed.author.name,icon_url=newEmbed.author.icon_url)
+        #     newEmbed.remove_author()
 
-        await audio_message.edit(content = content,
-                                    embed=newEmbed,
-                                    components=Buttons.AfterAudioButtons)
+        #content = audio_message.content #if len(audio_message.content) >1 else "☕️ Audio playing before :"
+        
+        await audio_message.edit(#content = content,
+                                embed=newEmbed,
+                                components=Buttons.AfterAudioButtons)
         print("Succesfully removed audio messsage.")
         queue.audio_message = None
 
@@ -555,7 +560,7 @@ class music_commands\
 
                 if guild.voice_client is None:
                     try:
-                        await self.join_voice_channel(guild, ctx.author.voice.channel)
+                        await super().join_voice_channel(guild, ctx.author.voice.channel)
                     except AttributeError:
                         raise error_type.NotInVoiceChannel
 
@@ -820,14 +825,7 @@ class music_commands\
         
         queue = self.get_queue(guild)
         #------
-        #Stop current audio (if queuing is disabled)
-        if guild.voice_client and not queue.enabled:
-            guild.voice_client.stop()
-        #Join Voice channel
-        elif author.voice:
-            await super().join_voice_channel(guild=guild,
-                                             vc=author.voice.channel)
-
+        
         #Create the track
         try:
             NewTrack:SongTrack = await self.bot.loop.run_in_executor(None,
@@ -855,6 +853,14 @@ class music_commands\
         #Success
         else:
             
+            #Stop current audio (if queuing is disabled)
+            if guild.voice_client and not queue.enabled:
+                guild.voice_client.stop()
+            #Join Voice channel
+            elif author.voice:
+                await super().join_voice_channel(guild=guild,
+                                                 vc=author.voice.channel)
+
             queue.append(NewTrack)
             
 
@@ -883,10 +889,22 @@ class music_commands\
             after_playing = lambda voice_error: self.after_playing(guild,start_time,voice_error)
 
             #Play the audio
-
-            NewTrack.play(guild.voice_client,
-                          volume = self.get_volume(guild),
-                          after= after_playing)
+            try:
+                NewTrack.play(guild.voice_client,
+                            volume = self.get_volume(guild),
+                            after= after_playing)
+            except discord.errors.ClientException as CE:
+                print(CE)
+                if queue.enabled:
+                    await reply_msg.edit(embed=discord.Embed(title = f"\"{NewTrack.title}\" has been added to the queue",
+                                            color=discord.Color.from_rgb(255, 255, 255))
+                                .add_field(name="Length ↔️",
+                                            value=f"`{Convert.length_format(NewTrack.duration)}`")
+                                .add_field(name = "Position in queue 🔢",
+                                            value=len(queue)-1)
+                            .set_thumbnail(url = NewTrack.thumbnail))
+                else:
+                    await ctx.reply("Unable to play this track because another tracks was requested at the same time")
             
             await self.create_audio_message(NewTrack,reply_msg)
 
@@ -929,7 +947,7 @@ class music_commands\
       
       symbol = "▶︎" if not self.is_paused(ctx.guild) else "\\⏸"
       await ctx.send(embed = 
-      discord.Embed(title = f"🎧 Current Queue | Track Count : {len(queue)} | Full Length : {Convert.length_format(queue.total_length)} | Repeat queue : {Convert.bool_to_str(queue.queue_looping)} ",
+      discord.Embed(title = f"🎧 Queue | Track Count : {len(queue)} | Full Length : {Convert.length_format(queue.total_length)} | Repeat queue : {Convert.bool_to_str(queue.queue_looping)}",
                     description = "\n".join([f"**{f'[ {i} ]' if i > 0 else f'[{symbol}]'}** {track.title}\
                         \n> `{Convert.length_format(track.duration)}` | {track.requester.mention}" for i,track in enumerate(list(queue))]),
                     color=discord.Color.from_rgb(255, 255, 255),
@@ -950,21 +968,21 @@ class music_commands\
 
         if ctx.invoked_subcommand is None:     
 
-            position = ctx.subcommand_passed
+            position:str = ctx.subcommand_passed
 
             if not position:
                 raise commands.errors.MissingRequiredArgument("position")
 
             try:
-                position = int(re.findall(r"\d+")[0])
+                position:int = int(re.findall(r"\d+",position)[0])
+
                 if position ==0 and ctx.voice_client.source:
                     raise IndexError("Cannot remove current song")
                 poped_track = queue.get(position)
 
                 queue.pop(position)
             except (TypeError,IndexError) as e:
-                # if any([True for w in ["duplicate","dup","repeated"] if w in position]):
-                #     return await self.duplicate(ctx)
+
                 await ctx.reply(f"❌ Invaild position")
             else:
                 await ctx.reply(f"**#{position}** - `{poped_track.title}` has been removed from the queue")
@@ -999,8 +1017,9 @@ class music_commands\
     
     @commands.guild_only()
     @remove.command(description="Remove tracks which their requester is not in the bot's voice channel",
+                    aliases=["left"],
                     usage="{}queue remove left")
-    async def left(self,ctx:commands.Context):
+    async def left_user(self,ctx:commands.Context):
         
         queue = self.get_queue(ctx.guild)
         
