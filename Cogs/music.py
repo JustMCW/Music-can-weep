@@ -775,7 +775,7 @@ class music_commands\
       
         else:
             #URL
-            youtube_link_match_result = re.findall(r"(https|HTTP)://(youtu\.be|www.youtube.com)(/shorts)?/(watch\?v=)?([A-Za-z0-9_]{11})",query)
+            youtube_link_match_result = re.findall(r"(https|HTTP)://(youtu\.be|www.youtube.com)(/shorts)?/(watch\?v=)?([A-Za-z0-9\-_]{11})",query)
             
             if "https://" in query or "HTTP://" in query:
                 #Not youtube video link
