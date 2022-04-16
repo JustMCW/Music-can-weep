@@ -35,7 +35,9 @@ class Embeds:
     def audio_playing_embed(queue:SongQueue,foundLyrics:bool) -> discord.Embed:
         """the discord embed for displaying the audio that is playing"""
         SongTrackPlaying:SongTrack = queue[0]
-        Creator =  getattr(SongTrackPlaying,"channel",getattr(SongTrackPlaying,"uploader"))
+
+        YT_creator = getattr(SongTrackPlaying,"channel",None) 
+        Creator = YT_creator or getattr(SongTrackPlaying,"uploader")
         Creator_url = getattr(SongTrackPlaying,"channel_url",getattr(SongTrackPlaying,"uploader_url",None))
         Creator = "[{}]({})".format(Creator,Creator_url) if Creator_url else Creator
 
@@ -47,18 +49,18 @@ class Embeds:
                             icon_url=SongTrackPlaying.requester.avatar_url)\
                 .set_image(url = SongTrackPlaying.thumbnail)\
                 \
-                .add_field(name=f"Creator",
+                .add_field(name=f"{Emojis.YOUTUBE_ICON} YT channel" if YT_creator else "💡 Creator",
                            value=Creator)\
-                .add_field(name="Length ↔️",
+                .add_field(name="↔️ Length",
                             value=f'`{Convert.length_format(getattr(SongTrackPlaying,"duration"))}`')\
-                .add_field(name="Lyrics 📝",
+                .add_field(name="📝 Lyrics",
                             value=f'*{"Available" if foundLyrics else "Unavailable"}*')\
                 \
-                .add_field(name="Voice Channel 🔊",
+                .add_field(name="🔊 Voice Channel",
                             value=f"{queue.guild.voice_client.channel.mention}")\
-                .add_field(name="Volume 📶",
+                .add_field(name="📶 Volume ",
                             value=f"`{round(queue.volume / BOT_INFO.InitialVolume * 100)}%`")\
-                .add_field(name="Looping 🔂",
+                .add_field(name="🔂 Looping",
                             value=f'**{Convert.bool_to_str(queue.looping)}**')
 
     NoTrackSelectedEmbed = discord.Embed(title=f"{Emojis.cute_panda} No track was selected !",
