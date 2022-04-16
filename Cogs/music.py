@@ -315,11 +315,13 @@ class Functions:
         #Some checks before continue
 
         #Ensure in voice chat
-        if not voice_client or not voice_client.is_connected:
+        if not voice_client or not voice_client.is_connected():
             self.bot.loop.create_task(self.clear_audio_message(guild))
 
             if not queue.enabled:
                 queue.popleft()
+
+            self.bot.loop.create_task(self.clean_up_queue(guild))
 
             return print("Ignore loop : NOT IN VOICE CHANNEL")
         
@@ -425,32 +427,31 @@ class Functions:
         Updates the audio message's embed (volume , voice channel, looping)
         """
 
-        if not self.is_playing(guild): 
-            return
+        if self.is_playing(guild): 
 
-        audio_msg:discord.Message = self.get_queue(guild).audio_message
+            audio_msg:discord.Message = self.get_queue(guild).audio_message
 
-        if audio_msg is None: 
-            return
+            if audio_msg is None: 
+                return
 
-        new_embed = audio_msg.embeds[0]
-        
-        #Replacing the orignal states field
-        for _ in range(3):
-            new_embed.remove_field(3)
+            new_embed = audio_msg.embeds[0]
+            
+            #Replacing the orignal states field
+            for _ in range(3):
+                new_embed.remove_field(3)
 
-        new_embed.insert_field_at(index=3,
-                                  name="Voice Channel 🔊",
-                                  value=f"*{self.get_current_vc(guild).mention}*")
-        new_embed.insert_field_at(index=4,
-                                  name="Volume 📶",
-                                  value=f"{self.get_volume_percentage(guild)}")
-        new_embed.insert_field_at(index=5,
-                                  name="Looping 🔂",
-                                  value=f"**{Convert.bool_to_str(self.get_loop(guild))}**")
+            new_embed.insert_field_at(index=3,
+                                    name="Voice Channel 🔊",
+                                    value=f"*{self.get_current_vc(guild).mention}*")
+            new_embed.insert_field_at(index=4,
+                                    name="Volume 📶",
+                                    value=f"{self.get_volume_percentage(guild)}")
+            new_embed.insert_field_at(index=5,
+                                    name="Looping 🔂",
+                                    value=f"**{Convert.bool_to_str(self.get_loop(guild))}**")
 
-        #Apply the changes                  
-        await audio_msg.edit(embed=new_embed)
+            #Apply the changes                  
+            await audio_msg.edit(embed=new_embed)
         
     async def clear_audio_message(self,guild:discord.Guild=None,specific_message:discord.Message = None):
 
@@ -485,6 +486,19 @@ class Functions:
         if not specific_message:
             self.get_queue(guild).audio_message = None
 
+    async def clean_up_queue(self,guild:discord.Guild):
+        queue:SongQueue = self.get_queue(guild)
+        clear_after = 600
+        if bool(queue):
+            print(f"Wait for {clear_after} sec then clear queue")
+            await asyncio.sleep(clear_after)
+            
+            voice_client:discord.VoiceClient = guild.voice_client
+            if not voice_client or not voice_client.is_connected():
+                if len(queue) != 0:
+                    queue.clear()
+            else:
+                print("Dont clear")
 #----------------------------------------------------------------#
 
 #COMMANDS
@@ -901,7 +915,6 @@ class music_commands\
 
             queue.append(NewTrack)
             
-
             if queue.get(1) is not None:
                 # track_repeated:bool = any([True for track in queue[1:] if track.webpage_url == NewTrack.webpage_url])
                 # if track_repeated:
@@ -917,8 +930,8 @@ class music_commands\
                                     )
                 if self.is_playing(guild):
                     return
-                    
 
+                reply_msg = ctx.channel
                 NewTrack = queue[0]
             
             #Repeat function after the audio
