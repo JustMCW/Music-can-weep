@@ -441,13 +441,13 @@ class Functions:
                 new_embed.remove_field(3)
 
             new_embed.insert_field_at(index=3,
-                                    name="Voice Channel 🔊",
+                                    name="🔊 Voice Channel",
                                     value=f"*{self.get_current_vc(guild).mention}*")
             new_embed.insert_field_at(index=4,
-                                    name="Volume 📶",
+                                    name="📶 Volume",
                                     value=f"{self.get_volume_percentage(guild)}")
             new_embed.insert_field_at(index=5,
-                                    name="Looping 🔂",
+                                    name="🔂 Looping",
                                     value=f"**{Convert.bool_to_str(self.get_loop(guild))}**")
 
             #Apply the changes                  
