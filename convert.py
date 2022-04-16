@@ -26,13 +26,13 @@ class Convert:
     @staticmethod
     def length_format(totalSeconds:int) -> str:
         if totalSeconds < 3600:
-            Min = totalSeconds // 60
-            Sec = totalSeconds % 60
+            Min = int(totalSeconds // 60)
+            Sec = int(totalSeconds % 60)
             return f"{Min}:{Sec:02d}"
         else:
-            Hours = totalSeconds // 3600
-            Min = (totalSeconds % 3600) // 60
-            Sec = totalSeconds % 60
+            Hours = int(totalSeconds // 3600)
+            Min = int((totalSeconds % 3600) // 60)
+            Sec = int(totalSeconds % 60)
             return f"{Hours}:{Min:02d}:{Sec:02d}"
         
     @staticmethod

@@ -2,18 +2,16 @@ import discord
 from youtube_dl import YoutubeDL
 
 RequiredAttr = ("title","webpage_url","duration",
-                "thumbnail","channel","channel_url",
+                "thumbnail","channel","uploader","channel_url","uploader_url",
                 "subtitles","formats","requester")
 
 
 class SongTrack:
 
-    __slots__ = RequiredAttr
-
     def __init__(self,requester:discord.Member,**info:dict):
 
       self.requester = requester
-      
+
       for key,value in info.items():
           if key in RequiredAttr:
               setattr(self,key,value)
@@ -24,7 +22,7 @@ class SongTrack:
         
         #Some options for extracting the audio from YT
         YDL_OPTION = {
-            "format": "bestaudio",
+            "format": "bestaudio/best",
             'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
             # 'restrictfilenames': True,
             'noplaylist': True,
@@ -44,7 +42,8 @@ class SongTrack:
           
         if 'entries' in info: 
             info = info["entries"][0]  
-            
+    
+
         return cls(requester,**info)
     
     def play(self,

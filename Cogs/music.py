@@ -30,9 +30,14 @@ class Embeds:
 
 
     #The embed that display the audio's infomation + status
+    
+    @staticmethod
     def audio_playing_embed(queue:SongQueue,foundLyrics:bool) -> discord.Embed:
         """the discord embed for displaying the audio that is playing"""
         SongTrackPlaying:SongTrack = queue[0]
+        Creator =  getattr(SongTrackPlaying,"channel",getattr(SongTrackPlaying,"uploader"))
+        Creator_url = getattr(SongTrackPlaying,"channel_url",getattr(SongTrackPlaying,"uploader_url",None))
+        Creator = "[{}]({})".format(Creator,Creator_url) if Creator_url else Creator
 
         return discord.Embed(title= SongTrackPlaying.title,
                             url= SongTrackPlaying.webpage_url,
@@ -42,8 +47,8 @@ class Embeds:
                             icon_url=SongTrackPlaying.requester.avatar_url)\
                 .set_image(url = SongTrackPlaying.thumbnail)\
                 \
-                .add_field(name=f"YT Channel  {Emojis.YOUTUBE_ICON}",
-                            value="[{}]({})".format(getattr(SongTrackPlaying,"channel"),getattr(SongTrackPlaying,"channel_url")))\
+                .add_field(name=f"Creator",
+                           value=Creator)\
                 .add_field(name="Length ↔️",
                             value=f'`{Convert.length_format(getattr(SongTrackPlaying,"duration"))}`')\
                 .add_field(name="Lyrics 📝",
@@ -779,12 +784,18 @@ class music_commands\
             
             if "https://" in query or "HTTP://" in query:
                 #Not youtube video link
-                if not youtube_link_match_result: 
-                    return await ctx.send("💿 Sorry ! But only Youtube video links can be played !")
-                query = "https://www.youtube.com/watch?v="+youtube_link_match_result[0][4]
+                if youtube_link_match_result: 
+                #     pass
+                #     return await ctx.send("💿 Sorry ! But only Youtube video links can be played !")
+                # else:
+                    query = "https://www.youtube.com/watch?v="+youtube_link_match_result[0][4]
 
-                reply_msg = await ctx.send(f"{Emojis.YOUTUBE_ICON} A Youtube link is selected")
-                    
+                    reply_msg = await ctx.send(f"{Emojis.YOUTUBE_ICON} A Youtube link is selected")
+                elif "soundcloud.com" in query:
+
+                    reply_msg = await ctx.send(f"☁️ A Soundcloud link is selected")
+                else:
+                    return await ctx.send("Sorry ! Only Youtube and Soundcloud links are supported ! (Spotify will be added soon)")
 
             #Favourites
             elif 'fav' in query.lower():
@@ -857,7 +868,9 @@ class music_commands\
         #Failed
         
         except BaseException as expection:
-
+            if "Unsupported URL" in str(expection):
+                return await ctx.reply("Sorry, this url is not supported !")
+            
             error_dict:dict = {
                 "Sign in to confirm your age":"Youtube has marked this video as inappropriate content.",
                 "Unable to recognize tab page":"the video link was invalid, please double check it.",
@@ -871,7 +884,7 @@ class music_commands\
                     if "429" in reply:
                         await Logging.error("429 429 429 429 429 429 429 429 <@812808602997620756>")
                     return await ctx.send(f"Unable to play track `{query}` because {reply}")
-            await Logging.error("BIG BIG BIG ERROR : {expection}")
+            await Logging.error(f"BIG BIG BIG ERROR : {expection}")
 
         #Success
         else:
@@ -903,7 +916,6 @@ class music_commands\
                 if self.is_playing(guild):
                     return
                     
-                reply_msg = reply_msg.channel
 
                 NewTrack = queue[0]
             
@@ -929,7 +941,7 @@ class music_commands\
                 else:
                     await ctx.reply("Unable to play this track because another tracks was requested at the same time")
             
-            await self.create_audio_message(NewTrack,reply_msg)
+            await self.create_audio_message(NewTrack,reply_msg or ctx.channel)
 
 #----------------------------------------------------------------#
 #QUEUE
