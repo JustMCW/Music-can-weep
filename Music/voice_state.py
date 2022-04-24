@@ -1,7 +1,5 @@
 import discord
 import time
-import asyncio
-from discord.ext import commands
 
 from main import BOT_INFO
 from Music.queue import SongQueue
@@ -68,8 +66,6 @@ class VoiceState:
             return [member for member in guild.voice_client.channel.members if not member.bot]
         except AttributeError:
             raise custom_errors.NotInVoiceChannel
-    
-#
 
     @staticmethod
     async def join_voice_channel(guild:discord.Guild, vc):
@@ -78,10 +74,13 @@ class VoiceState:
         else: 
             await guild.voice_client.move_to(vc)
 
-    @staticmethod
     @playing_audio
-    async def pause_audio(guild:discord.Guild):
-        guild.voice_client.pause()
+    async def pause_audio(self,guild:discord.Guild):
+        voicec = guild.voice_client
+        voicec.pause()
+
+        #Since the loop count resets after we pause and resume it so we have to save the loop count (basically the time position)
+        self.get_queue(guild).player_loop_passed.append(voicec._player.loops)
 
     @staticmethod
     @playing_audio
@@ -115,12 +114,9 @@ class VoiceState:
 
         voice_client = guild.voice_client
 
-        
-
         queue.audio_control_status = "RESTART"
 
         voice_client.stop()
-        
 
         new_start_time =float(time.perf_counter())
         queue[0].play(voice_client,

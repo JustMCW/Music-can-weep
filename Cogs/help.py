@@ -21,7 +21,6 @@ class MCWHelpCommand(commands.HelpCommand):
 
     async def send_bot_help(self, mapping):
         channel:discord.DMChannel = self.get_destination()
-    
         description = "\n".join([f'**{cog.qualified_name.replace("_"," ")}**\n{", ".join(f"`{cmd.name}`" for cmd in cog.get_commands())}\n' for cog in mapping if cog is not None and len(cog.get_commands()) != 0 and cog.name != "bot_admin_commands"])
 
         await channel.send(embed= discord.Embed(title="🎶 This is a simple music bot ~",
@@ -34,9 +33,10 @@ class MCWHelpCommand(commands.HelpCommand):
         aliases = f"\n\nAlternatives : `{'`, `'.join(command.aliases)}`" if command.aliases else ""
         description = command.description or "No description"
         params ='\n\nArguments : `'+'`, `'.join(self.get_params(command))+'`' if command.clean_params else ""
+        usage = command.usage.format(self.clean_prefix) if command.usage else f"{self.clean_prefix}{command.qualified_name}"
 
         await channel.send(embed= discord.Embed(title=f"🌟 Usage of command : {command.qualified_name}",
-                                                description = f"{description}{params}{aliases}\n\n**Examples:**\n{command.usage.format(self.clean_prefix)}",
+                                                description = f"{description}{params}{aliases}\n\n**Examples:**\n{usage}",
                                                 color = discord.Color.from_rgb(255,255,255)))
 
     async def send_group_help(self, group:commands.Group):

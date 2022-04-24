@@ -1,4 +1,3 @@
-
 from discord.ext import commands,tasks
 from replies import Replies
 import json,os
@@ -71,7 +70,7 @@ class events(commands.Cog,Replies):
       for cog_name in cogs:
         self.BOT.load_extension(f'Cogs.{cog_name}')
     except commands.errors.ExtensionAlreadyLoaded:
-      pass
+      return
     except commands.errors.ExtensionFailed as ExtFailure:
       print(ExtFailure)
       await self.BOT.close()
@@ -179,7 +178,7 @@ class events(commands.Cog,Replies):
     #or else it would be the code's error
     else:
       await Logging.error(str(commandError))
-    
+
 
 #Server joining
   @commands.Cog.listener()

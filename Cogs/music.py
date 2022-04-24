@@ -1,4 +1,4 @@
-import discord, asyncio,time,re
+import discord, asyncio,time,re,os
 from datetime import datetime
 from discord.ext import commands
 from discord_components import Select, SelectOption, Button, ButtonStyle
@@ -70,7 +70,7 @@ class Embeds:
 
 #BUTTONS
 class Buttons:
-  #Button Templates
+    #Button Templates
     PauseButton = Button(label="Pause",
                           custom_id="pause",
                           style=ButtonStyle.blue,
@@ -201,8 +201,8 @@ class Buttons:
             content=f"**{title} [ {modernLanguageName} ] **")
             url,subtitle_text = Subtitles.extract_subtitles(languages,selected_language)
             await Subtitles.send_subtitles(
-            UserDM,
-            f"{''.join(subtitle_text)}"
+                UserDM,
+                '\n'.join(subtitle_text)
             )
             await UserDM.send(content=f"( The subtitle looks glitched ? View the source text file here : {url})")
 
@@ -311,6 +311,7 @@ class Functions:
         queue:SongQueue = self.get_queue(guild)
         audio_control_status:str = queue.audio_control_status
         queue.audio_control_status = None
+        queue.player_loop_passed.clear()
 
         #Some checks before continue
 
@@ -357,6 +358,7 @@ class Functions:
         #Single song looping is on
         elif looping and audio_control_status is None:
             NextTrack = FinshedTrack
+            self.bot.loop.create_task(Subtitles.sync_subtitles(queue,queue.audio_message.channel,NextTrack))
 
         #Finshed naturaly / skipped
         else:
@@ -387,8 +389,9 @@ class Functions:
                 async def display_next():
 
                     target = queue.audio_message.channel
-
+                    
                     if not queue.audio_message.content:
+                        #if within 3 message, found the now playing message then use that as the target for editing
 
                         history = target.history(limit = 3)
                         history = await history.flatten()
@@ -405,17 +408,16 @@ class Functions:
                   
                 
                 self.bot.loop.create_task(display_next())
+                self.bot.loop.create_task(Subtitles.sync_subtitles(queue,queue.audio_message.channel,NextTrack))
             
             elif audio_control_status == "SKIP":
                 
                 self.bot.loop.create_task(self.clear_audio_message(guild))
                 return print("Skipped the only song in the queue")
 
-        #To show that we have handle the control
+
         
-
         new_start_time =float(time.perf_counter())
-
         #Play the audio
         NextTrack.play(voice_client,
                       after=lambda error: self.after_playing(guild,new_start_time,error),
@@ -472,11 +474,6 @@ class Functions:
         if newEmbed.image:
             newEmbed.set_thumbnail(url=newEmbed.image.url)
             newEmbed.set_image(url=discord.Embed.Empty)
-        # if newEmbed.author and not newEmbed.footer:
-        #     newEmbed.set_footer(text=newEmbed.author.name,icon_url=newEmbed.author.icon_url)
-        #     newEmbed.remove_author()
-
-        #content = audio_message.content #if len(audio_message.content) >1 else "☕️ Audio playing before :"
         
         await audio_message.edit(#content = content,
                                 embed=newEmbed,
@@ -580,7 +577,7 @@ class music_commands\
                       description='⏸ Pause the current audio',
                       usage="{}pause")
     async def pause(self, ctx:commands.Context):
-
+        
         await self.pause_audio(ctx.guild)
 
         await ctx.reply(Replies.paused_audio_msg)
@@ -607,6 +604,8 @@ class music_commands\
                         await super().join_voice_channel(guild, ctx.author.voice.channel)
                     except AttributeError:
                         raise error_type.NotInVoiceChannel
+                
+                self.bot.loop.create_task(Subtitles.sync_subtitles(queue,ctx.channel,queue[0]))
 
                 #Repeat function after the audio
                 start_time = float(time.perf_counter())
@@ -884,6 +883,7 @@ class music_commands\
         #Failed
         
         except BaseException as expection:
+            print(expection)
             if "Unsupported URL" in str(expection):
                 return await ctx.reply("Sorry, this url is not supported !")
             
@@ -904,7 +904,7 @@ class music_commands\
 
         #Success
         else:
-            
+            print("Succesfully extraced info")
             #Stop current audio (if queuing is disabled)
             if guild.voice_client and not queue.enabled:
                 guild.voice_client.stop()
@@ -933,11 +933,13 @@ class music_commands\
 
                 reply_msg = ctx.channel
                 NewTrack = queue[0]
-            
+
             #Repeat function after the audio
             start_time = float(time.perf_counter())
             after_playing = lambda voice_error: self.after_playing(guild,start_time,voice_error)
 
+
+            self.bot.loop.create_task(Subtitles.sync_subtitles(queue,ctx.channel,NewTrack))
             #Play the audio
             try:
                 NewTrack.play(guild.voice_client,
@@ -955,8 +957,10 @@ class music_commands\
                             .set_thumbnail(url = NewTrack.thumbnail))
                 else:
                     await ctx.reply("Unable to play this track because another tracks was requested at the same time")
+            else:
+                await self.create_audio_message(NewTrack,reply_msg or ctx.channel)
             
-            await self.create_audio_message(NewTrack,reply_msg or ctx.channel)
+
 
 #----------------------------------------------------------------#
 #QUEUE
@@ -1164,6 +1168,49 @@ class music_commands\
         await ctx.reply(Replies.queue_loop_audio_msg.format(Convert.bool_to_str(self.get_queue_loop(guild))))
 
 #----------------------------------------------------------------#
+
+    @commands.is_owner()
+    @queue.command(description='Ouput the queue as a txt file, can be imported again through the import command')
+    async def export(self,ctx:commands.Context):
+        filename:str= f"q{ctx.guild.id}.txt"
+        queue:SongQueue = self.get_queue(ctx.guild)
+
+        if not queue:
+            raise error_type.QueueEmpty
+
+        with open(filename,"x") as qfile:
+            file_str:str = ""
+            for track in queue:
+                file_str += track.webpage_url + "\n"
+
+            qfile.write(file_str)
+
+        await ctx.send(file=discord.File(filename))
+
+        os.remove(filename)
+
+    @commands.is_owner()
+    @queue.command(description='Input songs through a txt file, you can also export the current queue with queue export',
+                   aliases=["import"],
+                   usage="{}queue import [place your txt file in the attachmentd]")
+    async def from_file(self,ctx:commands.Context):
+        mes = await ctx.send("This might take a while ...")
+        await ctx.trigger_typing()
+        queue:SongQueue = self.get_queue(ctx.guild)
+        attach:discord.Attachment = ctx.message.attachments[0]
+        if "utf-8" in (attach.content_type):
+            
+            data:list[str] = (await attach.read()).decode("utf-8").split("\n")
+
+            for i,line in enumerate(data):
+                if line:
+                    self.bot.loop.create_task(mes.edit(f"{mes.content} ({i+1}/{len(data)-1})"))
+                    queue.append(await self.bot.loop.run_in_executor(None,
+                                                                    lambda: SongTrack.create_track(query=line,
+                                                                                                    requester=ctx.author)))
+            await mes.edit(f"Successfully added {len(data)-1} tracks to the queue !")
+                                     
+#----------------------------------------------------------------#
 #Voice update
     @commands.Cog.listener()
     async def on_voice_state_update(self,member, before, after):
@@ -1263,7 +1310,8 @@ class music_commands\
 
         #if same text channel
         if audio_message.channel == ctx.channel:
-            return await audio_message.reply("*🎧 This is the audio playing right now ~*")
+            return await audio_message.reply("*🎧 This is the audio playing right now ~* [{}/{}]".format(Convert.length_format(queue.time_position),
+                                                                                                         Convert.length_format(queue[0].duration)))
         #Or not
         await ctx.send(f"🎶 Now playing in {self.get_current_vc(ctx.guild).mention} - **{queue[0].get('title')}**")
 #----------------------------------------------------------------#

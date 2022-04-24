@@ -20,6 +20,8 @@ class SongQueue(deque):
 
         self.audio_message:discord.Message = None
 
+        self.player_loop_passed = []
+
         super().__init__()
 
     def get(self, __index: int) -> SongTrack:
@@ -42,6 +44,14 @@ class SongQueue(deque):
             total_len += track.duration
 
         return total_len
+
+    @property
+    def time_position(self) -> int:
+        if self.guild.voice_client.is_paused():
+            extra = sum(self.player_loop_passed[:-1])
+        else:
+            extra = sum(self.player_loop_passed)
+        return (self.guild.voice_client._player.loops + extra) // 50
 
     def swap(self,pos1:int,pos2:int):
         

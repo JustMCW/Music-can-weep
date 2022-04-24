@@ -12,3 +12,5 @@ beautifulsoup4~=4.10.0
 typing-extensions>=4.1.1
 
 youtube-dl==2021.12.17
+googletrans>=4.0.0rc1
+discord_components>=2.1.2
