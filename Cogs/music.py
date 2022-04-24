@@ -1,3 +1,4 @@
+from functools import reduce
 import discord, asyncio,time,re,os
 from datetime import datetime
 from discord.ext import commands
@@ -308,7 +309,7 @@ class Functions:
             return print("Voice error :",voice_error)
 
         voice_client:discord.VoiceClient = guild.voice_client
-        queue:SongQueue = self.get_queue(guild)
+        queue:SongQueue = VoiceState.get_queue(guild)
         audio_control_status:str = queue.audio_control_status
         queue.audio_control_status = None
         queue.player_loop_passed.clear()
@@ -509,10 +510,7 @@ class music_commands\
     def __init__(self,bot):
         print("MUSIC commands is ready")
 
-        self.bot = bot
-
-        #Hash maps
-        self.queues = {int:SongQueue}
+        self.bot:commands.Bot = bot
 
         super().__init__()
 
@@ -626,6 +624,47 @@ class music_commands\
         
         await Logging.log(f"{ctx.author} used resume command in [{ctx.guild}] ;")
 
+    @commands.guild_only()
+    @commands.command(aliases=["fast_forward","fwd"],
+                      description = "⏭ Fast-foward the time position of the current audio for a certain amount of time.",
+                      usage="{0}fwd 10\n{0}foward 10:30")
+    async def forward(self,ctx,*,time:str):
+        voicec:discord.VoiceClient = ctx.voice_client
+        if not voicec.is_playing():
+            raise error_type.NoAudioPlaying
+        queue = self.get_queue(ctx.guild)
+        fwd_sec:float = Convert.time_to_sec(time)
+
+        await ctx.trigger_typing()
+        if queue[0].duration < (fwd_sec+queue.time_position):
+            await ctx.reply("Ended the current track")
+            return voicec.stop()
+        await self.pause_audio(ctx.guild)
+
+        for _ in range(fwd_sec * 50):
+            try:
+                voicec.source.read()
+            except AttributeError:
+                break
+        queue.player_loop_passed.append(fwd_sec * 50)
+        await self.resume_audio(ctx.guild)
+        await ctx.reply(f"*⏭ Fast-fowarded for {Convert.length_format(fwd_sec)} seconds*")
+
+    @commands.guild_only()
+    @commands.command(aliases=["jump"],
+                      description="⏏️ Move the time position of the current audio, format : [Hours:Minutes:Seconds] or literal seconds like 3600 (an hour). This is a experimental command.",
+                      usage="{}seek 2:30")
+    async def seek(self,ctx:commands.Context,*,time_position):
+
+        try:
+            position_sec:float = Convert.time_to_sec(time_position)
+            await self.restart_audio(ctx.guild,position=position_sec)
+        except ValueError:
+            await ctx.reply(f"Invaild time position, format : {ctx.prefix}{ctx.invoked_with} [Hours:Minutes:Seconds]")
+        except OverflowError:
+            await ctx.reply("This time position is longer than the duration of the current track playing")
+        else:
+            await ctx.reply(f"⏏️ Moving audio's time position to `{Convert.length_format(position_sec)}` (It might take a while depend on the length of the audio)")
 
     @commands.guild_only()
     @commands.command(aliases=["previous"],
@@ -651,23 +690,6 @@ class music_commands\
 
 
     @commands.guild_only()
-    @commands.command(aliases=["jump"],
-                      description="⏏️ Move the time position of the current audio, format : [Hours:Minutes:Seconds] or literal seconds like 3600 (an hour). This is a experimental command.",
-                      usage="{}seek 2:30")
-    async def seek(self,ctx:commands.Context,*,time_position):
-
-        try:
-            position_sec:float = Convert.time_to_sec(time_position)
-            await self.restart_audio(ctx.guild,position=position_sec)
-        except ValueError:
-            await ctx.reply(f"Invaild time position, format : {ctx.prefix}{ctx.invoked_with} [Hours:Minutes:Seconds]")
-        except OverflowError:
-            await ctx.reply("This time position is longer than the duration of the current track playing")
-        else:
-            await ctx.reply(f"⏏️ Moving audio's time position to `{Convert.length_format(position_sec)}` (It might take a while depend on the length of the audio)")
-
-
-    @commands.guild_only()
     @commands.command(description='⏹ stop the current audio from playing 🚫',
                       usuge="{}stop")
     async def stop(self, ctx:commands.Context):
@@ -682,9 +704,7 @@ class music_commands\
 
         await ctx.reply(Replies.stopped_audio_msg)
 
-        await Logging.log(
-            f"{ctx.author} used stop command in [{ctx.guild}] ;"
-        )
+        await Logging.log(f"{ctx.author} used stop command in [{ctx.guild}] ;")
 
     @commands.guild_only()
     @commands.command(aliases=["replay", "re"],
@@ -707,19 +727,15 @@ class music_commands\
         #Try getting the volume_percentage from the message
         try:
             volume_percentage = float(re.findall(r"\d+",volume_to_set)[0])
-            if volume_percentage < 0: 
-                raise ValueError
         except IndexError:
-            return await ctx.reply("🎧 Please enter a vaild volume_percentage 🔊")
-        await Logging.log(
-            f"{ctx.author} set volume to `{round(volume_percentage,2)}%` in [{ctx.guild}] ;")
+            return await ctx.reply("🎧 Please enter a vaild volume percentage 🔊")
+        await Logging.log(f"{ctx.author} set volume to `{round(volume_percentage,2)}%` in [{ctx.guild}] ;")
 
         PERCENTAGE_LIMIT = 200
+        
         #Volume higher than limit
-        if volume_percentage > PERCENTAGE_LIMIT:
-            return await ctx.reply(
-                f"🚫 Please enter a volume below {PERCENTAGE_LIMIT}% (to protect yours and other's ears 👍🏻)"
-            )
+        if volume_percentage > PERCENTAGE_LIMIT and ctx.author.id != self.bot.owner_id:
+            return await ctx.reply(f"🚫 Please enter a volume below {PERCENTAGE_LIMIT}% (to protect yours and other's ears 👍🏻)")
 
         #Setting the actual volume we are going to set
         true_volume = volume_percentage / 100 * BOT_INFO.InitialVolume
@@ -1047,54 +1063,49 @@ class music_commands\
                     aliases=["dup","repeated"],
                     usage="{}queue remove duplicate")
     async def duplicated(self,ctx):
-        queue = self.get_queue(ctx.guild)
 
-        appeared_url:list[str] = [] #for url that already appeared once
-        index_to_be_removed:list[int] = [] #indicate indexes that need to be removed
+        queue:SongQueue = self.get_queue(ctx.guild)
 
-        #Check whether which are repeated
-        for i,track in enumerate(queue):
-            if track.webpage_url in appeared_url:
-                index_to_be_removed.append(i)
-            else:
-                appeared_url.append(track.webpage_url)
+        not_rep = []
 
-        if not index_to_be_removed:
+        def is_dup(appeared:list,item:SongTrack):
+            if item.webpage_url not in appeared:
+                appeared.append(item.webpage_url)
+                not_rep.append(item)
+            return appeared
+        
+        reduce(is_dup,queue,[])
+        removed_index:int = len(queue) - len(not_rep)
+
+        if removed_index == 0:
+            print(not_rep)
             return await ctx.reply("No track is repeated !")
 
-        #Removing them
-        index_to_be_removed.reverse() #Large to small (to prevent iteration errors)
-        for i in index_to_be_removed:
-            del queue[i]
+        queue.clear()
+        queue.extend(not_rep)
 
-        await ctx.reply(f"Successfully removed {len(index_to_be_removed)} tracks from the queue.")
+        await ctx.reply(f"Successfully removed `{removed_index}` duplicated tracks from the queue.")
     
     @commands.guild_only()
     @remove.command(description="Remove tracks which their requester is not in the bot's voice channel",
-                    aliases=["left"],
+                    aliases=["left_vc","left"],
                     usage="{}queue remove left")
     async def left_user(self,ctx:commands.Context):
         
         queue = self.get_queue(ctx.guild)
         
         user_in_vc:list[int] = list(map(lambda usr: usr.id, self.get_current_vc(ctx.guild).members))
+        
+        in_vc = filter(lambda t: t.requester.id in user_in_vc, queue)
 
-        index_to_be_removed:list[int] = [] #indicate indexes that need to be removed
-
-        #Check whether which are repeated
-        for i,track in enumerate(queue):
-            if track.requester.id not in user_in_vc:
-                #Large to small (to prevent iteration errors)
-                index_to_be_removed.insert(0,i)
-
-        if not index_to_be_removed:
+        remove_count = len(queue) - len(in_vc)
+        if remove_count == 0:
             return await ctx.reply("No track is removed !")
 
-        #Removing them
-        for i in index_to_be_removed:
-            del queue[i]
-        
-        await ctx.reply(f"Successfully removed {len(index_to_be_removed)} tracks from the queue.")
+        queue.clear()
+        queue.extend(in_vc)
+
+        await ctx.reply(f"Successfully removed {remove_count} tracks from the queue.")
 
     @commands.guild_only()
     @queue.command(description="🧹 Removes every track in the queue",
@@ -1192,24 +1203,24 @@ class music_commands\
     @commands.is_owner()
     @queue.command(description='Input songs through a txt file, you can also export the current queue with queue export',
                    aliases=["import"],
-                   usage="{}queue import [place your txt file in the attachmentd]")
+                   usage="{}queue import [place your txt file in the attachments]")
     async def from_file(self,ctx:commands.Context):
-        mes = await ctx.send("This might take a while ...")
-        await ctx.trigger_typing()
         queue:SongQueue = self.get_queue(ctx.guild)
         attach:discord.Attachment = ctx.message.attachments[0]
+        if not attach:
+            return await ctx.reply("Please upload a txt file")
         if "utf-8" in (attach.content_type):
-            
+            mes = await ctx.reply("This might take a while ...")
             data:list[str] = (await attach.read()).decode("utf-8").split("\n")
 
-            for i,line in enumerate(data):
+            for line in data:
                 if line:
-                    self.bot.loop.create_task(mes.edit(f"{mes.content} ({i+1}/{len(data)-1})"))
                     queue.append(await self.bot.loop.run_in_executor(None,
                                                                     lambda: SongTrack.create_track(query=line,
                                                                                                     requester=ctx.author)))
             await mes.edit(f"Successfully added {len(data)-1} tracks to the queue !")
-                                     
+        else:
+            await ctx.reply("Invaild file type ! (txt and utf-8)")                       
 #----------------------------------------------------------------#
 #Voice update
     @commands.Cog.listener()

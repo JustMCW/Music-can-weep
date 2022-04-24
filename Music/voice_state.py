@@ -5,6 +5,9 @@ from main import BOT_INFO
 from Music.queue import SongQueue
 from errors import custom_errors
 
+#Hash maps
+queues = {int:SongQueue}
+
 #DECORATER
 def playing_audio(vcfunc):
   async def wrapper(*args,**kwargs):
@@ -33,17 +36,18 @@ class VoiceState:
             return True
         return guild.voice_client.is_paused()
 
-    def get_now_playing(self,guild:discord.Guild) -> dict:
-        return self.now_playing.get(guild.id)
+    @staticmethod
+    def get_queue(guild:discord.Guild) ->SongQueue:
+        """get the queue of a guild, create one if not found"""
+        if queues.get(guild.id) is None:
+            queues[guild.id] = SongQueue(guild)
+        return queues.get(guild.id)
 
-    def get_queue(self,guild:discord.Guild) ->SongQueue:
-        if self.queues.get(guild.id) is None:
-            self.queues[guild.id] = SongQueue(guild)
-        return self.queues.get(guild.id)
-
+    @classmethod
     def get_queue_loop(self,guild:discord.Guild)->bool:
         return self.get_queue(guild).queue_looping
 
+    @classmethod
     def get_loop(self,guild:discord.Guild)->bool:
         return self.get_queue(guild).looping
     
@@ -54,9 +58,11 @@ class VoiceState:
         except AttributeError:
             return None
     
+    @classmethod
     def get_volume(self,guild:discord.Guild)->float:
         return self.get_queue(guild).volume
 
+    @classmethod
     def get_volume_percentage(self,guild:discord.Guild)->str:
         return f'{round(self.get_volume(guild) / BOT_INFO.InitialVolume * 100)}%'
 
@@ -73,7 +79,8 @@ class VoiceState:
             await vc.connect()
         else: 
             await guild.voice_client.move_to(vc)
-
+    
+    @classmethod
     @playing_audio
     async def pause_audio(self,guild:discord.Guild):
         voicec = guild.voice_client
@@ -87,6 +94,7 @@ class VoiceState:
     async def resume_audio(guild:discord.Guild):
         guild.voice_client.resume()
     
+    @classmethod
     @playing_audio
     async def rewind_audio(self,guild:discord.Guild):
         queue = self.get_queue(guild)
@@ -95,11 +103,12 @@ class VoiceState:
 
         guild.voice_client.stop()
 
+    @classmethod
     @playing_audio
     async def skip_audio(self,guild:discord.Guild):
 
         queue = self.get_queue(guild)
-
+        
         queue.audio_control_status = "SKIP"
         guild.voice_client.stop()
 

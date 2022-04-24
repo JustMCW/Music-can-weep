@@ -98,7 +98,8 @@ class Subtitles:
 
     @staticmethod
     async def sync_subtitles(queue,channel,song_track):
-        return print("Syncing not implemented!")
+        if not queue.sync_lyrics:
+            return print("Syncing disabled")
         sub_options:dict = getattr(song_track,"subtitles",None)
         if not sub_options:
             return 

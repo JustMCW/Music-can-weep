@@ -1,83 +1,103 @@
 {
    "915104477521014834": {
-      "prefix": ">>",
-      "queuing": true
+      "prefix": "==",
+      "queuing": true,
+      "sync_lyrics": true
    },
    "545988173151600650": {
       "prefix": ">>",
-      "queuing": true
+      "queuing": true,
+      "sync_lyrics": false
    },
    "683439512017305644": {
       "prefix": ">>",
-      "queuing": true
+      "queuing": true,
+      "sync_lyrics": false
    },
    "756724785748115506": {
       "prefix": ">>",
-      "queuing": true
+      "queuing": true,
+      "sync_lyrics": false
    },
    "757146989619052614": {
       "prefix": ">>",
-      "queuing": true
+      "queuing": true,
+      "sync_lyrics": false
    },
    "787663746214133790": {
       "prefix": ">>",
-      "queuing": true
+      "queuing": true,
+      "sync_lyrics": false
    },
    "792025070285094922": {
-      "prefix": ">>",
-      "queuing": true
+      "prefix": "<<",
+      "queuing": true,
+      "sync_lyrics": false
    },
    "863784683526684712": {
       "prefix": ">>",
-      "queuing": true
+      "queuing": true,
+      "sync_lyrics": false
    },
    "877120050581082122": {
       "prefix": ">>",
-      "queuing": true
+      "queuing": true,
+      "sync_lyrics": false
    },
    "877798270099939358": {
       "prefix": ">>",
-      "queuing": true
+      "queuing": true,
+      "sync_lyrics": false
    },
    "879327356446183514": {
-      "prefix": ">>",
-      "queuing": false
+      "prefix": ">_<",
+      "queuing": false,
+      "sync_lyrics": false
    },
    "885779582081458187": {
       "prefix": ">>",
-      "queuing": true
+      "queuing": true,
+      "sync_lyrics": false
    },
    "899615995159805952": {
       "prefix": ">>",
-      "queuing": true
+      "queuing": true,
+      "sync_lyrics": false
    },
    "936617602606858281": {
       "prefix": ">>",
-      "queuing": true
+      "queuing": true,
+      "sync_lyrics": false
    },
    "938833067013972039": {
       "prefix": ">>",
-      "queuing": true
+      "queuing": true,
+      "sync_lyrics": false
    },
    "939206629507866735": {
       "prefix": ">>",
-      "queuing": true
+      "queuing": true,
+      "sync_lyrics": false
    },
    "940162564476780544": {
       "prefix": ">>",
-      "queuing": true
+      "queuing": true,
+      "sync_lyrics": false
    },
    "942811898221584465": {
       "prefix": ">>",
-      "queuing": true
+      "queuing": true,
+      "sync_lyrics": false
    },
    "944120534524911616": {
       "prefix": ">>",
-      "queuing": true
+      "queuing": true,
+      "sync_lyrics": false
    },
    "947871429511233636": {
       "prefix": ">>",
-      "queuing": true
+      "queuing": true,
+      "sync_lyrics": false
    },
    "956970829021839440": {
       "prefix": ">>",
@@ -85,6 +105,7 @@
    },
    "958802116586123284": {
       "prefix": ">>",
-      "queuing": true
+      "queuing": true,
+      "sync_lyrics": false
    }
 }

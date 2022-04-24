@@ -20,11 +20,12 @@ class events(commands.Cog,Replies):
       data = json.load(jsonf)
 
       for guild in self.BOT.guilds:
+
         if str(guild.id) not in data.keys():
           print(guild,"lacking Database")
           data[str(guild.id)] = self.DefaultDatabase
         elif data[str(guild.id)].keys() != self.DefaultDatabase.keys():
-          data[str(guild.id)] = dict(self.DefaultDatabase , **data[guild.id])
+          data[str(guild.id)] = dict(self.DefaultDatabase , **data[str(guild.id)])
           print(guild,"has incorrect key")
       
       jsonf.seek(0)

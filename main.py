@@ -23,6 +23,7 @@ class BOT_INFO:
     DefaultDatabase = {
       "prefix":  DefaultPrefix,
       "queuing": InitialQueuing,
+      "sync_lyrics": False,
     }
 
 

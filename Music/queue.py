@@ -37,21 +37,21 @@ class SongQueue(deque):
         return data["queuing"]
 
     @property
-    def total_length(self):
-        total_len = 0
-        
-        for track in self:
-            total_len += track.duration
+    def sync_lyrics(self)->bool:
+        with open(DiscordServerDatabase,"r") as SVDBjson_r:
+            data = json.load(SVDBjson_r)[str(self.guild.id)]
+        return data["sync_lyrics"]
 
-        return total_len
+    @property
+    def total_length(self):
+        return sum( map( lambda t: t.duration, self ) ) 
 
     @property
     def time_position(self) -> int:
-        if self.guild.voice_client.is_paused():
-            extra = sum(self.player_loop_passed[:-1])
-        else:
-            extra = sum(self.player_loop_passed)
-        return (self.guild.voice_client._player.loops + extra) // 50
+        voicec = self.guild.voice_client
+        loop_pass = self.player_loop_passed
+
+        return (voicec._player.loops + sum(loop_pass[:-1] if voicec.is_paused() else loop_pass)) // 50
 
     def swap(self,pos1:int,pos2:int):
         
@@ -75,13 +75,18 @@ class SongQueue(deque):
         if len(self) ==0: 
             raise custom_errors.QueueEmpty
 
+        is_playing = self.guild.voice_client is not None and self.guild.voice_client.is_playing()
+
         #Exclude the first item ( currently playing )
-        playing = self.popleft()
+        
+        if is_playing:
+            playing = self.popleft()
         
         from random import shuffle
         shuffle(self)
         
-        #Add it back after shuffling
-        self.appendleft(playing)
+        if is_playing:
+            #Add it back after shuffling
+            self.appendleft(playing)
 
         

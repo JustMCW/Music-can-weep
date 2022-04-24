@@ -37,6 +37,10 @@ class Convert:
         
     @staticmethod
     def time_to_sec(string:str)->int:
+        #Its just a number .
+        try: return int(string) 
+        except ValueError: pass
+
         try:
             #Hours
             #                       1 2      :        3    4         :         5    6

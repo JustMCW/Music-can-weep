@@ -1,15 +1,16 @@
 #I mean ... just look at their name lol Ovo
 
-from discord.ext import commands
+
+from discord.ext.commands import errors
 
 class custom_errors:
   
-  class NotInVoiceChannel(Exception): pass
+  class NotInVoiceChannel(errors.CommandError): pass
 
-  class NoAudioPlaying(Exception): pass
+  class NoAudioPlaying(errors.CommandError): pass
   
-  class UserNotInVoiceChannel(Exception): pass
+  class UserNotInVoiceChannel(errors.CommandError): pass
 
-  class QueueEmpty(Exception): pass
+  class QueueEmpty(errors.CommandError): pass
 
-  class QueueDisabled(Exception): pass
+  class QueueDisabled(errors.CommandError): pass

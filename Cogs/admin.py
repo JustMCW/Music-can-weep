@@ -31,6 +31,7 @@ class bot_admin_commands(commands.Cog,command_attrs=dict(hidden=True)):
             await ctx.reply("Success")
 
 
+
     @commands.is_owner() 
     @admin.command()
     async def say(self,ctx,*,message):
