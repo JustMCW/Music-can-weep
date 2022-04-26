@@ -1,6 +1,8 @@
 import discord
 from discord.ext import commands
 
+def setup(*_): pass
+
 class MCWHelpCommand(commands.HelpCommand):
     def __init__(self):
         super().__init__()
@@ -21,7 +23,7 @@ class MCWHelpCommand(commands.HelpCommand):
 
     async def send_bot_help(self, mapping):
         channel:discord.DMChannel = self.get_destination()
-        description = "\n".join([f'**{cog.qualified_name.replace("_"," ")}**\n{", ".join(f"`{cmd.name}`" for cmd in cog.get_commands())}\n' for cog in mapping if cog is not None and len(cog.get_commands()) != 0 and cog.name != "bot_admin_commands"])
+        description = "\n".join([f'**{cog.qualified_name.replace("_"," ")}**\n{", ".join(f"`{cmd.name}`" for cmd in cog.get_commands())}\n' for cog in mapping if cog is not None and len(cog.get_commands()) != 0 and cog.qualified_name != "bot_admin_commands"])
 
         await channel.send(embed= discord.Embed(title="🎶 This is a simple music bot ~",
                                                 description = f"Run `{self.clean_prefix}help command` for more infomation about that command\n\n"+description,
@@ -45,6 +47,3 @@ class MCWHelpCommand(commands.HelpCommand):
         await channel.send(embed= discord.Embed(title=f"🌟 Usage of group command : {group.qualified_name} ",
                                                 description =f"{group.description}\n\nCommands for this group : `{'`, `'.join([cmd.name for cmd in list(group.walk_commands())])}`\n\n**Examples:**\n{group.usage.format(self.clean_prefix)}",
                                                 color = discord.Color.from_rgb(255,255,255)))
-    
-def setup(*_):
-    pass

@@ -5,9 +5,9 @@ import discord,json
 from discord.ext import commands
 from discord_components import Button, ButtonStyle , ActionRow 
 
-from replies import Replies
+from Response import MessageString
 from log import Logging
-from convert import Convert
+import Convert
 
 DiscordServerDatabase = "Database/DiscordServers.json"
 
@@ -101,9 +101,9 @@ class other_commands(commands.Cog):
         mode:bool = Convert.str_to_bool(mode)
 
         if mode is None:
-            return await ctx.reply(Replies.invaild_mode_msg)
+            return await ctx.reply(MessageString.invaild_mode_msg)
 
-        if mode == False and len(self.bot.cogs["music_commands"].get_queue(ctx.guild)) != 0 :
+        if mode == False and len(ctx.guild.song_queue) != 0 :
             return await ctx.reply(f"There are still tracks remaining in the queue, it must be empty. ( `{ctx.prefix}queue clear` will clear it for you )")
 
         overwrite_server_database(ctx.guild.id,

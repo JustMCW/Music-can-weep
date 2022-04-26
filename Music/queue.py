@@ -1,7 +1,7 @@
 import discord,json
+from discord.ext import commands
 
 from Music.song_track import SongTrack
-from errors import custom_errors
 from main import BOT_INFO
 
 from collections import deque
@@ -56,7 +56,7 @@ class SongQueue(deque):
     def swap(self,pos1:int,pos2:int):
         
         if len(self) ==0: 
-            raise custom_errors.QueueEmpty
+            raise commands.errors.QueueEmpty
 
         #Swapping same item :/
         if pos1 == pos2:
@@ -73,7 +73,7 @@ class SongQueue(deque):
     def shuffle(self):
 
         if len(self) ==0: 
-            raise custom_errors.QueueEmpty
+            raise commands.errors.QueueEmpty
 
         is_playing = self.guild.voice_client is not None and self.guild.voice_client.is_playing()
 

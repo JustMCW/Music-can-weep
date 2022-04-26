@@ -54,23 +54,26 @@ BOT = commands.Bot(command_prefix=get_prefix,
                    case_insensitive=True,
                    owner_id=812808602997620756)
 
-
 def main():
     print("Started the code")
 
     #Add event cog for the BOT
-    from Cogs.event import events
-    BOT.add_cog(events(BOT, BOT_INFO))
+    from Cogs.event import event
+    BOT.add_cog(event(BOT, BOT_INFO))
 
     BOT_TOKEN = os.environ.get("TOKEN")
     
     if BOT_TOKEN is not None:
-        print("Running on heroku")
+        print("Running on cloud")
     else:
         print("Running locally")
+        import sys
         import re
         with open("../.tokens.txt","r") as TKF:
-            BOT_TOKEN = dict(re.findall("(.*) = (.*)",TKF.read() )) ["Music-can-weep-beta"]
+            if len(sys.argv) == 1:
+                BOT_TOKEN = dict(re.findall("(.*) = (.*)",TKF.read() )) ["Music-can-weep-beta"]
+            else:
+                BOT_TOKEN = dict(re.findall("(.*) = (.*)",TKF.read() )) ["Music-can-weep"]
 
         from discord import opus
         if not opus.is_loaded():

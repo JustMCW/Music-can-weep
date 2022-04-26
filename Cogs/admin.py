@@ -18,7 +18,8 @@ class bot_admin_commands(commands.Cog,command_attrs=dict(hidden=True)):
     @admin.command()
     async def test(self,ctx:commands.Context,*_):
         msg:discord.Message = await ctx.reply("This is a testing command.")
-        print(msg.reference.message_id)
+        print(ctx.guild.song_queue)
+        ctx.guild.song_queue.append(1)
         # await ctx.invoke(ctx.bot.get_command("admin shutdown"))
 
     @admin.command()
@@ -69,7 +70,7 @@ class bot_admin_commands(commands.Cog,command_attrs=dict(hidden=True)):
         if not voice_chan:
             return await ctx.send(f"{vc_name} is not found at {guild.name}")
 
-        from Music.voice_state import VoiceState
+        from Music import VoiceState
         await VoiceState.join_voice_channel(guild,voice_chan)
 
         from Music.song_track import SongTrack
