@@ -1,4 +1,7 @@
-import requests,re,asyncio
+import requests
+import re
+import asyncio
+import logging
 from googletrans import Translator
 
 translator = Translator()
@@ -99,7 +102,7 @@ class Subtitles:
     @staticmethod
     async def sync_subtitles(queue,channel,song_track):
         if not queue.sync_lyrics:
-            return print("Syncing disabled")
+            return logging.info("Syncing disabled")
         sub_options:dict = getattr(song_track,"subtitles",None)
         if not sub_options:
             return 
@@ -107,13 +110,13 @@ class Subtitles:
         subtitle:str = requests.get(lang[4]["url"]).content.decode("utf-8")
         subtitle_dict = {}
 
-        print(lang[4]["url"])
+        logging.info(lang[4]["url"])
 
         for indx,line in enumerate(subtitle.splitlines()):
             if "-->" in line:
                 match = re.match(r"^(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})$",line)
                 if not match: 
-                    return print("Complex cannot be synced")
+                    return logging.warning("Complex cannot be synced")
                 subtitle_dict[(sec_in_time_string(match.group(1))-0.5,sec_in_time_string(match.group(2)))] = subtitle.splitlines()[indx+1]
 
         async def tt(text):

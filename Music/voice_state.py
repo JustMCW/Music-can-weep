@@ -1,11 +1,12 @@
 import discord
 import time
 import asyncio
+import logging
 from discord.ext import commands
 
 from main import BOT_INFO
 
-from Music.queue import SongQueue
+from Music.song_queue import SongQueue
 from Music.song_track import SongTrack
 
 from Buttons import Buttons
@@ -27,9 +28,9 @@ def playing_audio(vcfunc):
             if guild.voice_client.source: 
                 return vcfunc(*args,**kwargs)
             else: 
-                raise commands.errors.NoAudioPlaying
+                raise commands.errors.NoAudioPlaying("{vcfunc.__name__} requires the bot to be playing audio.")
         except AttributeError: 
-          raise commands.errors.NotInVoiceChannel
+            raise commands.errors.NotInVoiceChannel("{vcfunc.__name__} requires the bot to be in a voice channel.")
       
     return wrapper
 
@@ -124,7 +125,7 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
     Do stuff after playing the audio like removing it from the queue
     """
     if voice_error is not None:
-        return print("Voice error :",voice_error)
+        return logging.error("Voice error :",voice_error)
 
     voice_client:discord.VoiceClient = guild.voice_client
     queue:SongQueue = guild.song_queue
@@ -143,15 +144,15 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
 
         event_loop.create_task(clean_up_queue(guild))
 
-        return print("Ignore loop : NOT IN VOICE CHANNEL")
+        return logging.info("Ignore loop : NOT IN VOICE CHANNEL")
     
     #Ignore if some commands are triggered
     if audio_control_status == "RESTART":
-        return print(f"Ignore loop : RESTART")
+        return logging.info(f"Ignore loop : RESTART")
 
     elif audio_control_status == "CLEAR":
         event_loop.create_task(clear_audio_message(guild))
-        return print("Ignore loop : CLEAR QUEUE")
+        return logging.info("Ignore loop : CLEAR QUEUE")
     
     FinshedTrack:SongTrack = queue[0]
     NextTrack:SongTrack = None
@@ -160,7 +161,7 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
     #Counter 403 forbidden error (an error that try cannot catch, it makes the audio ends instantly)
     if (time.perf_counter() - start_time) < 0.5 and audio_control_status is None:
 
-        print("Ignore loop : HTTP ERROR, Time (ns) = ",time.perf_counter() - start_time)
+        logging.warning("Ignore loop : HTTP ERROR, Time (ns) = ",time.perf_counter() - start_time)
 
         #Get a new piece of info
         NextTrack = SongTrack.create_track(query = FinshedTrack.webpage_url,
@@ -172,7 +173,7 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
     elif not queue.enabled and (not looping or audio_control_status=="SKIP"):
         queue.popleft()
         event_loop.create_task(clear_audio_message(guild))
-        return print("Queue disabled")
+        return logging.info("Queue disabled")
 
     #Single song looping is on
     elif looping and audio_control_status is None:
@@ -198,11 +199,11 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
         if NextTrack is None:
             event_loop.create_task(queue.audio_message.channel.send("\\☑️ All tracks in the queue has been played (if you want to repeat the queue, run \" >>queue repeat on \")",delete_after=30))
             event_loop.create_task(clear_audio_message(guild))
-            return print("Queue is empty")
+            return logging.info("Queue is empty")
 
         #To prevent sending the same audio message again
         if NextTrack != FinshedTrack:
-            print("Next track !")
+            logging.info(f"Play next track : {NextTrack.title}")
 
             async def display_next():
 
@@ -231,7 +232,7 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
         elif audio_control_status == "SKIP":
             
             event_loop.create_task(clear_audio_message(guild))
-            return print("Skipped the only song in the queue")
+            return logging.info("Skipped the only song in the queue")
 
 
     
@@ -285,7 +286,7 @@ async def clear_audio_message(guild:discord.Guild=None,specific_message:discord.
     audio_message:discord.Message = specific_message or guild.song_queue.audio_message
 
     if audio_message is None:  
-        return print("Audio message is none")
+        return logging.warning("Audio message is none")
 
     newEmbed:discord.Embed = audio_message.embeds[0]
 
@@ -300,7 +301,7 @@ async def clear_audio_message(guild:discord.Guild=None,specific_message:discord.
     await audio_message.edit(#content = content,
                             embed=newEmbed,
                             components= Buttons.AfterAudioButtons)
-    print("Succesfully removed audio messsage.")
+    logging.info("Succesfully removed audio messsage.")
 
     if not specific_message:
         guild.song_queue.audio_message = None
@@ -310,15 +311,13 @@ async def clean_up_queue(guild:discord.Guild):
     queue:SongQueue = guild.song_queue
     clear_after = 600
     if bool(queue):
-        print(f"Wait for {clear_after} sec then clear queue")
+        logging.info(f"Wait for {clear_after} sec then clear queue")
         await asyncio.sleep(clear_after)
         
         voice_client:discord.VoiceClient = guild.voice_client
         if not voice_client or not voice_client.is_connected():
             if len(queue) != 0:
                 queue.clear()
-        else:
-                print("Dont clear")
 
 
 async def update_audio_msg(guild):

@@ -3,8 +3,9 @@ from Response import MessageString
 import json
 import os
 import discord
+import logging
 
-from log import Logging
+from Database import Management
 
 DiscordServerDatabase = "Database/DiscordServers.json"
 #--------------------#
@@ -17,24 +18,6 @@ class event(commands.Cog):
         self.DefaultDatabase = info.DefaultDatabase
 
         self.cmd_aliases_list = []
-
-# make sure every server has a database
-    def checkDatabase(self):
-        with open(DiscordServerDatabase, "r+") as jsonf:
-            data = json.load(jsonf)
-
-            for guild in self.bot.guilds:
-
-                if str(guild.id) not in data.keys():
-                    print(guild, "lacking Database")
-                    data[str(guild.id)] = self.DefaultDatabase
-                elif data[str(guild.id)].keys() != self.DefaultDatabase.keys():
-                    data[str(guild.id)] = dict(
-                        self.DefaultDatabase, **data[str(guild.id)])
-                    print(guild, "has incorrect key")
-
-            jsonf.seek(0)
-            json.dump(data, jsonf, indent=3)
 
 
 # Get prefix in string
@@ -65,9 +48,7 @@ class event(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
 
-        print(f"Running as {self.bot.user.name} :")
-
-        self.checkDatabase()
+        logging.warning(f"Running as {self.bot.user.name} :")
 
         from discord_components import DiscordComponents
         DiscordComponents(self.bot)
@@ -75,18 +56,31 @@ class event(commands.Cog):
         #Register the custom errors
         import custom_errors
 
-        #Register the song queue on the discord guild object
-        from Music.queue import SongQueue
-        discord.Guild._song_queue = SongQueue()
+        #Register the song queue and database on the discord guild object
+        from Music.song_queue import SongQueue
+        import discord
 
+        discord.Guild._song_queue = SongQueue()
         @property
-        def song_queue(self:discord.Guild):
-            """Represents the song queue of the guild"""
+        def song_queue(self):
+            """
+            Represents the song queue of the guild
+            """
             if self._song_queue is self:
                 return self._song_queue
-            self._song_queue.guild = self
-            return self._song_queue
-        discord.Guild.song_queue = song_queue
+            else:
+                self._song_queue.guild = self
+                return self._song_queue
+
+        discord.Guild.song_queue=song_queue
+
+        @property
+        def database(self) -> dict:
+            """
+            Represents the database which is from `Database.DiscordServers.json` of the guild 
+            """
+            return Management.read_database_of(self)
+        discord.Guild.database=database
 
         #Load the cogs for the bot
         cogs = [pyf.replace(".py", "") for pyf in filter(lambda name: name.endswith(".py"), os.listdir("./Cogs"))]
@@ -100,7 +94,7 @@ class event(commands.Cog):
             except commands.errors.ExtensionAlreadyLoaded:
                 return
             except commands.errors.ExtensionFailed as ExtFailure:
-                print(ExtFailure)
+                logging.error(ExtFailure)
                 await self.bot.close()
 
         #Since we cannot edit it direactly
@@ -108,9 +102,11 @@ class event(commands.Cog):
         self.bot.get_command("help").usage = "{}help play"
 
         # Message that tell us we have logged in
-        await Logging.log(f"Logged in as {self.bot.user.mention} ( running in {len(self.bot.guilds)} servers ) ;")
+        logging.webhook_log_event(f"Logged in as {self.bot.user.name} ( running in {len(self.bot.guilds)} servers ) ;",thumbnail = self.bot.user.avatar_url)
 
-        # Start a background task
+        Management.auto_correct_databases(self.bot)
+
+        # Start a background task  
         self.changeBotPresence.start()
 
     def guess_the_command(self, wrong_cmd, prefix):
@@ -140,78 +136,81 @@ class event(commands.Cog):
         return f"Did you mean `{prefix}{connector.join(matchs)}` 🤔"
 
 
-# Error handling ( reply and logging)
+# Error handling (reply and logging)
 
     @commands.Cog.listener()
-    async def on_command_error(self, ctx, commandError):
-        commands.errors = commands.errors
-        print(commandError)
-        await Logging.log(f"{ctx.author} triggered an error : `{(commandError.__class__.__name__)}` in [{ctx.guild}] ;")
+    async def on_command_error(self, ctx:commands.Context, command_error:commands.errors.CommandError):
+        logging.webhook_log_event(f"{ctx.author} triggered an error : {(command_error.__class__.__name__)}",description = f"in #{ctx.channel.name} | {ctx.guild}")
 
-        # Invaild command (command not found)
-        if isinstance(commandError, commands.errors.CommandNotFound):
-            wrong_cmd = str(commandError)[9:-14]
-            await ctx.reply(MessageString.command_not_found_msg.format(self.guess_the_command(wrong_cmd, self.prefix_str(ctx))))
+        # Invaild command
+        if isinstance(command_error, commands.errors.CommandNotFound):
+            wrong_cmd = str(command_error)[9:-14]
+            await ctx.reply(MessageString.command_not_found_msg.format(self.guess_the_command(wrong_cmd,ctx.guild.database.get("prefix"))))
 
-        # Not in server / in private message
-        elif isinstance(commandError, commands.errors.NoPrivateMessage):
+        # Not In Server
+        elif isinstance(command_error, commands.errors.NoPrivateMessage):
             await ctx.reply(MessageString.not_in_server_msg)
-
-        elif isinstance(commandError, commands.errors.NotOwner):
-            print(f"{ctx.author} your not owner lol")
-
-        # User missing permission (not owner / missing some permisson)
-        elif isinstance(commandError, commands.errors.MissingPermissions):
+        
+        # Permissions Errors
+        elif isinstance(command_error, commands.errors.NotOwner):
+            pass
+        elif isinstance(command_error, commands.errors.MissingPermissions):
             await ctx.reply(MessageString.missing_perms_msg)
-
-        # Bot missing permsion
-        elif isinstance(commandError, commands.errors.BotMissingPermissions):
+        elif isinstance(command_error, commands.errors.BotMissingPermissions):
             await ctx.reply(MessageString.bot_lack_perm_msg)
 
-        # User missing command argument
-        elif isinstance(commandError, commands.errors.MissingRequiredArgument):
-            missed_arg = str(commandError)[:-40]
+        # Arguments Errors
+        elif isinstance(command_error, commands.errors.MissingRequiredArgument):
+            missed_arg = str(command_error)[:-40]
             await ctx.reply(MessageString.missing_arg_msg.format(missed_arg))
+        elif isinstance(command_error, commands.errors.BadBoolArgument):
+            await ctx.reply(MessageString.invaild_bool_msg)
 
-        # Input User not found
-        elif isinstance(commandError, commands.errors.UserNotFound):
+        # Not Found Errors
+        elif isinstance(command_error, commands.errors.UserNotFound):
             await ctx.reply(MessageString.user_not_found_msg)
-
-        # Input Channel not found
-        elif isinstance(commandError, commands.errors.ChannelNotFound):
+        elif isinstance(command_error, commands.errors.ChannelNotFound):
             await ctx.reply(MessageString.channel_not_found_msg)
-
-        # Custom Errors
-        if isinstance(commandError, commands.errors.UserNotInVoiceChannel):
-            await ctx.reply(MessageString.user_not_in_vc_msg)
-
-        elif isinstance(commandError, commands.errors.NotInVoiceChannel):
-            await ctx.reply(MessageString.bot_not_in_vc_msg)
-        elif isinstance(commandError, commands.errors.NoAudioPlaying):
-            await ctx.reply(MessageString.not_playing_msg)
-
-        elif isinstance(commandError, commands.errors.QueueEmpty):
-            await ctx.reply(MessageString.queue_empty_msg)
-        elif isinstance(commandError, commands.errors.QueueDisabled):
-            await ctx.reply(MessageString.queue_disabled_msg.format(ctx.prefix))
-
-        elif isinstance(commandError, commands.errors.CheckFailure):
-            await ctx.reply(MessageString.queue_disabled_msg.format(ctx.prefix))
-
-        elif "NotFound" in str(commandError):
+        elif "NotFound" in str(command_error):
             pass
 
-        # or else it would be the code's error
+        # Voice Errors
+        elif isinstance(command_error, commands.errors.UserNotInVoiceChannel):
+            await ctx.reply(MessageString.user_not_in_vc_msg)
+        elif isinstance(command_error, commands.errors.NotInVoiceChannel):
+            await ctx.reply(MessageString.bot_not_in_vc_msg)
+        elif isinstance(command_error, commands.errors.NoAudioPlaying):
+            await ctx.reply(MessageString.not_playing_msg)
+
+        # Queue Errors
+        elif isinstance(command_error, commands.errors.QueueEmpty):
+            await ctx.reply(MessageString.queue_empty_msg)
+        elif isinstance(command_error, commands.errors.QueueDisabled):
+            await ctx.reply(MessageString.queue_disabled_msg.format(ctx.prefix))
+
+        #Others
+        elif isinstance(command_error,commands.errors.CommandInvokeError):
+            orginal_error:Exception = command_error.__cause__
+            logging.error(f'{command_error.__cause__.__class__.__name__} ouccurs when `>>{ctx.command}` was called')
+            
+            if isinstance(orginal_error,discord.errors.HTTPException):
+                ...
+            else:
+                #Code error
+                logging.webhook_log_error(command_error.__cause__)
+                raise command_error.__cause__.with_traceback(command_error.__cause__.__traceback__)
+
+        #Uknowm / unhandled DISCORD errors
         else:
-            await Logging.error(str(commandError))
+            logging.webhook_log_error(command_error)
 
 
 # Server joining
 
     @commands.Cog.listener()
-    async def on_guild_join(self, guild):
+    async def on_guild_join(self, guild:discord.Guild):
         link = await guild.system_channel.create_invite(xkcd=True, max_age=0, max_uses=0)
-        await Logging.log(f"Joined `{guild.name}` ( ID :{guild.id}) <@{self.bot.owner_id}>;{link}")
+        logging.webhook_log_event(f"Joined {guild.name}",url = link)
 
         # welcome embed
         from discord import Embed

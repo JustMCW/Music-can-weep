@@ -7,7 +7,7 @@ from Response import MessageString
 from subtitles import Subtitles
 import Favourites
 import Convert
-from Music import VoiceState
+from Music import voice_state
 
 #BUTTONS
 class Buttons:
@@ -63,7 +63,7 @@ class Buttons:
     #Buttons functionality 
     @staticmethod
     async def inform_changes(btn,msg:str):
-        if len(VoiceState.get_non_bot_vc_members(btn.guild)) > 1:
+        if len(voice_state.get_non_bot_vc_members(btn.guild)) > 1:
             await btn.message.reply(content=f"{msg} by {btn.author.mention}",
                                     delete_after=30)
 
@@ -90,31 +90,31 @@ class Buttons:
 
     @classmethod
     async def on_pause_btn_press(self,btn):
-        if VoiceState.is_paused(btn.guild):
+        if voice_state.is_paused(btn.guild):
             await btn.respond(type=4, content=MessageString.already_paused_msg)
         else:
             await btn.edit_origin(content=btn.message.content)
-            VoiceState.pause_audio(btn.guild)
+            voice_state.pause_audio(btn.guild)
             await self.inform_changes(btn,MessageString.paused_audio_msg)
 
     @classmethod
     async def on_resume_btn_press(self,btn):
-        if not VoiceState.is_paused(btn.guild):
+        if not voice_state.is_paused(btn.guild):
             await btn.respond(type=4, content=MessageString.already_resumed_msg)
         else:
             await btn.edit_origin(content=btn.message.content)
-            VoiceState.resume_audio(btn.guild)
+            voice_state.resume_audio(btn.guild)
             await self.inform_changes(btn,MessageString.resumed_audio_msg)
     @classmethod
     @subpress_failed_message
     async def on_skip_btn_press(self,btn):
-        VoiceState.skip_audio(btn.guild)
+        voice_state.skip_audio(btn.guild)
         await self.inform_changes(btn,MessageString.stopped_audio_msg)
 
     @classmethod
     @subpress_failed_message
     async def on_restart_btn_press(self,btn):
-        VoiceState.restart_audio(btn.guild)
+        voice_state.restart_audio(btn.guild)
         await self.inform_changes(btn,MessageString.restarted_audio_msg)
 
     @classmethod
@@ -189,7 +189,7 @@ class Buttons:
 
         URL = btn.message.embeds[0].url
 
-        if VoiceState.get_current_vc(ctx.guild):...
+        if voice_state.get_current_vc(ctx.guild):...
 
         #Play the music
         await ctx.invoke(bot.get_command('play'),

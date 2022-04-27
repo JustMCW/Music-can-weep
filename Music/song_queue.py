@@ -1,12 +1,11 @@
-import discord,json
+import discord
 from discord.ext import commands
 
 from Music.song_track import SongTrack
 from main import BOT_INFO
+from Database import Management
 
 from collections import deque
-
-DiscordServerDatabase = "Database/DiscordServers.json"
 
 class SongQueue(deque):
     def __init__(self,guild:discord.Guild=None):
@@ -24,26 +23,22 @@ class SongQueue(deque):
 
         super().__init__()
 
-    def get(self, __index: int) -> SongTrack:
+    def get(self, __index: int):
         try:
             return self[__index]
         except IndexError:
             return None
     
     @property
-    def enabled(self)->bool:
-        with open(DiscordServerDatabase,"r") as SVDBjson_r:
-            data = json.load(SVDBjson_r)[str(self.guild.id)]
-        return data["queuing"]
+    def enabled(self) -> bool:
+        return self.guild.database.get("queuing")
 
     @property
-    def sync_lyrics(self)->bool:
-        with open(DiscordServerDatabase,"r") as SVDBjson_r:
-            data = json.load(SVDBjson_r)[str(self.guild.id)]
-        return data["sync_lyrics"]
+    def sync_lyrics(self) -> bool:
+        return self.guild.database.get("sync_lyrics")
 
     @property
-    def total_length(self):
+    def total_length(self) -> int:
         return sum( map( lambda t: t.duration, self ) ) 
 
     @property
@@ -55,8 +50,8 @@ class SongQueue(deque):
 
     def swap(self,pos1:int,pos2:int):
         
-        if len(self) ==0: 
-            raise commands.errors.QueueEmpty
+        if not self: 
+            raise commands.errors.QueueEmpty("No tracks in the queue to be swapped")
 
         #Swapping same item :/
         if pos1 == pos2:
@@ -72,14 +67,13 @@ class SongQueue(deque):
     
     def shuffle(self):
 
-        if len(self) ==0: 
-            raise commands.errors.QueueEmpty
+        if not self: 
+            raise commands.errors.QueueEmpty("No tracks in the queue to be shuffled")
 
         is_playing = self.guild.voice_client is not None and self.guild.voice_client.is_playing()
-
-        #Exclude the first item ( currently playing )
         
         if is_playing:
+             #Exclude the first item ( currently playing )
             playing = self.popleft()
         
         from random import shuffle

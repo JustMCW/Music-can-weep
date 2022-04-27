@@ -28,8 +28,8 @@ class MessageString:
     same_vc_msg = "👍🏻 Already joined {}"
     free_to_use_msg = "🎧 Nothing is playing right now... meaning you are free to use it ! 👍�"
 
-    loop_audio_msg = "� Single track looping has been set to {}"
-    queue_loop_audio_msg = "� Queue looping has been set to {}"
+    loop_audio_msg = "🔂 Single-track looping has been set to {}"
+    queue_loop_audio_msg = "🔁 Queue-looping has been set to {}"
     now_play_msg = "**🎧 Now playing 🎤**"
 
 # Fav_msg
@@ -45,11 +45,11 @@ class MessageString:
     user_not_found_msg = f"🔍 User was not found 👻"
     channel_not_found_msg = f"🔍 Channel was not found 💬"
 
-    invaild_mode_msg = "🪗 Enter a vaild looping mode : `on / off`"
+    invaild_bool_msg = "🪗 Enter a vaild value : `on / off`"
     queue_empty_msg = "📦 Queue is empty ... play some songs !"
-    queue_disabled_msg = "This server has queuing disabled, run \"{}config queue on\" to turn it on again (needs admin permission)"
+    queue_disabled_msg = "This server has queuing disabled, run \"{}config queue on\" to turn it on again (requires admin permission)"
 
-    bot_lack_perm_msg = f"🎹 I am missing the permission to do that !"
+    bot_lack_perm_msg = f"I am missing the permission to do that :("
 
 # MessageString.fav_empty_msg
 
@@ -64,7 +64,7 @@ class Embeds:
     @staticmethod
     def audio_playing_embed(queue,foundLyrics:bool) -> discord.Embed:
         """the discord embed for displaying the audio that is playing"""
-        from Music import VoiceState
+        from Music import voice_state
         
         SongTrackPlaying = queue[0]
 
@@ -91,7 +91,7 @@ class Embeds:
                 .add_field(name="🔊 Voice Channel",
                             value=f"{queue.guild.voice_client.channel.mention}")\
                 .add_field(name="📶 Volume ",
-                            value=f"`{VoiceState.get_volume_percentage(queue.guild)}%`")\
+                            value=f"`{voice_state.get_volume_percentage(queue.guild)}%`")\
                 .add_field(name="🔂 Looping",
                             value=f'**{Convert.bool_to_str(queue.looping)}**')
 

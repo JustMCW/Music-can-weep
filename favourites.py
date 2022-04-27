@@ -69,7 +69,7 @@ def remove_track(user, index: int):
         edit_data(user, delete)
 
 
-def get_track_by_index( user, index: int) -> tuple:
+def get_track_by_index(user, index: int) -> tuple:
     FavList = get_data(user)
 
     if index <= 0 or index > len(FavList):

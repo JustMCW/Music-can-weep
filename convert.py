@@ -1,6 +1,11 @@
 from Response import Emojis
 import re
 
+def extract_int_from_str(string:str)->int:
+    """
+    Find the first number in a string, raises `IndexError` if not found
+    """
+    return int(re.findall(r'\d+', string)[0])
 
 def str_to_bool(string:str)->bool:
     #XOR logicgate 

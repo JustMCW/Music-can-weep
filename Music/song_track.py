@@ -1,4 +1,5 @@
 import discord
+import logging
 from youtube_dl import YoutubeDL
 
 RequiredAttr = ("title","webpage_url","duration",
@@ -60,13 +61,13 @@ class SongTrack:
         src_url = self.formats[0].get("url")
         
         if src_url.startswith("https://manifest.googlevideo.com"):
-            print("is fragment url")
+            logging.info("Is fragment url")
             src_url = self.formats[0]["fragment_base_url"]
 
         try:
             src = discord.FFmpegPCMAudio(source=src_url, **FFMPEG_OPTION)
         except discord.ClientException as e:
-            print(e,"So imma look for the ffmpeg locally")
+            logging.info(f"{e}, looking for the ffmpeg locally")
             src = discord.FFmpegPCMAudio(executable="/Users/xwong/Documents/Daily/Learning/Computing/exe/ffmpeg",
                                          source=src_url, **FFMPEG_OPTION)
 
