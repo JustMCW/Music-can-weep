@@ -1,7 +1,10 @@
 import requests
 import re
 import asyncio
+import discord
 import logging
+import Convert
+from difflib import SequenceMatcher
 from googletrans import Translator
 
 translator = Translator()
@@ -108,10 +111,67 @@ class Subtitles:
             return 
         lang = sub_options.get("ja") or sub_options.get("zh-TW") or sub_options.get("zh-HK") or sub_options.get("zh-CN") or sub_options.get("en") or list(sub_options.values())[0]
         subtitle:str = requests.get(lang[4]["url"]).content.decode("utf-8")
-        subtitle_dict = {}
 
         logging.info(lang[4]["url"])
 
+        subtitle_list = re.findall(r"^(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})\n((^.+\n)+)\n",subtitle,re.MULTILINE)
+
+        offset:float = 0.5
+        
+        is_jp:bool = sub_options.get("ja") is not None
+
+        sent:list[discord.Message] = []
+        text_sent:list[str] = []
+
+        display:discord.Message =await channel.send(
+            embed = discord.Embed(
+                title="Lyrics ~"
+            )
+        )
+
+        async def send_text(text,duration):
+            if len(sent) > 5:
+                sent.pop(0)
+
+            # if sent:
+            #     p = SequenceMatcher(None,text_sent[-1], text).quick_ratio()
+            #     print(p)
+            #     if p >= 0.4 and duration < 2:
+            #         sent.pop(-1)
+            # text_sent.append(text)
+            if is_jp:
+                pron = translator.translate(text,src="ja",dest="ja").pronunciation
+                like_percentage = SequenceMatcher(None,text,pron).quick_ratio()
+                if like_percentage < 0.3:
+                    
+                    sent.append(f"> {Convert.length_format(queue.time_position)} - {Convert.length_format(queue.time_position+duration)}\n{text}\n{pron}")
+                    return await display.edit(
+                       embed=discord.Embed( title="Lyrics ~",
+                                            description="\n".join(sent))
+                    )
+                    # return sent.append(await channel.send(embed=discord.Embed(title=f"{text}\n{pron}")))
+                    
+            sent.append(f"> {Convert.length_format(queue.time_position)} - {Convert.length_format(queue.time_position+duration)}\n{text}")
+            return await display.edit(embed=discord.Embed( title="Lyrics ~",
+                                            description="\n".join(sent)))
+
+
+        for indx,(start,end,text,*texts_list) in enumerate(subtitle_list):
+            start,end = sec_in_time_string(start),sec_in_time_string(end)
+            start -= offset
+            wait_time:int = start if indx == 0 else start - (sec_in_time_string(subtitle_list[indx-1][0]) - offset)
+            await asyncio.sleep(wait_time)
+            if channel.guild.voice_client is None or not channel.guild.voice_client.is_playing or queue[0] != song_track:
+                break
+            asyncio.create_task(send_text("\n".join(text.splitlines()),end-start))
+
+        await asyncio.sleep(10)
+        await display.delete()
+
+        return logging.info("Finshed syncing")
+
+
+        subtitle_dict = {}
         for indx,line in enumerate(subtitle.splitlines()):
             if "-->" in line:
                 match = re.match(r"^(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})$",line)
@@ -119,12 +179,7 @@ class Subtitles:
                     return logging.warning("Complex cannot be synced")
                 subtitle_dict[(sec_in_time_string(match.group(1))-0.5,sec_in_time_string(match.group(2)))] = subtitle.splitlines()[indx+1]
 
-        async def tt(text):
-            if sub_options.get("ja"):
-                pron = translator.translate(text,src="ja",dest="ja").pronunciation
-                if pron != text:
-                    return await channel.send(f"{text}\n{pron}",delete_after = 30)
-            return await channel.send(f"{text}",delete_after = 30)
+        
 
         async def loop():
 

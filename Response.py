@@ -33,7 +33,7 @@ class MessageString:
     now_play_msg = "**🎧 Now playing 🎤**"
 
 # Fav_msg
-    added_fav_msg = "✅ `{}` has been added to your favourites !"
+    added_fav_msg = "✅ `{}` has been added to your favourites at **#{}** !"
     removed_fav_msg = "👋 `{}` has been removed from your favourites"
     already_in_fav_msg = "✅ `{}` is already in your favourites"
     fav_empty_msg = "🗒 Your favourite list is currently empty"
@@ -55,12 +55,36 @@ class MessageString:
 
 import Convert
 import discord
+import discord_components
 
 class Embeds:
 
 
     #The embed that display the audio's infomation + status
     
+    def generate_search_result_attachments(search_result) -> dict:
+        """
+        Returns the embed + buttons for a youtube search result returned by the `search_from_youtube` function
+        """
+        #Add the buttons and texts for user to pick
+        choices_string:str  = ""
+        components    :list = []
+
+        for i,video in enumerate(search_result):
+            title = video["title"]["runs"][0]["text"]
+            length = video["lengthText"]["simpleText"]
+
+            choices_string += f'{i+1}: {title} `[{length}]`\n'
+            components.append(discord_components.Button(label=str(i+1),custom_id=str(i),style=discord_components.ButtonStyle.blue))
+        
+        return {
+            "embed":discord.Embed(title="🎵  Select a song you would like to play : ( click the buttons below )",
+                                  description=choices_string,
+                                  color=discord.Color.from_rgb(255, 255, 255)),
+            "components": discord_components.ActionRow(components)
+        }
+
+
     @staticmethod
     def audio_playing_embed(queue,foundLyrics:bool) -> discord.Embed:
         """the discord embed for displaying the audio that is playing"""

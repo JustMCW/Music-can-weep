@@ -45,13 +45,13 @@ def edit_data(user, edit):
     return new_data
 
 
-def add_track(user, title: str, url: str):
+def add_track(user, title: str, url: str) -> int:
 
     def new(data: dict) -> dict:
         data[title] = url
         return data
 
-    edit_data(user, new)
+    return len(edit_data(user, new)) - 1
 
 
 def remove_track(user, index: int):
@@ -74,5 +74,6 @@ def get_track_by_index(user, index: int) -> tuple:
 
     if index <= 0 or index > len(FavList):
         raise IndexError
+        
     key = list(FavList)[index]
     return (key, FavList[key])

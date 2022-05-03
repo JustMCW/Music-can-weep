@@ -1,39 +1,38 @@
 #Built-ins
-from email import message
-from functools import reduce
 import asyncio
 import logging
 import time
 import re
 import os
-from datetime import datetime
-from turtle import title
+import datetime
+from functools        import reduce
 
-#Third party libary
+#Third party libaries
 import discord
-from discord.ext import commands
+import youtube_dl
+from discord.ext      import commands
 
-#My own libary
-from main import BOT_INFO
+#My own modules
 import Convert
-
 import Favourites
-from subtitles import Subtitles
+
+from main             import BOT_INFO
+from subtitles        import Subtitles
 
 from Music.song_queue import SongQueue
 from Music.song_track import SongTrack
-from Music import voice_state
+from Music            import voice_state
 
-from Buttons import Buttons,Interaction
+from Buttons          import Interaction
+
 #Literals
-from Response import MessageString,Emojis,Embeds
+from Response         import MessageString, Emojis, Embeds
 
 #----------------------------------------------------------------#
 
 #Btn message sent and delete after
-time_out_seconds:int = 60 * 2
-initial_volume:float = BOT_INFO.InitialVolume
-
+TIMEOUT_SECONDS:int = 60 * 2
+VOLUME_PERCENTAGE_LIMIT = 200
 
 #----------------------------------------------------------------#
 
@@ -43,7 +42,8 @@ def search_from_youtube(query:str,
                         ResultLengthLimit:int=5,
                         DurationLimit:int=3*3600) -> list:
     """
-    Search youtube videos with a given string
+    Search youtube videos with a given string.
+    Returns a list of search result which the item contains the title, duration, channel etc.
     """
     from requests import get
     from bs4 import BeautifulSoup
@@ -86,11 +86,7 @@ def search_from_youtube(query:str,
 #----------------------------------------------------------------#
 
 #COMMANDS
-class music_commands\
-(
-  commands.Cog, 
-
-):
+class MusicCommands(commands.Cog):
     def __init__(self,bot):
         logging.info("MUSIC commands is ready")
 
@@ -101,36 +97,17 @@ class music_commands\
 #CHANGING BOT'S VOICE CHANNEL
     @commands.bot_has_guild_permissions(connect=True, speak=True)
     @commands.command(aliases=["enter", "j"],
-                    description='🎧 Connect to your current voice channel or a given voice channel name',
-                    usage = "{}join Music channel")
-    async def join(self, ctx:commands.Context,*,ChannelName=None):
-        author = ctx.author
-        channel_to_join = None
-        #if specified a channel
-        if ChannelName:
-            SelectedVC = discord.utils.get(ctx.guild.voice_channels,
-                                          name=ChannelName)
-            if not SelectedVC:  #Channel not found
-                raise commands.errors.ChannelNotFound(ChannelName)
-            channel_to_join = SelectedVC
-          
-        #User not in a voice channel
-        elif not author.voice:
-            raise commands.errors.UserNotInVoiceChannel("Join a voice channel or specify a voice channel to be joined.")
-        else:
-            channel_to_join = author.voice.channel
-
-        #if already in the that same voice channel
-        if ctx.voice_client:
-            if channel_to_join == ctx.voice_client.channel:
-                return await ctx.reply(MessageString.same_vc_msg.format(channel_to_join.mention))
-
-        #Join
-        await voice_state.join_voice_channel(ctx.guild, channel_to_join)
-
-        #Response
-        await ctx.reply(MessageString.join_msg.format(channel_to_join.mention))
+                      description='🎧 Connect to your current voice channel or a given voice channel name',
+                      usage = "{}join Music channel")
+    async def join(self, 
+                   ctx:commands.Context,*,
+                   voice_channel:commands.converter.VoiceChannelConverter=None):
         
+        try: voice_channel = voice_channel or ctx.author.voice.channel
+        except AttributeError: raise commands.errors.UserNotInVoiceChannel("Join a voice channel or specify a voice channel to be joined.")
+
+        await voice_state.join_voice_channel(ctx.guild, voice_channel)
+        await ctx.reply(MessageString.join_msg.format(voice_channel.mention))
         await voice_state.update_audio_msg(ctx.guild)
 
     @commands.guild_only()
@@ -140,17 +117,13 @@ class music_commands\
     async def disconnect(self, ctx:commands.Context):
         voice_client = ctx.voice_client
 
-        #Not in a voice voice_client
-        if not voice_client: 
-            raise commands.errors.NotInVoiceChannel
+        #Not in a voice channel
+        if not voice_client: raise commands.errors.NotInVoiceChannel
 
         #Disconnect from voice_client
         await voice_client.disconnect()
-
-        #Message
         await ctx.reply(MessageString.leave_msg.format(voice_client.channel.mention))
         
-
 #----------------------------------------------------------------#
 #INTERRUPTING THE AUDIO
 
@@ -170,72 +143,79 @@ class music_commands\
                       description='▶️ Resume the current audio',
                       usage="{}resume")
     async def resume(self, ctx:commands.Context):
-        guild = ctx.guild
-        queue:SongQueue = guild.song_queue      
+        """
+        Resume the player.
+        
+        If player is not found,
+        join voice channel (if not already in one) and play the first track in the queue.
+        """
 
-        #Not playing anything but the queue has something
-        if queue.get(0) is not None:
-            try:
-                voice_state.resume_audio(guild)       
-            except (commands.errors.NotInVoiceChannel,commands.errors.NoAudioPlaying):
+        guild:discord.Guild              = ctx.guild
+        voice_client:discord.VoiceClient = guild.voice_client
+        queue:SongQueue                  = guild.song_queue      
+        current_track:SongTrack          = queue.get(0)
 
-                if guild.voice_client is None:
-                    try:
-                        await voice_state.join_voice_channel(guild, ctx.author.voice.channel)
-                    except AttributeError:
-                        raise commands.errors.NotInVoiceChannel
-                
-                self.bot.loop.create_task(Subtitles.sync_subtitles(queue,ctx.channel,queue[0]))
-
-                #Repeat function after the audio
-                start_time = float(time.perf_counter())
-
-                #Play the audio
-                queue[0].play(guild.voice_client,
-                              volume = queue.volume,
-                              after = lambda voice_error: voice_state.after_playing(self.bot.loop,
-                                                                            guild,
-                                                                            start_time,
-                                                                            voice_error)
-                            )
-
-                continue_playing_queue_msg = await ctx.send("▶️ Continue to play tracks in the queue")
-                await voice_state.create_audio_message(queue[0],continue_playing_queue_msg)
-            else:
-                await ctx.reply(MessageString.resumed_audio_msg)
-        else:
+        #Try to resume the audio like usual
+        try:
             voice_state.resume_audio(guild)
-            await ctx.reply(MessageString.resumed_audio_msg)
+        #Error encountered, player is not found
+        except (commands.errors.NotInVoiceChannel,commands.errors.NoAudioPlaying) as resume_error: 
+            
+            #Stop if there is no track in the queue at all
+            if not current_track:
+                raise resume_error if isinstance(resume_error,commands.errors.NoAudioPlaying) else commands.errors.NoAudioPlaying
+
+            #Check for voice
+            if isinstance(resume_error,commands.errors.NotInVoiceChannel):
+                try:
+                    await voice_state.join_voice_channel(guild, ctx.author.voice.channel)
+                except AttributeError:
+                    raise resume_error
+
+            #Play the track
+            self.bot.loop.create_task(Subtitles.sync_subtitles(queue,ctx.channel,current_track))
+            start_time = float(time.perf_counter())
+            current_track.play(voice_client,
+                                volume = queue.volume,
+                                after = lambda voice_error: voice_state.after_playing(self.bot.loop,
+                                                                                    guild,
+                                                                                    start_time,
+                                                                                    voice_error))
+
+            await voice_state.create_audio_message(current_track, await ctx.send("▶️ Continue to play tracks in the queue"))
         
-        
+        #Successfully resume like usual, send response.
+        else:
+            await ctx.reply(MessageString.resumed_audio_msg)       
 
     @commands.guild_only()
     @commands.command(aliases=["fast_forward","fwd"],
                       description = "⏭ Fast-foward the time position of the current audio for a certain amount of time.",
                       usage="{0}fwd 10\n{0}foward 10:30")
     async def forward(self,ctx,*,time:str):
+        """
+        Fast-foward the player by time given by the user
+        """
         voicec:discord.VoiceClient = ctx.voice_client
-        if not voicec.is_playing():
-            raise commands.errors.NoAudioPlaying
+
+        if not voicec.is_playing(): raise commands.errors.NoAudioPlaying
         
-        guild = ctx.guild
+        guild   :discord.Guild = ctx.guild
+        queue   :SongQueue     = guild.song_queue
+        fwd_sec :float         = Convert.time_to_sec(time)
 
-        queue = guild.song_queue
-        fwd_sec:float = Convert.time_to_sec(time)
-
-        await ctx.trigger_typing()
         if queue[0].duration < (fwd_sec+queue.time_position):
             await ctx.reply("Ended the current track")
             return voicec.stop()
-        voice_state.pause_audio(guild)
 
+        voice_state.pause_audio(guild)
         for _ in range(fwd_sec * 50):
-            try:
-                voicec.source.read()
-            except AttributeError:
-                break
+            try: voicec.source.read()
+            except AttributeError: break #Finshed the audio
+
         queue.player_loop_passed.append(fwd_sec * 50)
         voice_state.resume_audio(guild)
+
         await ctx.reply(f"*⏭ Fast-fowarded for {Convert.length_format(fwd_sec)} seconds*")
 
     @commands.guild_only()
@@ -246,7 +226,7 @@ class music_commands\
 
         try:
             position_sec:float = Convert.time_to_sec(time_position)
-            voice_state.restart_audio(ctx.guild,position=position_sec)
+            await voice_state.restart_audio(ctx.guild,position=position_sec)
         except ValueError:
             await ctx.reply(f"Invaild time position, format : {ctx.prefix}{ctx.invoked_with} [Hours:Minutes:Seconds]")
         except IndexError:
@@ -264,7 +244,6 @@ class music_commands\
 
         await ctx.reply(MessageString.rewind_audio_msg)
         
-
     @commands.guild_only()
     @commands.command(aliases=["next"],
                       description='⏩ skip to the next audio in the queue',
@@ -273,9 +252,7 @@ class music_commands\
         
         voice_state.skip_audio(ctx.guild)
 
-        await ctx.reply(MessageString.skipped_audio_msg)
-        
-
+        await ctx.reply(MessageString.skipped_audio_msg)    
 
     @commands.guild_only()
     @commands.command(description='⏹ stop the current audio from playing 🚫',
@@ -288,20 +265,18 @@ class music_commands\
         if not ctx.voice_client.is_playing():
             raise commands.errors.NoAudioPlaying
         
-        ctx.guild.song_queue.popleft()
+        voice_state.skip_audio()
         await ctx.voice_client.disconnect()
 
         await ctx.reply(MessageString.stopped_audio_msg)
-
         
-
     @commands.guild_only()
     @commands.command(aliases=["replay", "re"],
                       description='🔄 restart the current audio track',
                       usage="{}replay")
     async def restart(self, ctx:commands.Context):
 
-        voice_state.restart_audio(ctx.guild)
+        await voice_state.restart_audio(ctx.guild)
 
         await ctx.reply(MessageString.restarted_audio_msg)
         
@@ -314,44 +289,33 @@ class music_commands\
     async def volume(self, ctx:commands.Context, volume_to_set):
 
         #Try getting the volume_percentage from the message
-        try:
-            volume_percentage = Convert.extract_int_from_str(volume_to_set)
-        except IndexError:
-            return await ctx.reply("🎧 Please enter a vaild volume percentage 🔊")
+        try: volume_percentage = Convert.extract_int_from_str(volume_to_set)
+        except ValueError: return await ctx.reply("🎧 Please enter a vaild volume percentage 🔊")
         
-
-        PERCENTAGE_LIMIT = 200
         
-        #Volume higher than limit
-        if volume_percentage > PERCENTAGE_LIMIT and ctx.author.id != self.bot.owner_id:
-            return await ctx.reply(f"🚫 Please enter a volume below {PERCENTAGE_LIMIT}% (to protect yours and other's ears 👍🏻)")
+        #Volume higher than the limit
+        if volume_percentage > VOLUME_PERCENTAGE_LIMIT and ctx.author.id != self.bot.owner_id:
+            return await ctx.reply(f"🚫 Please enter a volume below {VOLUME_PERCENTAGE_LIMIT}% (to protect yours and other's ears 👍🏻)")
 
-        #Setting the actual volume we are going to set
-        true_volume = volume_percentage / 100 * initial_volume
+        guild       :discord.Guild       = ctx.guild
+        voice_client:discord.VoiceClient = ctx.voice_client
+        true_volume :float               = volume_percentage / 100 * BOT_INFO.InitialVolume #Actual volume to be set to
         
-        ctx.guild.song_queue.volume = true_volume
+        #Updating to the new value
+        guild.song_queue.volume = true_volume
+        if voice_client and voice_client.source:
+            voice_client.source.volume = true_volume
 
-        await voice_state.update_audio_msg(ctx.guild)
-        vc = ctx.voice_client
-        if vc and vc.source:
-            vc.source.volume = true_volume
-            
         await ctx.reply(f"🔊 Volume has been set to {round(volume_percentage,2)}%")
+        await voice_state.update_audio_msg(guild)
 
     @commands.guild_only()
     @commands.command(aliases=["looping","repeat"],
                       description='🔂 Enable / Disable single audio track looping\nWhen enabled tracks will restart after playing',
                       usage="{}loop on")
     async def loop(self, ctx:commands.Context, mode=None):
-        guild = ctx.guild
-      
-        new_loop = guild.song_queue.looping
-
-        #if not specified a mode
-        if not mode:
-            new_loop = not new_loop
-        else:
-            new_loop = commands.core._convert_to_bool(mode)
+        guild   : discord.Guild = ctx.guild
+        new_loop: bool          = commands.core._convert_to_bool(mode) if mode else not guild.song_queue.looping
 
         guild.song_queue.looping = new_loop
 
@@ -365,107 +329,108 @@ class music_commands\
 
     @commands.bot_has_guild_permissions(connect=True, speak=True)
     @commands.command(aliases=["p","music"],
-                    description='🔎 Search and play audio with a given YOUTUBE link or from keywords 🎧',
-                    usage="{0}play https://www.youtube.com/watch?v=GrAchTdepsU\n{0}p mood\n{0}play fav 4"
+                     description='🔎 Search and play audio with a given YOUTUBE link or from keywords 🎧',
+                     usage="{0}play https://www.youtube.com/watch?v=GrAchTdepsU\n{0}p mood\n{0}play fav 4"
     )
-    async def play(self,ctx,*,query,**kwargs):
+    async def play(self,
+                   ctx:commands.Context,
+                   *,
+                   query:str, #URL / Favourite track index / Keyword
+                   btn:Interaction=None #This will be present if this command was invoked from a play_again button
+    ):
+        """
+        0.Check for voice channel
 
-        await ctx.trigger_typing()
+        1.Determines whether the input is URL, favourite track index or keyword
+        2.Transform it into a valid url
+        3.Extract info from it with Youtube-dl
+        4.Join voice channel if not joined
+        5.Add to queue
+        6.Play it if there is no other tracks in the queue
+        7.Send the discord message indicating the audio track playing
+        """
+       
+        guild       : discord.Guild       = ctx.guild
+        author      : discord.Member      = getattr(btn,"author",ctx.author)
+        voice_client: discord.VoiceClient = ctx.voice_client or author.voice #It can be either our bots vc or the user's vc
+        reply_msg   : discord.Message     = None  #This will be the message for the audio message
 
-        btn = kwargs.get("btn")
-        
-        author = ctx.author if not btn else btn.author
-        guild = ctx.guild
+        #Check for voice channel
+        if voice_client is None:
+            if btn:
+                #Give a button respond instead so it doesn't inform everyone else
+                return await btn.respond(type=4,content=MessageString.user_not_in_vc_msg)
+            raise commands.errors.UserNotInVoiceChannel("You need to be in a voice channel.")
 
-        
-
-        #See if user is in voice channel
-        if not guild.voice_client and not author.voice:
-            if not btn:
-                raise commands.errors.UserNotInVoiceChannel("You need to be in a voice channel.")
-            else:
-                return await btn.respond(type=4,
-                                        content=MessageString.user_not_in_vc_msg)
-
-        reply_msg:discord.Message = None
-
-        #Play again button                   
+        #Triggered by play_again button (so it must be a valid URL because it was played successful before)            
         if btn:
-            #Supress the interaction failed message  
+            #Suppress the interaction failed message and response 
             await btn.edit_origin(content=btn.message.content)
             reply_msg = await ctx.reply(content=f"🎻 {btn.author.mention} requests to play this song again")
-      
-        else:
-            #URL
+
+        #URL
+        elif "https://" in query or "HTTP://" in query:
+            #Match the link in the query
             youtube_link_match_result = re.findall(r"(https|HTTP)://(youtu\.be|www.youtube.com)(/shorts)?/(watch\?v=)?([A-Za-z0-9\-_]{11})",query)
             
-            if "https://" in query or "HTTP://" in query:
-                #Not youtube video link
-                if youtube_link_match_result: 
-                #     pass
-                #     return await ctx.send("💿 Sorry ! But only Youtube video links can be played !")
-                # else:
-                    query = "https://www.youtube.com/watch?v="+youtube_link_match_result[0][4]
+            #Matched
+            if youtube_link_match_result: 
+                query = "https://www.youtube.com/watch?v="+youtube_link_match_result[0][4]
+                reply_msg = await ctx.send(f"{Emojis.YOUTUBE_ICON} A Youtube link is selected")
 
-                    reply_msg = await ctx.send(f"{Emojis.YOUTUBE_ICON} A Youtube link is selected")
-                elif "soundcloud.com" in query:
+            #Sound cloud link
+            elif "soundcloud.com" in query:
+                reply_msg = await ctx.send(f"☁️ A Soundcloud link is selected")
 
-                    reply_msg = await ctx.send(f"☁️ A Soundcloud link is selected")
-                else:
-                    return await ctx.send("Sorry ! Only Youtube and Soundcloud links are supported ! (Spotify will be added soon)")
-
-            #Favourites
-            elif 'fav' in query.lower():
-                try:
-                    index = Convert.extract_int_from_str(query)
-                    _,link = Favourites.get_track_by_index(author, index-1)
-                    query = link
-                except (ValueError,IndexError):
-                    return await ctx.reply("❌ Failed to get song from your favourite list")
-                else:
-                    reply_msg = await ctx.send(f"🎧 Track **#{index}** in {author.mention}'s favourites has been selected")
-                        
-            #Keyword
+            #Invalid
             else:
-                #Searching
-                try:
-                    search_res:list = search_from_youtube(query,ResultLengthLimit=100)
-                except IndexError:
-                    return await ctx.reply("No search result was found for that ...")
+                return await ctx.send("Oops ! Only Youtube and Soundcloud links are supported ! ")
 
-                #Add the buttons and texts for user to see
-                choicesString:str = ""
-                choicesButtons = []
+        #Favourite Index
+        elif 'fav' in query.lower():
+            #Get the number
+            try:
+                index = Convert.extract_int_from_str(query)
+            except ValueError:
+                return await ctx.reply("Invalid favourite index !")
+            
+            #Get the track url from the number index in the user's favourite.
+            try:
+                _,link = Favourites.get_track_by_index(author, index-1)
+            except IndexError:
+                return await ctx.reply(f"Unable to get **#{index}** from your favourite track list.")
 
-                gen = Buttons.generate_search_result_buttons(search_res)
-                
-                for _ in range(5):
-                    add_str,add_button = next(gen)
-                    choicesString +=  add_str + "\n"
-                    choicesButtons.append(add_button)
+            #Good to go
+            query = link
+            reply_msg = await ctx.send(f"🎧 Track **#{index}** in {author.mention}'s favourites has been selected")
+                    
+        #Keyword
+        else:
+            #Get the search result
+            try:
+                search_result:list = search_from_youtube(query,ResultLengthLimit=5)
+            except IndexError:
+                return await ctx.reply(f"No search result was found for `{query}` ...")
 
-                #Send those buttons and texts
-                choicesMsg = await ctx.send(embed=discord.Embed(title="🎵  Select a song you would like to play : ( click the buttons below )",
-                                                                description=choicesString,
-                                                                color=discord.Color.from_rgb(255, 255, 255) ),
-                                            components=[choicesButtons])
-                
-                #Get which button user pressed
-                try:
-                    choicesInteraction = await self.bot.wait_for("button_click",
-                                                                timeout=time_out_seconds,
-                                                                check=lambda btn: btn.author == author and btn.message.id == choicesMsg.id)
-                #Not pressed for ammount of time
-                except asyncio.TimeoutError:
-                    return await choicesMsg.edit(embed=Embeds.NoTrackSelectedEmbed,
-                                                components=[])
-                #Received option
-                else:
-                    index = int(choicesInteraction.custom_id)
-                    await choicesInteraction.edit_origin(content=f"{Emojis.YOUTUBE_ICON} Song **#{index+1}** in the youtube search result has been selected",
-                                                        components = [])
-                    reply_msg = await ctx.fetch_message(choicesMsg.id)
-                    query = f'https://www.youtube.com/watch?v={search_res[index]["videoId"]}'
+            #Send the message for asking the user
+            option_message:discord.Message = await ctx.send(**Embeds.generate_search_result_attachments(search_result))
+            
+            #Get which button user pressed, and make sure that it is the user who press the buttons
+            try:
+                choicesInteraction:Interaction = await self.bot.wait_for("button_click",
+                                                            timeout=TIMEOUT_SECONDS,
+                                                            check=lambda btn: btn.author == author and btn.message.id == option_message.id)
+            #Not selected
+            except asyncio.TimeoutError:
+                return await option_message.edit(embed=Embeds.NoTrackSelectedEmbed,
+                                            components=[])
+            #Received option
+            else:
+                selected_index = int(choicesInteraction.custom_id)
+                await choicesInteraction.edit_origin(content=f"{Emojis.YOUTUBE_ICON} Song **#{selected_index+1}** in the youtube search result has been selected",
+                                                    components = [])
+                reply_msg = await ctx.fetch_message(option_message.id)
+                query = f'https://www.youtube.com/watch?v={search_result[selected_index]["videoId"]}'
               
         
         queue = guild.song_queue
@@ -478,44 +443,35 @@ class music_commands\
                                              requester=author))
         #Failed
         
-        except BaseException as expection:
+        except youtube_dl.utils.YoutubeDLError as yt_dl_error:
+            logging.warning(yt_dl_error.__class__.__name__)
 
-            if "Unsupported URL" in str(expection):
-                return await ctx.reply("Sorry, this url is not supported !")
-            
-            error_dict:dict = {
-                "Sign in to confirm your age":"Youtube has marked this video as inappropriate content.",
-                "Unable to recognize tab page":"the video link was invalid, please double check it.",
-                "Video unavailable":expection,
-                "requested format not available":"Live stream cannot be played.",
-                "No video formats found":"429 too many request, this error has been reported automatically."
-            }
-            
-            for error_msg,reply in error_dict.items():
-                if error_msg in str(expection):
-                    if "429" in reply:
-                        logging.webhook_log_error(expection)
-                    return await ctx.send(f"Unable to play track `{query}` because {reply}")
-            logging.webhook_log_error(expection)
 
+            utils = youtube_dl.utils
+
+            for error,error_message in {utils.UnsupportedError:"Sorry, this url is not supported !",
+                                        utils.UnavailableVideoError:"Video was unavailable",
+                                        utils.DownloadError: str(yt_dl_error).replace("ERROR: ",""),
+                                        }.items():
+                if isinstance(yt_dl_error,error):
+                    return await reply_msg.reply(f"An error was occurred : {error_message}")
+
+            #Raise the error if it was not in the above dictionary
+            raise yt_dl_error
         #Success
         else:
             logging.info("Succesfully extraced info")
             #Stop current audio (if queuing is disabled)
-            if guild.voice_client and not queue.enabled:
+            if voice_client and not queue.enabled:
                 guild.voice_client.stop()
+
             #Join Voice channel
             elif author.voice:
-                await voice_state.join_voice_channel(guild=guild,
-                                                 vc=author.voice.channel)
+                await voice_state.join_voice_channel(guild,author.voice.channel)
 
             queue.append(NewTrack)
             
             if queue.get(1) is not None:
-                # track_repeated:bool = any([True for track in queue[1:] if track.webpage_url == NewTrack.webpage_url])
-                # if track_repeated:
-                #     await reply_msg.edit(reply_msg.content + "(A)")
-                #     # return await ctx.reply("This song is already in the queue")
                 await reply_msg.edit(embed=discord.Embed(title = f"\"{NewTrack.title}\" has been added to the queue",
                                                          color=discord.Color.from_rgb(255, 255, 255))
                                               .add_field(name="Length ↔️",
@@ -534,6 +490,7 @@ class music_commands\
             start_time = float(time.perf_counter())
 
             self.bot.loop.create_task(Subtitles.sync_subtitles(queue,ctx.channel,NewTrack))
+            
             #Play the audio
             try:
                 NewTrack.play(guild.voice_client,
@@ -543,7 +500,6 @@ class music_commands\
                                                                           start_time,
                                                                           voice_error))
             except discord.errors.ClientException as cl_exce:
-                logging.webhook_log_error(cl_exce)
                 if queue.enabled:
                     await reply_msg.edit(embed=discord.Embed(title = f"\"{NewTrack.title}\" has been added to the queue",
                                             color=discord.Color.from_rgb(255, 255, 255))
@@ -552,13 +508,13 @@ class music_commands\
                                 .add_field(name = "Position in queue 🔢",
                                             value=len(queue)-1)
                             .set_thumbnail(url = NewTrack.thumbnail))
+                    
                 else:
                     await ctx.reply("Unable to play this track because another tracks was requested at the same time")
+                raise cl_exce
             else:
                 await voice_state.create_audio_message(NewTrack,reply_msg or ctx.channel)
             
-
-
 #----------------------------------------------------------------#
 #QUEUE
     @commands.guild_only()
@@ -567,8 +523,9 @@ class music_commands\
                     usage="{0}queue display\n{0}q clear")
     async def queue(self,ctx:commands.Context):
         
-        if not ctx.guild.song_queue.enabled:
-            raise commands.errors.QueueDisabled("Queuing is disabled in {0}.".format(ctx.guild.name))
+        guild:discord.Guild = ctx.guild
+
+        if not guild.song_queue.enabled: raise commands.errors.QueueDisabled("Queuing is disabled in {0}.".format(guild.name))
 
         if ctx.invoked_subcommand is None:
             def get_params_str(cmd)->str:
@@ -577,40 +534,38 @@ class music_commands\
                 return ""
 
 
-            await ctx.reply(embed=discord.Embed(
-                title = "Queue commands :",
-                description = "\n".join([f"{ctx.prefix}queue **{cmd.name}** {get_params_str(cmd)}" for cmd in ctx.command.walk_commands() ]),
-                color = discord.Color.from_rgb(255,255,255)
-              ) 
-            )
+            await ctx.reply(embed=discord.Embed(title = "Queue commands :",
+                                                description = "\n".join([f"{ctx.prefix}queue **{cmd.name}** {get_params_str(cmd)}" for cmd in ctx.command.walk_commands() ]),
+                                                color = discord.Color.from_rgb(255,255,255)))
 
     @commands.guild_only()
     @queue.command(description="📋 Display tracks in the song queue",
                    aliases=["show"],
                    usage="{}queue display")
     async def display(self,ctx):
-      queue = ctx.guild.song_queue
+        """
+        Display the song queue as a discord embed
+        """
+        queue:SongQueue = ctx.guild.song_queue
 
-      if not queue: 
-          raise commands.errors.QueueEmpty("No tracks in the queue for display.")
-      
-      symbol = "▶︎" if not voice_state.is_paused(ctx.guild) else "\\⏸"
-      await ctx.send(embed = 
-      discord.Embed(title = f"🎧 Queue | Track Count : {len(queue)} | Full Length : {Convert.length_format(queue.total_length)} | Repeat queue : {Convert.bool_to_str(queue.queue_looping)}",
-                    description = "\n".join([f"**{f'[ {i} ]' if i > 0 else f'[{symbol}]'}** {track.title}\
-                        \n> `{Convert.length_format(track.duration)}` | {track.requester.mention}" for i,track in enumerate(list(queue))]),
-                    color=discord.Color.from_rgb(255, 255, 255),
-                    timestamp=datetime.now()
-        )
-      )
+        if not queue: 
+            raise commands.errors.QueueEmpty("No tracks in the queue for display.")
+        
+        symbol = "▶︎" if not voice_state.is_paused(ctx.guild) else "\\⏸"
+        await ctx.send(embed = discord.Embed(title = f"🎧 Queue | Track Count : {len(queue)} | Full Length : {Convert.length_format(queue.total_length)} | Repeat queue : {Convert.bool_to_str(queue.queue_looping)}",
+                                            #                           **   [Index] if is 1st track [Playing Sign]**    title   (newline)             `Length`               |         @Requester         Do this for every track in the queue
+                                            description = "\n".join([f"**{f'[ {i} ]' if i > 0 else f'[{symbol}]'}** {track.title}\n> `{Convert.length_format(track.duration)}` | {track.requester.mention}" for i,track in enumerate(list(queue))]),
+                                            color=discord.Color.from_rgb(255, 255, 255),
+                                            timestamp=datetime.datetime.now()))
 
     @commands.guild_only()
     @queue.group(description=" Remove one song track by position in the queue, or remove all song tracks that apply to the statement ",
-                aliases=["rm","delete","del"],
-                usage="{0}queue remove 1\n{0}q rm dup")
+                    aliases=["rm","delete","del"],
+                    usage="{0}queue remove 1\n{0}q rm dup")
     async def remove(self,ctx:commands.Context):
         
-        queue = ctx.guild.song_queue
+        guild:discord.Guild = ctx.guild
+        queue:SongQueue     = guild.song_queue
 
         if not queue:
             raise commands.errors.QueueEmpty("There must be songs in the queue to be removed.")
@@ -623,17 +578,19 @@ class music_commands\
                 raise commands.errors.MissingRequiredArgument("position")
 
             try:
-                position:int = Convert.extract_int_from_str(position)
+                position:int = Convert.extract_int_from_str(position) - 1
 
-                if position ==0 and ctx.voice_client.source:
-                    raise IndexError("Cannot remove current song")
-                poped_track = queue.get(position)
+            except ValueError:
 
-                queue.pop(position)
-            except (TypeError,IndexError) as e:
-
-                await ctx.reply(f"❌ Invaild position")
+                return await ctx.reply(f"Please enter a valid number for position.")
+            
             else:
+                poped_track = queue.get(position)
+                queue.pop(position)
+
+                if position == 0 and ctx.voice_client.source:
+                    voice_state.skip_audio(guild)
+            
                 await ctx.reply(f"**#{position}** - `{poped_track.title}` has been removed from the queue")
         
     
@@ -643,9 +600,8 @@ class music_commands\
                     usage="{}queue remove duplicate")
     async def duplicated(self,ctx):
 
-        queue:SongQueue = ctx.guild.song_queue
-
-        not_rep = []
+        queue   :SongQueue       = ctx.guild.song_queue
+        not_rep :list[SongTrack] = []
 
         def is_dup(appeared:list,item:SongTrack):
             if item.webpage_url not in appeared:
@@ -656,8 +612,7 @@ class music_commands\
         reduce(is_dup,queue,[])
         removed_index:int = len(queue) - len(not_rep)
 
-        if removed_index == 0:
-            return await ctx.reply("No track is repeated !")
+        if removed_index == 0: return await ctx.reply("No track is repeated therefore no track was removed")
 
         queue.clear()
         queue.extend(not_rep)
@@ -669,22 +624,20 @@ class music_commands\
                     aliases=["left_vc","left"],
                     usage="{}queue remove left")
     async def left_user(self,ctx:commands.Context):
-        
-        queue = ctx.guild.song_queue
-        
-        user_in_vc:list[discord.Member] = voice_state.get_non_bot_vc_members()
-        user_in_vc_ids:list[int] = map(lambda mem:mem.id, user_in_vc)
 
-        in_vc = filter(lambda t: t.requester.id in user_in_vc_ids, queue)
+        guild          : discord.Guild        = ctx.guild
+        queue          : SongQueue            = guild.song_queue
+        user_in_vc     : list[discord.Member] = voice_state.get_non_bot_vc_members()
+        user_in_vc_ids : list[int]            = map(lambda mem:mem.id, user_in_vc)
+        track_in_vc    : list[SongQueue]      = filter(lambda t: t.requester.id in user_in_vc_ids, queue)
+        remove_count   : int                  = len(queue) - len(track_in_vc)
 
-        remove_count = len(queue) - len(in_vc)
-        if remove_count == 0:
-            return await ctx.reply("No track is removed !")
+        if remove_count == 0: return await ctx.reply("No requester lefted the voice channel, therefore no track was removed.")
 
         queue.clear()
-        queue.extend(in_vc)
+        queue.extend(track_in_vc)
 
-        await ctx.reply(f"Successfully removed {remove_count} tracks from the queue.")
+        await ctx.reply(f"Successfully removed `{remove_count}` tracks from the queue.")
 
     @commands.guild_only()
     @queue.command(description="🧹 Removes every track in the queue",
@@ -695,9 +648,10 @@ class music_commands\
 
         queue.audio_control_status = "CLEAR"
         queue.clear()
+
         await voice_state.clear_audio_message(ctx.guild)
-        if ctx.voice_client:
-            ctx.voice_client.stop()
+
+        if ctx.voice_client: ctx.voice_client.stop()
 
         await ctx.reply("🗒 The queue has been cleared")
 
@@ -705,23 +659,22 @@ class music_commands\
     @queue.command(description="🔁 Swap the position of two tracks in the queue",
                    usage="{}queue swap 1 2")
     async def swap(self,ctx,position_1,position_2):
-        queue = ctx.guild.song_queue
+        queue:SongQueue = ctx.guild.song_queue
 
-        try:
-            queue.swap(position_1,position_2)
-        except (TypeError,IndexError):
-            await ctx.reply("❌ Invaild position")
-        else:
-            await ctx.reply(f"Swapped **#{position_1}** with **#{position_2}** in the queue")
+        try: queue.swap(position_1,position_2)
+        except (TypeError,IndexError): return await ctx.reply("❌ Invaild position")
+
+        await ctx.reply(f"Swapped **#{position_1}** with **#{position_2}** in the queue")
 
     @commands.guild_only()
     @queue.command(description="🔃 Reverse the position of the whole queue",
                     usage="{}queue reverse")
     async def reverse(self,ctx):
-        queue:SongQueue = ctx.guild.song_queue
-        playing:SongTrack = queue.popleft()
+        queue   :SongQueue = ctx.guild.song_queue
+        playing :SongTrack = queue.popleft() #We exclude the track playing
+
         queue.reverse()
-        queue.appendleft(playing)
+        queue.appendleft(playing) #Add the playing track back
 
         await ctx.reply("🔃 The queue has been *reversed*")
 
@@ -730,7 +683,8 @@ class music_commands\
                    aliases = ["random","randomize","sfl"],
                    usage="{}queue shuffle")
     async def shuffle(self,ctx):
-        queue = ctx.guild.song_queue
+        queue:SongQueue = ctx.guild.song_queue
+
         queue.shuffle()
 
         await ctx.reply("🎲 The queue has been *shuffled*")
@@ -739,42 +693,31 @@ class music_commands\
     @queue.command(description='🔂 Enable / Disable queue looping.\nWhen enabled, tracks will be moved to the last at the queue after finsh playing',
                    aliases=["loop","looping","repeat_queue",'setloop','setlooping',"toggleloop","toggle_looping",'changelooping','lop'],
                    usage="{}queue repeat on")
-    async def repeat(self,ctx,mode=None):
-        guild = ctx.guild
-
-        queue = guild.song_queue
-        new_qloop = queue.queue_looping
-            
-        #if not specified a mode
-        if not mode:
-            new_qloop = not new_qloop
-        else:
-            new_qloop = commands.core._convert_to_bool(mode)
-        
+    async def repeat(self,
+                    ctx:commands.Context,
+                    select_mode:str=None):
+        guild     :discord.Guild = ctx.guild
+        queue     :SongQueue     = guild.song_queue
+        new_qloop :bool          = commands.core._convert_to_bool(select_mode) if select_mode else not queue.queue_looping
 
         queue.queue_looping = new_qloop
-        await ctx.reply(MessageString.queue_loop_audio_msg.format(Convert.bool_to_str(guild.song_queue.queue_looping)))
+        await ctx.reply(MessageString.queue_loop_audio_msg.format(Convert.bool_to_str(new_qloop)))
 
 #----------------------------------------------------------------#
 
     @commands.is_owner()
     @queue.command(description='Ouput the queue as a txt file, can be imported again through the import command')
     async def export(self,ctx:commands.Context):
-        filename:str= f"q{ctx.guild.id}.txt"
-        queue:SongQueue = ctx.guild.song_queue
+        filename:str       = f"q{ctx.guild.id}.txt"
+        queue   :SongQueue = ctx.guild.song_queue
 
-        if not queue:
-            raise commands.errors.QueueEmpty("No tracks to export.")
+        if not queue: raise commands.errors.QueueEmpty("No tracks to export.")
 
+        #Create a file the contains the queue in a txt
         with open(filename,"x") as qfile:
-            file_str:str = ""
-            for track in queue:
-                file_str += track.webpage_url + "\n"
-
-            qfile.write(file_str)
+            qfile.write("\n".join([track.webpage_url for track in queue]))
 
         await ctx.send(file=discord.File(filename))
-
         os.remove(filename)
 
     @commands.is_owner()
@@ -782,22 +725,23 @@ class music_commands\
                    aliases=["import"],
                    usage="{}queue import [place your txt file in the attachments]")
     async def from_file(self,ctx:commands.Context):
-        queue:SongQueue = ctx.guild.song_queue
-        attach:discord.Attachment = ctx.message.attachments[0]
-        if not attach:
-            return await ctx.reply("Please upload a txt file")
-        if "utf-8" in (attach.content_type):
-            mes = await ctx.reply("This might take a while ...")
-            data:list[str] = (await attach.read()).decode("utf-8").split("\n")
+        queue       :SongQueue          = ctx.guild.song_queue
+        attachments :discord.Attachment = ctx.message.attachments[0]
 
-            for line in data:
-                if line:
-                    queue.append(await self.bot.loop.run_in_executor(None,
-                                                                    lambda: SongTrack.create_track(query=line,
-                                                                                                    requester=ctx.author)))
-            await mes.edit(f"Successfully added {len(data)-1} tracks to the queue !")
-        else:
-            await ctx.reply("Invaild file type ! (txt and utf-8)")                       
+        if not attachments: return await ctx.reply("Please upload a txt file")
+
+        if "utf-8" not in (attachments.content_type): return await ctx.reply("Invaild file type. (must be txt and utf-8 encoded)")   
+
+        mes :discord.Message = await ctx.reply("This might take a while ...")
+        data:list[str]       = (await attachments.read()).decode("utf-8").split("\n")
+
+        for line in data:
+            if line:
+                queue.append(await self.bot.loop.run_in_executor(None,
+                                                                lambda: SongTrack.create_track(query=line,
+                                                                                                requester=ctx.author)))
+        await mes.edit(f"Successfully added {len(data)-1} tracks to the queue !")
+                                
 #----------------------------------------------------------------#
 #Voice update
     @commands.Cog.listener()
@@ -848,14 +792,14 @@ class music_commands\
         guild = btn.guild
 
         if logging.root.isEnabledFor(logging.getLevelName("COMMAND_INFO")):
-            logging.webhook_log(embed= discord.Embed(title = f"{btn.guild.name+' | ' if btn.guild else ''}{btn.channel}",
-                                                    description = f"**Pressed the {btn.custom_id} button**",
-                                                    color=discord.Color.from_rgb(255,255,255),
-                                                    timestamp = datetime.now()
-                                                    ).set_author(
-                                                    name =btn.author,
-                                                    icon_url= btn.author.avatar_url),
-                                username="Button Logger")
+            asyncio.create_task(logging.webhook_log(embed= discord.Embed(title = f"{btn.guild.name+' | ' if btn.guild else ''}{btn.channel}",
+                                                                        description = f"**Pressed the {btn.custom_id} button**",
+                                                                        color=discord.Color.from_rgb(255,255,255),
+                                                                        timestamp = datetime.datetime.now()
+                                                                        ).set_author(
+                                                                        name =btn.author,
+                                                                        icon_url= btn.author.avatar_url),
+                                                    username="Button Logger"))
         
         if btn.responded or guild is None:  return
         
@@ -928,13 +872,11 @@ class music_commands\
 
         Track = ctx.guild.song_queue[0]
 
-        
-
         #Add to the list
-        Favourites.add_track(ctx.author, Track.title, Track.webpage_url)
+        position:int = Favourites.add_track(ctx.author, Track.title, Track.webpage_url)
 
         #Responding
-        await ctx.reply(MessageString.added_fav_msg.format(Track.title))
+        await ctx.reply(MessageString.added_fav_msg.format(Track.title,position))
 
 #Unfavouriting song
 
@@ -947,7 +889,7 @@ class music_commands\
             index = Convert.extract_int_from_str(index) - 1
             removedTrackTitle = Favourites.get_track_by_index(ctx.author,index)[0]
             Favourites.remove_track(ctx.author,index)
-        except (IndexError,ValueError):
+        except ValueError:
             await ctx.reply("✏ Please enter a vaild index")
         except FileNotFoundError:
             await ctx.reply(MessageString.fav_empty_msg)
@@ -976,7 +918,7 @@ class music_commands\
       favouritesEmbed = discord.Embed(title=f"🤍 🎧 Favourites of {ctx.author.name} 🎵",
                                       description=wholeList,
                                       color=discord.Color.from_rgb(255, 255, 255),
-                                      timestamp=datetime.now()
+                                      timestamp=datetime.datetime.now()
                         ).set_footer(text="Your favourites would be the available in every server")
 
       #sending the embed
@@ -984,4 +926,4 @@ class music_commands\
 
 #----------------------------------------------------------------#
 def setup(BOT):
-    BOT.add_cog(music_commands(BOT))
+    BOT.add_cog(MusicCommands(BOT))

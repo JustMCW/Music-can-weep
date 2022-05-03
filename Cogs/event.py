@@ -1,23 +1,21 @@
-from discord.ext import commands, tasks
-from Response import MessageString
+import aiohttp
 import json
 import os
-import discord
 import logging
-
-from Database import Management
+import discord
+from discord.ext import commands, tasks
+from Response    import MessageString
+from Database    import Management
 
 DiscordServerDatabase = "Database/DiscordServers.json"
 #--------------------#
 
 
-class event(commands.Cog):
+class Event(commands.Cog):
     def __init__(self, bot, info):
         self.bot:commands.Bot = bot
-        self.DefaultPrefix = info.DefaultPrefix
         self.DefaultDatabase = info.DefaultDatabase
-
-        self.cmd_aliases_list = []
+        self.DefaultPrefix = info.DefaultDatabase["prefix"]
 
 
 # Get prefix in string
@@ -89,7 +87,7 @@ class event(commands.Cog):
             try:
                 self.bot.load_extension(f'Cogs.{cog_name}')
             except commands.errors.NoEntryPointError:
-                if cog_name != self.qualified_name:
+                if cog_name != self.qualified_name.lower():
                     raise
             except commands.errors.ExtensionAlreadyLoaded:
                 return
@@ -113,17 +111,17 @@ class event(commands.Cog):
 
         # Create a command list without admin commands
         clientCmdList = []
-        self.cmd_aliases_list = []
+        cmd_aliases_list = []
         [clientCmdList.extend(cog.get_commands()) for cog in self.bot.cogs.values(
         ) if 'admin' not in cog.qualified_name]
         for cmd in clientCmdList:
             aliases = cmd.aliases
             aliases.insert(0, cmd.name)
-            self.cmd_aliases_list.append(aliases)
+            cmd_aliases_list.append(aliases)
 
         # Match any possible commands
         matchs = []
-        for aliases in self.cmd_aliases_list:
+        for aliases in cmd_aliases_list:
             for alia in aliases:
                 if alia in wrong_cmd or wrong_cmd in alia:
                     matchs.append(alia)
@@ -140,7 +138,7 @@ class event(commands.Cog):
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx:commands.Context, command_error:commands.errors.CommandError):
-        logging.webhook_log_event(f"{ctx.author} triggered an error : {(command_error.__class__.__name__)}",description = f"in #{ctx.channel.name} | {ctx.guild}")
+        logging.webhook_log_event(f"{ctx.author} triggered an error : {(command_error.__class__.__name__)}",description = f"in #{ctx.channel} | {ctx.guild}")
 
         # Invaild command
         if isinstance(command_error, commands.errors.CommandNotFound):
@@ -191,10 +189,10 @@ class event(commands.Cog):
         #Others
         elif isinstance(command_error,commands.errors.CommandInvokeError):
             orginal_error:Exception = command_error.__cause__
-            logging.error(f'{command_error.__cause__.__class__.__name__} ouccurs when `>>{ctx.command}` was called')
+            logging.error(f'{orginal_error.__class__.__name__} ouccurs when `>>{ctx.command}` was called : {orginal_error}')
             
-            if isinstance(orginal_error,discord.errors.HTTPException):
-                ...
+            if isinstance(orginal_error,discord.errors.HTTPException) and "404" in str(orginal_error):
+                logging.info("Passed 404 not found.")
             else:
                 #Code error
                 logging.webhook_log_error(command_error.__cause__)

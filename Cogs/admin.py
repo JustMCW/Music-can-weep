@@ -4,7 +4,7 @@ from discord.ext import commands
 import discord
 import logging
 
-class bot_admin_commands(commands.Cog,command_attrs=dict(hidden=True)):
+class AdminCommands(commands.Cog,command_attrs=dict(hidden=True)):
     def __init__(self,bot):
         logging.info("ADMIN commands is ready")
         self.bot:commands.Bot = bot
@@ -36,19 +36,17 @@ class bot_admin_commands(commands.Cog,command_attrs=dict(hidden=True)):
     async def say(self,ctx,*,message):
         await ctx.send(message)
         logging.warning(message)
-        
+
     @admin.command()
-    async def process_command_at(self,ctx,channel_id:int,command_str,*,args):
+    async def process_command_at(self,ctx,channel:commands.converter.TextChannelConverter,command_str,*,args):
         import ast
         kwargs:dict = ast.literal_eval(args)
-
-        channel:discord.TextChannel = self.bot.get_channel(channel_id)
         ctx:commands.Context = await self.bot.get_context(await channel.send(f">>{command_str} {' '.join(list(kwargs.values()))}"))
         await ctx.invoke(self.bot.get_command(command_str),**kwargs)
 
     #Except this one... hehe anonymous
     @admin.command(pass_context = False)
-    async def play_at(self,ctx,guild_id:int,vc_name,*,query):
+    async def play_at(self,ctx,guild:commands.converter.GuildConverter,vc_name,*,query):
         """
         1.Get the guild
         2.find the voice channel with the guild
@@ -57,7 +55,6 @@ class bot_admin_commands(commands.Cog,command_attrs=dict(hidden=True)):
         5.play it at the vc
         6.replay it if ended or disconnected
         """
-        guild:discord.Guild = self.bot.get_guild(guild_id)
 
         if not guild:
             return await ctx.send("Guild not found")
@@ -118,8 +115,8 @@ class bot_admin_commands(commands.Cog,command_attrs=dict(hidden=True)):
 
     @commands.is_owner()
     @admin.command(aliases=["si","showserver"])
-    async def serverinfo(self,ctx,id:int):
-        guild = self.bot.get_guild(id)
+    async def serverinfo(self,ctx,guild:commands.converter.GuildConverter):
+
         if guild:
             serin = discord.Embed(
             title=guild.name,
@@ -158,4 +155,4 @@ class bot_admin_commands(commands.Cog,command_attrs=dict(hidden=True)):
 
 
 def setup(BOT):
-    BOT.add_cog(bot_admin_commands(BOT))
+    BOT.add_cog(AdminCommands(BOT))

@@ -1,33 +1,28 @@
 import discord
 from discord.ext import commands
-
-from Music.song_track import SongTrack
-from main import BOT_INFO
-from Database import Management
-
 from collections import deque
+
+from main        import BOT_INFO
 
 class SongQueue(deque):
     def __init__(self,guild:discord.Guild=None):
-        self.guild:discord.Guild = guild
+        self.guild                :discord.Guild   = guild
 
-        self.volume:float = BOT_INFO.InitialVolume
-        self.audio_control_status:str = None
+        self.volume               :float           = BOT_INFO.InitialVolume
+        self.audio_control_status :str             = None
 
-        self.looping:bool = BOT_INFO.InitialLooping
-        self.queue_looping:bool = BOT_INFO.InitialQueueLooping
+        self.looping              :bool            = BOT_INFO.InitialLooping
+        self.queue_looping        :bool            = BOT_INFO.InitialQueueLooping
 
-        self.audio_message:discord.Message = None
+        self.audio_message        :discord.Message = None
 
-        self.player_loop_passed = []
+        self.player_loop_passed   :list            = []
 
         super().__init__()
 
     def get(self, __index: int):
-        try:
-            return self[__index]
-        except IndexError:
-            return None
+        try: return self[__index]
+        except IndexError: return None
     
     @property
     def enabled(self) -> bool:
@@ -43,12 +38,12 @@ class SongQueue(deque):
 
     @property
     def time_position(self) -> int:
-        voicec = self.guild.voice_client
-        loop_pass = self.player_loop_passed
+        voicec    :discord.VoiceClient = self.guild.voice_client
+        loop_pass :list                = self.player_loop_passed
 
         return (voicec._player.loops + sum(loop_pass[:-1] if voicec.is_paused() else loop_pass)) // 50
 
-    def swap(self,pos1:int,pos2:int):
+    def swap(self,pos1:int,pos2:int) -> None:
         
         if not self: 
             raise commands.errors.QueueEmpty("No tracks in the queue to be swapped")
@@ -65,7 +60,7 @@ class SongQueue(deque):
 
         self[pos1] , self[pos2] = self[pos2] , self[pos1]
     
-    def shuffle(self):
+    def shuffle(self) -> None:
 
         if not self: 
             raise commands.errors.QueueEmpty("No tracks in the queue to be shuffled")

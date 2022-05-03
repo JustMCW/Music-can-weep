@@ -11,14 +11,6 @@ from Music import voice_state
 
 #BUTTONS
 class Buttons:
-    @staticmethod
-    def generate_search_result_buttons(search_result:list):
-        for i,video in enumerate(search_result):
-            title = video["title"]["runs"][0]["text"]
-            length = video["lengthText"]["simpleText"]
-
-            yield f'{i+1}: {title} `[{length}]`', Button(label=str(i+1),custom_id=str(i),style=ButtonStyle.blue)
-
     
     #Button Templates
     PauseButton = Button(label="Pause",
@@ -114,7 +106,7 @@ class Buttons:
     @classmethod
     @subpress_failed_message
     async def on_restart_btn_press(self,btn):
-        voice_state.restart_audio(btn.guild)
+        await voice_state.restart_audio(btn.guild)
         await self.inform_changes(btn,MessageString.restarted_audio_msg)
 
     @classmethod
@@ -129,8 +121,7 @@ class Buttons:
         await btn.respond(type=5)
         title = btn.message.embeds[0].title
         url = btn.message.embeds[0].url
-        Favourites.add_track(btn.author, title, url)
-        await btn.respond(content=MessageString.added_fav_msg.format(title))
+        await btn.respond(content=MessageString.added_fav_msg.format(title,Favourites.add_track(btn.author, title, url)))
 
     @staticmethod
     async def on_subtitles_btn_press(btn,bot):

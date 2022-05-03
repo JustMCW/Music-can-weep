@@ -6,10 +6,9 @@ from discord.ext import commands
 import logging
 from discord_components import Button, ButtonStyle , ActionRow 
 
-from Response import MessageString
 from Database import Management
 
-class other_commands(commands.Cog):
+class OtherCommands(commands.Cog):
     def __init__(self,bot):
         logging.info("HELP commands is ready")
         self.bot = bot
@@ -93,4 +92,4 @@ class other_commands(commands.Cog):
         await ctx.reply("Song tracks will now queue up when being requested" if mode else "Song tracks will now be instantly played when requested")
 
 def setup(BOT):
-    BOT.add_cog(other_commands(BOT))
+    BOT.add_cog(OtherCommands(BOT))
