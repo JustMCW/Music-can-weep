@@ -1,6 +1,5 @@
 import asyncio
 import discord
-from click import BadParameter
 
 from discord_components import Select, SelectOption, Button, ButtonStyle,Interaction
 from Response import MessageString
@@ -69,7 +68,7 @@ class Buttons:
                     break
 
             if btn is None:
-                raise BadParameter(f"There must be a button object as a argument in {func.__name__}. It was not found from : {list(func.__code__.co_varnames)}")
+                raise ValueError(f"There must be a button object as a argument in {func.__name__}. It was not found from : {list(func.__code__.co_varnames)}")
             
             try:
                 await btn.edit_origin(content=btn.message.content)
