@@ -130,5 +130,11 @@
       "queuing": true,
       "sync_lyrics": false,
       "auto_clear_queue": true
+   },
+   "985731995076272208": {
+      "prefix": ">>",
+      "queuing": true,
+      "sync_lyrics": false,
+      "auto_clear_queue": true
    }
 }
