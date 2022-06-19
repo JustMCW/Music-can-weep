@@ -4,6 +4,8 @@ import logging
 import discord
 from discord.ext import commands, tasks
 from Response    import MessageString
+from ..Database import Management
+
 
 DiscordServerDatabase = "Database/DiscordServers.json"
 #--------------------#
@@ -66,8 +68,6 @@ class Event(commands.Cog):
             return SongQueue.get_song_queue_for(self)
             
         discord.Guild.song_queue=song_queue
-
-        from Database import Management
 
         @property
         def database(self) -> dict:
