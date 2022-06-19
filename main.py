@@ -133,8 +133,7 @@ def main():
 
     #Add event cog for the BOT
     from Cogs.event import Event
-    from Database import Management
-    BOT.add_cog(Event(BOT, BOT_INFO,Management))
+    BOT.add_cog(Event(BOT, BOT_INFO))
 
     BOT_TOKEN = os.environ.get("TOKEN")
     

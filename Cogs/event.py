@@ -4,7 +4,7 @@ import logging
 import discord
 from discord.ext import commands, tasks
 from Response    import MessageString
-# from Database import Management
+from Database import Management
 
 
 DiscordServerDatabase = "Database/DiscordServers.json"
@@ -12,11 +12,10 @@ DiscordServerDatabase = "Database/DiscordServers.json"
 
 
 class Event(commands.Cog):
-    def __init__(self, bot, info,m):
+    def __init__(self, bot, info):
         self.bot:commands.Bot = bot
         self.DefaultDatabase = info.DefaultDatabase
         self.DefaultPrefix = info.DefaultDatabase["prefix"]
-        self.Management = m
 
 
 # Get prefix in string
@@ -75,7 +74,7 @@ class Event(commands.Cog):
             """
             Represents the database which is from `Database.DiscordServers.json` of the guild 
             """
-            return self.Management.read_database_of(self)
+            return Management.read_database_of(self)
         discord.Guild.database=database
 
         #Load the cogs for the bot
@@ -100,7 +99,7 @@ class Event(commands.Cog):
         # Message that tell us we have logged in
         logging.webhook_log_event(f"Logged in as {self.bot.user.name} ( running in {len(self.bot.guilds)} servers ) ;",thumbnail = self.bot.user.avatar_url)
 
-        self.Management.auto_correct_databases(self.bot)
+        Management.auto_correct_databases(self.bot)
 
         # Start a background task  
         self.changeBotPresence.start()
