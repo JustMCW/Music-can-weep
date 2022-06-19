@@ -111,9 +111,9 @@ class Subtitles:
         Sync the subtitle with the audio
         """
         
-
         if not queue.sync_lyrics:
             return logging.info("Syncing disabled")
+
         sub_options:dict = getattr(song_track,"subtitles",None)
         if not sub_options:
             return 
