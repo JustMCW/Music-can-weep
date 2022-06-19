@@ -5,6 +5,7 @@ import time
 import re
 import os
 import datetime
+import threading
 from functools        import reduce
 
 #Third party libaries
@@ -23,7 +24,7 @@ from Music.song_queue import SongQueue
 from Music.song_track import SongTrack
 from Music            import voice_state
 
-from Buttons          import Interaction
+from Buttons          import Buttons, Interaction
 
 #Literals
 from Response         import MessageString, Emojis, Embeds
@@ -110,6 +111,24 @@ class MusicCommands(commands.Cog):
         await ctx.reply(MessageString.join_msg.format(voice_channel.mention))
         await voice_state.update_audio_msg(ctx.guild)
 
+        queue : SongQueue = ctx.guild.song_queue
+        if queue:
+            from discord_components import Button,ButtonStyle
+            message = await ctx.send(f"There are {len(queue)} tracks in the queue, resume ?",components=[
+                Button(label="Yes",style=ButtonStyle.green)
+            ])
+
+            try:
+                await self.bot.wait_for("button_click",
+                                        timeout=20,
+                                        check=lambda btn: btn.message.id == message.id and btn.author.id == ctx.author.id)
+            except asyncio.TimeoutError:
+                pass
+            else:
+                await ctx.invoke(self.bot.get_command('resume'))
+            finally:
+                await message.delete()
+
     @commands.guild_only()
     @commands.command(aliases=["leave", "bye", 'dis', "lev",'l'],
                     description='👋 Disconnect from the current voice channel i am in',
@@ -173,7 +192,11 @@ class MusicCommands(commands.Cog):
                     raise resume_error
 
             #Play the track
-            self.bot.loop.create_task(Subtitles.sync_subtitles(queue,ctx.channel,current_track))
+            threading.Thread(
+                target=Subtitles.sync_subtitles,
+                args=(queue,ctx.channel,current_track)
+            ).start()
+
             start_time = float(time.perf_counter())
             current_track.play(voice_client,
                                 volume = queue.volume,
@@ -184,7 +207,7 @@ class MusicCommands(commands.Cog):
 
             await voice_state.create_audio_message(current_track, await ctx.send("▶️ Continue to play tracks in the queue"))
         
-        #Successfully resume like usual, send response.
+        #Successfully resumed like usual, send response.
         else:
             await ctx.reply(MessageString.resumed_audio_msg)       
 
@@ -198,7 +221,8 @@ class MusicCommands(commands.Cog):
         """
         voicec:discord.VoiceClient = ctx.voice_client
 
-        if not voicec.is_playing(): raise commands.errors.NoAudioPlaying
+        if voicec is None or not voicec.is_playing(): 
+            raise commands.errors.NoAudioPlaying
         
         guild   :discord.Guild = ctx.guild
         queue   :SongQueue     = guild.song_queue
@@ -306,7 +330,7 @@ class MusicCommands(commands.Cog):
         if voice_client and voice_client.source:
             voice_client.source.volume = true_volume
 
-        await ctx.reply(f"🔊 Volume has been set to {round(volume_percentage,2)}%")
+        await ctx.reply(f"🔊 Volume has been set to {round(volume_percentage,3)}%")
         await voice_state.update_audio_msg(guild)
 
     @commands.guild_only()
@@ -433,19 +457,17 @@ class MusicCommands(commands.Cog):
                 query = f'https://www.youtube.com/watch?v={search_result[selected_index]["videoId"]}'
               
         
-        queue = guild.song_queue
-        #------
+        #We now have the exact url that lead us to the audio regardless of what the user've typed, let's find and play it.
         
-        #Create the track
+        queue = guild.song_queue
+        #Create the track with yt-dl
         try:
             NewTrack:SongTrack = await self.bot.loop.run_in_executor(None,
               lambda: SongTrack.create_track(query=query,
                                              requester=author))
-        #Failed
-        
+        #Extraction Failed
         except youtube_dl.utils.YoutubeDLError as yt_dl_error:
             logging.warning(yt_dl_error.__class__.__name__)
-
 
             utils = youtube_dl.utils
 
@@ -457,8 +479,10 @@ class MusicCommands(commands.Cog):
                     return await reply_msg.reply(f"An error was occurred : {error_message}")
 
             #Raise the error if it was not in the above dictionary
+            logging.error(yt_dl_error)
             raise yt_dl_error
-        #Success
+
+        #Extraction Success
         else:
             logging.info("Succesfully extraced info")
             #Stop current audio (if queuing is disabled)
@@ -489,7 +513,10 @@ class MusicCommands(commands.Cog):
             #Repeat function after the audio
             start_time = float(time.perf_counter())
 
-            self.bot.loop.create_task(Subtitles.sync_subtitles(queue,ctx.channel,NewTrack))
+            threading.Thread(
+                target=Subtitles.sync_subtitles,
+                args=(queue,ctx.channel,NewTrack)
+            ).start()
             
             #Play the audio
             try:
@@ -586,7 +613,7 @@ class MusicCommands(commands.Cog):
             
             else:
                 poped_track = queue.get(position)
-                queue.pop(position)
+                del queue[position]
 
                 if position == 0 and ctx.voice_client.source:
                     voice_state.skip_audio(guild)

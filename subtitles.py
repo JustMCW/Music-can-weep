@@ -1,9 +1,12 @@
-import requests
-import re
 import asyncio
 import discord
 import logging
+import requests
+import re
+import threading
+
 import Convert
+
 from difflib import SequenceMatcher
 from googletrans import Translator
 
@@ -103,7 +106,12 @@ class Subtitles:
             await channel.send(full)
 
     @staticmethod
-    async def sync_subtitles(queue,channel,song_track):
+    def sync_subtitles(queue,channel,song_track):
+        """
+        Sync the subtitle with the audio
+        """
+        
+
         if not queue.sync_lyrics:
             return logging.info("Syncing disabled")
         sub_options:dict = getattr(song_track,"subtitles",None)
@@ -123,13 +131,14 @@ class Subtitles:
         sent:list[discord.Message] = []
         text_sent:list[str] = []
 
-        display:discord.Message =await channel.send(
-            embed = discord.Embed(
-                title="Lyrics ~"
-            )
-        )
+        # display:discord.Message = asyncio.run(channel.send(
+        #     embed = discord.Embed(
+        #         title="Lyrics ~"
+        #     )
+        # ))
 
         async def send_text(text,duration):
+            return
             if len(sent) > 5:
                 sent.pop(0)
 
@@ -139,55 +148,72 @@ class Subtitles:
             #     if p >= 0.4 and duration < 2:
             #         sent.pop(-1)
             # text_sent.append(text)
-            if is_jp:
-                pron = translator.translate(text,src="ja",dest="ja").pronunciation
-                like_percentage = SequenceMatcher(None,text,pron).quick_ratio()
-                if like_percentage < 0.3:
-                    
-                    sent.append(f"> {Convert.length_format(queue.time_position)} - {Convert.length_format(queue.time_position+duration)}\n{text}\n{pron}")
-                    return await display.edit(
-                       embed=discord.Embed( title="Lyrics ~",
-                                            description="\n".join(sent))
-                    )
-                    # return sent.append(await channel.send(embed=discord.Embed(title=f"{text}\n{pron}")))
-                    
-            sent.append(f"> {Convert.length_format(queue.time_position)} - {Convert.length_format(queue.time_position+duration)}\n{text}")
-            return await display.edit(embed=discord.Embed( title="Lyrics ~",
-                                            description="\n".join(sent)))
+            try:    
+                if is_jp:
+                    pron = translator.translate(text,src="ja",dest="ja").pronunciation
+                    like_percentage = SequenceMatcher(None,text,pron).quick_ratio()
+                    if like_percentage < 0.3:
+                        
+                        sent.append(f"> {Convert.length_format(queue.time_position)} - {Convert.length_format(queue.time_position+duration)}\n{text}\n{pron}")
+                        return await display.edit(
+                        embed=discord.Embed( title="Lyrics ~",
+                                                description="\n".join(sent))
+                        )
+                        # return sent.append(await channel.send(embed=discord.Embed(title=f"{text}\n{pron}")))
+                        
+                sent.append(f"> {Convert.length_format(queue.time_position)} - {Convert.length_format(queue.time_position+duration)}\n{text}")
+                return await display.edit(embed=discord.Embed( title="Lyrics ~",
+                                                description="\n".join(sent)))
+            except discord.errors.NotFound:
+                pass
 
-
+        
         for indx,(start,end,text,*texts_list) in enumerate(subtitle_list):
+    
             start,end = sec_in_time_string(start),sec_in_time_string(end)
+            """  
+            second_wait_time = start-queue.time_position
+            #if positive -> we are ahead
+            #if negative -> we are delayed
+            """
+            
             start -= offset
             wait_time:int = start if indx == 0 else start - (sec_in_time_string(subtitle_list[indx-1][0]) - offset)
-            await asyncio.sleep(wait_time)
+            
+            
+            #Correcting delayed output (can be caused by fast-forwarding)
+            delay = (start- queue.time_position - wait_time) * -1
+
+            if delay > offset:
+                print(f"we are delayed for {delay} secondss")
+                print("\n".join(text.splitlines()))
+                continue
+
+            import time
+            time.sleep(wait_time)
+
+            #Stop if changed song or left
             if channel.guild.voice_client is None or not channel.guild.voice_client.is_playing or queue[0] != song_track:
                 break
-            asyncio.create_task(send_text("\n".join(text.splitlines()),end-start))
 
-        await asyncio.sleep(10)
-        await display.delete()
+            #Handling pausing
+            channel.guild.voice_client._player._resumed.wait(3600)
+            
+            #Correcting early output (can be caused by pausing)
+            early = start-queue.time_position-offset
+            #if positive -> we are ahead
+            #if negative -> we are delayed
+
+            if early > 0:
+                print(f"we are ahead of {early} seconds")
+                time.sleep(early)
+
+            # asyncio.create_task(send_text("\n".join(text.splitlines()),end-start))
+            print("\n".join(text.splitlines()))
+
+        # await asyncio.sleep(10)
+        # await display.delete()
 
         return logging.info("Finshed syncing")
-
-
-        subtitle_dict = {}
-        for indx,line in enumerate(subtitle.splitlines()):
-            if "-->" in line:
-                match = re.match(r"^(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})$",line)
-                if not match: 
-                    return logging.warning("Complex cannot be synced")
-                subtitle_dict[(sec_in_time_string(match.group(1))-0.5,sec_in_time_string(match.group(2)))] = subtitle.splitlines()[indx+1]
-
-        
-
-        async def loop():
-
-            for indx,((start,end),text) in enumerate(subtitle_dict.items()):
-                await asyncio.sleep((start if indx == 0 else start - list(subtitle_dict.keys())[indx-1][0]))
-                asyncio.create_task(tt(text))
-                if channel.guild.voice_client is None or not channel.guild.voice_client.is_playing or queue[0] != song_track:
-                    break
-
-        await loop()
-        
+    
+    

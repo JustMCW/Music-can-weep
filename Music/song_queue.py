@@ -1,12 +1,15 @@
 import discord
 from discord.ext import commands
 from collections import deque
+from typing_extensions import Self
 
 from main        import BOT_INFO
 
+hash_maps = {}
+
 class SongQueue(deque):
-    def __init__(self,guild:discord.Guild=None):
-        self.guild                :discord.Guild   = guild
+    def __init__(self,guild):
+        self.guild                :discord.Guild   = guild 
 
         self.volume               :float           = BOT_INFO.InitialVolume
         self.audio_control_status :str             = None
@@ -19,6 +22,16 @@ class SongQueue(deque):
         self.player_loop_passed   :list            = []
 
         super().__init__()
+
+    @classmethod
+    def get_song_queue_for(cls,guild:discord.Guild) -> Self:
+        search = hash_maps.get(guild.id)
+
+        if search is not None:
+            return search
+        
+        hash_maps[guild.id] = cls(guild)
+        return hash_maps[guild.id]
 
     def get(self, __index: int):
         try: return self[__index]

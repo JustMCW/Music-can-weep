@@ -58,18 +58,15 @@ class Event(commands.Cog):
         from Music.song_queue import SongQueue
         import discord
 
-        discord.Guild._song_queue = SongQueue()
+        # discord.Guild._song_queue = SongQueue()
+
         @property
-        def song_queue(self):
+        def song_queue(self) -> SongQueue:
             """
             Represents the song queue of the guild
             """
-            if self._song_queue is self:
-                return self._song_queue
-            else:
-                self._song_queue.guild = self
-                return self._song_queue
-
+            return SongQueue.get_song_queue_for(self)
+            
         discord.Guild.song_queue=song_queue
 
         @property
@@ -169,7 +166,7 @@ class Event(commands.Cog):
             await ctx.reply(MessageString.user_not_found_msg)
         elif isinstance(command_error, commands.errors.ChannelNotFound):
             await ctx.reply(MessageString.channel_not_found_msg)
-        elif "NotFound" in str(command_error):
+        elif isinstance(command_error,discord.errors.NotFound):
             pass
 
         # Voice Errors
@@ -185,7 +182,7 @@ class Event(commands.Cog):
             await ctx.reply(MessageString.queue_empty_msg)
         elif isinstance(command_error, commands.errors.QueueDisabled):
             await ctx.reply(MessageString.queue_disabled_msg.format(ctx.prefix))
-
+        
         #Others
         elif isinstance(command_error,commands.errors.CommandInvokeError):
             orginal_error:Exception = command_error.__cause__
@@ -197,6 +194,7 @@ class Event(commands.Cog):
                 #Code error
                 logging.webhook_log_error(command_error.__cause__)
                 raise command_error.__cause__.with_traceback(command_error.__cause__.__traceback__)
+        
 
         #Uknowm / unhandled DISCORD errors
         else:

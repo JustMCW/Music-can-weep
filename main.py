@@ -17,7 +17,7 @@ from discord.ext import commands
 from datetime    import datetime
 
 #Logging
-logging.basicConfig(level=20,format="%(levelname)s from %(module)s:%(lineno)d (%(funcName)s) : %(message)s")
+logging.basicConfig(level=22,format="%(levelname)s from %(module)s:%(lineno)d (%(funcName)s) : %(message)s")
 logging.addLevelName(22, "COMMAND_INFO")
 logging.addLevelName(27, "BOT_EVENT")
 

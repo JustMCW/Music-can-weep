@@ -2,6 +2,7 @@ import discord
 import time
 import asyncio
 import logging
+import threading
 
 from discord.ext      import commands
 
@@ -50,8 +51,8 @@ def get_current_vc(guild:discord.Guild)->discord.VoiceChannel:
         return None
 
 
-def get_volume_percentage(guild:discord.Guild)->str:
-    return f'{round(guild.song_queue.volume / BOT_INFO.InitialVolume * 100)}%'
+def get_volume_percentage(guild:discord.Guild)->int:
+    return round(guild.song_queue.volume / BOT_INFO.InitialVolume * 100)
 
 
 def get_non_bot_vc_members(guild:discord.Guild)->list:
@@ -192,7 +193,10 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
         #Single song looping is on
         elif looping and audio_control_status is None:
             NextTrack = FinshedTrack
-            asyncio.create_task(Subtitles.sync_subtitles(queue,text_channel,NextTrack))
+            threading.Thread(
+                target=Subtitles.sync_subtitles,
+                args=(queue,text_channel,NextTrack)
+            ).start()
         
         #Queuing disabled
         elif not queue.enabled:
@@ -211,7 +215,7 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
 
             #No song in the queue
             if NextTrack is None:
-                await text_channel.send("\\☑️ All tracks in the queue has been played (if you want to repeat the queue, run \" >>queue repeat on \")",delete_after=30)
+                # await text_channel.send("\\☑️ All tracks in the queue has been played (if you want to repeat the queue, run \" >>queue repeat on \")",delete_after=30)
                 await clear_audio_message(guild)
                 return logging.info("Queue is empty")
 
@@ -237,7 +241,10 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
                 await create_audio_message(Track = NextTrack,
                                                 Target = target)
                     
-                asyncio.create_task(Subtitles.sync_subtitles(queue,text_channel,NextTrack))
+                threading.Thread(
+                    target=Subtitles.sync_subtitles,
+                    args=(queue,text_channel,NextTrack)
+                ).start()
             
             #Skipping the only track in the queue
             elif audio_control_status == "SKIP":
@@ -350,7 +357,7 @@ async def update_audio_msg(guild):
                                     value=f"*{get_current_vc(guild).mention}*")
             new_embed.insert_field_at(index=4,
                                     name="📶 Volume",
-                                    value=f"`{get_volume_percentage(guild)}`")
+                                    value=f"`{get_volume_percentage(guild)}%`")
             new_embed.insert_field_at(index=5,
                                     name="🔂 Looping",
                                     value=f"**{Convert.bool_to_str(guild.song_queue.looping)}**")
