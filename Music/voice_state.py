@@ -324,7 +324,7 @@ async def clean_up_queue(guild:discord.Guild):
     queue:SongQueue = guild.song_queue
     clear_after = 600
 
-    if queue:
+    if queue and queue.guild.database.get("auto_clear_queue"):
         logging.info(f"Wait for {clear_after} sec then clear queue")
         await asyncio.sleep(clear_after)
         

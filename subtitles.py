@@ -182,7 +182,10 @@ class Subtitles:
             
             
             #Correcting delayed output (can be caused by fast-forwarding)
-            delay = (start- queue.time_position - wait_time) * -1
+            try:
+                delay = (start- queue.time_position - wait_time) * -1
+            except AttributeError:
+                delay = 0
 
             if delay > offset:
                 print(f"we are delayed for {delay} secondss")
