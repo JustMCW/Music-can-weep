@@ -31,9 +31,9 @@ def playing_audio(vcfunc):
             if guild.voice_client._player: 
                 return vcfunc(*args,**kwargs)
             else: 
-                raise commands.errors.NoAudioPlaying("Function {vcfunc.__name__} requires the bot to be playing audio.")
+                raise commands.errors.NoAudioPlaying(f"Function {vcfunc.__name__} requires the bot to be playing audio.")
         except AttributeError:
-            raise commands.errors.NotInVoiceChannel("Function {vcfunc.__name__} requires the bot to be in a voice channel.")
+            raise commands.errors.NotInVoiceChannel(f"Function {vcfunc.__name__} requires the bot to be in a voice channel.")
       
     return wrapper
 
