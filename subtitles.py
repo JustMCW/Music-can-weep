@@ -200,7 +200,10 @@ class Subtitles:
                 break
 
             #Handling pausing
-            channel.guild.voice_client._player._resumed.wait(3600)
+            try:
+                channel.guild.voice_client._player._resumed.wait(3600)
+            except AttributeError:
+                ...
             
             #Correcting early output (can be caused by pausing)
             early = start-queue.time_position-offset
