@@ -9,7 +9,7 @@ RequiredAttr = ("title","webpage_url","duration",
 
 class SongTrack:
 
-    request_message : discord.Message | None
+    request_message : discord.Message
 
     def __init__(self,requester:discord.Member,request_message : discord.Message = None,**info:dict):
 
