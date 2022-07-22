@@ -170,7 +170,6 @@ class MusicCommands(commands.Cog):
         """
 
         guild:discord.Guild              = ctx.guild
-        voice_client:discord.VoiceClient = guild.voice_client
         queue:SongQueue                  = guild.song_queue      
         current_track:SongTrack          = queue.get(0)
 
@@ -198,7 +197,7 @@ class MusicCommands(commands.Cog):
             ).start()
 
             start_time = float(time.perf_counter())
-            current_track.play(voice_client,
+            current_track.play(guild.voice_client,
                                 volume = queue.volume,
                                 after = lambda voice_error: voice_state.after_playing(self.bot.loop,
                                                                                     guild,
@@ -464,7 +463,9 @@ class MusicCommands(commands.Cog):
         try:
             NewTrack:SongTrack = await self.bot.loop.run_in_executor(None,
               lambda: SongTrack.create_track(query=query,
-                                             requester=author))
+                                             requester=author,
+                                             request_message=reply_msg
+                                             ))
         #Extraction Failed
         except youtube_dl.utils.YoutubeDLError as yt_dl_error:
             logging.warning(yt_dl_error.__class__.__name__)
@@ -605,7 +606,7 @@ class MusicCommands(commands.Cog):
                 raise commands.errors.MissingRequiredArgument("position")
 
             try:
-                position:int = Convert.extract_int_from_str(position) - 1
+                position:int = Convert.extract_int_from_str(position)
 
             except ValueError:
 
@@ -613,10 +614,16 @@ class MusicCommands(commands.Cog):
             
             else:
                 poped_track = queue.get(position)
-                del queue[position]
-
+                
+                #Also skip the audio if the one we are removing is currentl yplaying
                 if position == 0 and ctx.voice_client.source:
                     voice_state.skip_audio(guild)
+                    if queue.queue_looping: #
+                        del queue[0]
+                else:
+                    del queue[position]
+
+                
             
                 await ctx.reply(f"**#{position}** - `{poped_track.title}` has been removed from the queue")
         
@@ -639,7 +646,7 @@ class MusicCommands(commands.Cog):
         reduce(is_dup,queue,[])
         removed_index:int = len(queue) - len(not_rep)
 
-        if removed_index == 0: return await ctx.reply("No track is repeated therefore no track was removed")
+        if removed_index == 0: return await ctx.reply("None of the track is repeated, therefore no track was removed")
 
         queue.clear()
         queue.extend(not_rep)
@@ -763,10 +770,16 @@ class MusicCommands(commands.Cog):
         data:list[str]       = (await attachments.read()).decode("utf-8").split("\n")
 
         for line in data:
-            if line:
+            if not line: continue
+
+            try:
                 queue.append(await self.bot.loop.run_in_executor(None,
                                                                 lambda: SongTrack.create_track(query=line,
-                                                                                                requester=ctx.author)))
+                                                                                                requester=ctx.author,
+                                                                                                request_message= mes)))
+            except youtube_dl.utils.YoutubeDLError as yt_dl_error:
+                await ctx.send(f"Failed to add {line} to the queue because `{yt_dl_error}`")
+
         await mes.edit(f"Successfully added {len(data)-1} tracks to the queue !")
                                 
 #----------------------------------------------------------------#

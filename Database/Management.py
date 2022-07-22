@@ -1,3 +1,4 @@
+import logging
 import discord
 import json
 from main import BOT_INFO
@@ -19,15 +20,15 @@ def auto_correct_databases(bot):
 
             #The server wasn't even found
             if ID not in data.keys():
-                print(guild, "lacking Database")
+                logging.info(guild, "lacking Database")
                 data[ID] = BOT_INFO.DefaultDatabase
             elif data[ID].keys() != BOT_INFO.DefaultDatabase.keys():
                 data[ID] = dict(
                     BOT_INFO.DefaultDatabase, **data[ID])
-                print(guild, "has incorrect key")
+                logging.info(guild, "has incorrect key")
             # elif data[ID] == BOT_INFO.DefaultDatabase:
             #     data[ID] = None
-            #     print(f"Removed the database of {guild}")
+            #     logging.info(f"Removed the database of {guild}")
 
         jsonf.seek(0)
         json.dump(data, jsonf, indent=3)

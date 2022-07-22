@@ -9,17 +9,20 @@ RequiredAttr = ("title","webpage_url","duration",
 
 class SongTrack:
 
-    def __init__(self,requester:discord.Member,**info:dict):
+    request_message : discord.Message | None
 
-      self.requester:discord.Member = requester
+    def __init__(self,requester:discord.Member,request_message : discord.Message = None,**info:dict):
 
-      for key,value in info.items():
-          if key in RequiredAttr:
-              setattr(self,key,value)
+        self.requester:discord.Member = requester
+        self.request_message = request_message
+
+        for key,value in info.items():
+            if key in RequiredAttr:
+                setattr(self,key,value)
       
     
     @classmethod
-    def create_track(cls,query:str,requester:discord.Member)->object:
+    def create_track(cls,query:str,requester:discord.Member,request_message : discord.Message = None)->object:
         
         #Some options for extracting the audio from YT
         YDL_OPTION =  {
@@ -45,7 +48,7 @@ class SongTrack:
             info = info["entries"][0]  
     
 
-        return cls(requester,**info)
+        return cls(requester,request_message,**info)
     
     def play(self,
             voice_client:discord.VoiceClient,
@@ -65,7 +68,7 @@ class SongTrack:
             try:
                 src_url = self.formats[0]["fragment_base_url"]
             except KeyError:
-                print(src_url)
+                logging.WARNING(src_url)
 
         try:
             src = discord.FFmpegPCMAudio(source=src_url, **FFMPEG_OPTION)
@@ -79,3 +82,4 @@ class SongTrack:
         logging.info("Successfully Transformed into PCM")
         voice_client.play(vol_src,after=after)
     
+

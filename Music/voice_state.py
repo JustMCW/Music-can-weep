@@ -124,7 +124,7 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
                 voice_error:str = None):
     """
     if any check 1-3 gives true, stop.
-    1. Check for voice error
+    1. Check for voice error (like audio file broke)
     2. Check if the bot is in a voice channel
     3. Check for trigger, whether the restart/clear command is used
 
@@ -178,14 +178,15 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
         queue_looping :bool                = queue.queue_looping
         text_channel  :discord.TextChannel = queue.audio_message.channel if queue.audio_message else None
 
-        #403 forbidden error (an error that try cannot catch, it makes the audio ends instantly)
+        #403 forbidden error (an error that try cannot catch, but it makes the audio ends instantly)
         if (time.perf_counter() - start_time) < 0.5 and audio_control_status is None:
 
             logging.warning(f"Ignore loop : HTTP ERROR, Time (ns) = {time.perf_counter() - start_time}")
 
             #Get a new piece of info
             NextTrack = SongTrack.create_track(query = FinshedTrack.webpage_url,
-                                                requester=FinshedTrack.requester)
+                                                requester=FinshedTrack.requester,
+                                                request_message=FinshedTrack.request_message)
 
             #Replace the old info
             queue[0].formats = NextTrack.formats
@@ -206,6 +207,8 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
 
         #Finshed naturaly / skipped or rewind
         else:
+            queue[0].request_message = None
+            
             if audio_control_status == "REWIND": queue.rotate(1)
             elif queue_looping: queue.rotate(-1)    
             else: queue.popleft()
@@ -225,7 +228,7 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
 
                 target = text_channel
                 
-                if not queue.audio_message.content:
+                if queue.audio_message.reference is None:
                     #if within 3 message, found the now playing message then use that as the target for editing
 
                     history = target.history(limit = 3)
@@ -281,20 +284,31 @@ async def create_audio_message(Track:SongTrack,Target):
     #if it's found then dont disable
     control_buttons[1][2].disabled = not FoundLyrics 
 
+    message_info = {
+        "embed":audio_embed,
+        "components":control_buttons
+    }
+
+    audio_message_created = None
+
     if isinstance(Target,discord.Message):
-        await Target.edit(embed=audio_embed,components=control_buttons)
-        Target = await Target.channel.fetch_message(Target.id)
+        await Target.edit(**message_info)
+        audio_message_created = await Target.channel.fetch_message(Target.id)
 
     elif isinstance(Target,discord.TextChannel):
-        Target = await Target.send(embed=audio_embed,components=control_buttons)
+
+        if Track.request_message:
+            audio_message_created = await Track.request_message.reply(**message_info)
+        else:
+            audio_message_created = await Target.send(**message_info)
     
-    queue.audio_message = Target
+    queue.audio_message = audio_message_created
 
 
 async def clear_audio_message(guild:discord.Guild=None,specific_message:discord.Message = None):
 
     """
-    Edit the audio message to give it play again button and shorten it
+    Edit the audio message to give it play again button and make the embed smaller
     """
 
     audio_message:discord.Message = specific_message or guild.song_queue.audio_message
