@@ -30,7 +30,7 @@ async def webhook_log(self:logging.RootLogger,message=None,**options):
 def webhook_log_context(self:logging.RootLogger,ctx:commands.Context,*args,**kwargs):
     if self.isEnabledFor(logging.getLevelName("COMMAND_INFO")):
         asyncio.create_task(self.webhook_log(embed= discord.Embed(title = f"{ctx.guild.name+' | ' if ctx.guild else ''}{ctx.channel}",
-                                                                description = f"**{ctx.prefix}{ctx.command} {' '.join(ctx.args[2:])}**",
+                                                                description = f"**Used the {ctx.command} command ({ctx.message.content})**",
                                                                 color=discord.Color.from_rgb(255,255,255),
                                                                 timestamp = datetime.now()).set_author(
                                                                 name =ctx.author,
@@ -113,8 +113,8 @@ async def on_message(self,message:discord.Message):
                             avatar_url=message.author.avatar_url)
     if ctx.valid:
         await ctx.trigger_typing()
-        logging.webhook_log_context(ctx)
         await self.process_commands(message)
+        logging.webhook_log_context(ctx)
 
 commands.Bot.on_message = on_message
 

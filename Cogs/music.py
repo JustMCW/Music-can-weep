@@ -63,7 +63,8 @@ def search_from_youtube(query:str,
 
     #The Path to the search results
     QueryList = JsonData["contents"]["twoColumnSearchResultsRenderer"]["primaryContents"]\
-                        ["sectionListRenderer"]["contents"][0]["itemSectionRenderer"]["contents"] 
+                        ["sectionListRenderer"]["contents"]
+    QueryList = QueryList[len(QueryList)-2]["itemSectionRenderer"]["contents"] 
 
     #Filters items in the search result
     FilteredQueryList = []
