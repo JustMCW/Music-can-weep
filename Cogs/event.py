@@ -153,7 +153,7 @@ class Event(commands.Cog):
         elif isinstance(command_error, commands.errors.MissingPermissions):
             await ctx.reply(MessageString.missing_perms_msg)
         elif isinstance(command_error, commands.errors.BotMissingPermissions):
-            await ctx.reply(MessageString.bot_lack_perm_msg)
+            await ctx.reply(MessageString.bot_lack_perm_msg.format(', '.join(command_error.missing_perms)))
 
         # Arguments Errors
         elif isinstance(command_error, commands.errors.MissingRequiredArgument):
@@ -197,7 +197,7 @@ class Event(commands.Cog):
                 raise command_error.__cause__.with_traceback(command_error.__cause__.__traceback__)
         
 
-        #Uknowm / unhandled DISCORD errors
+        #Uknown/ unhandled DISCORD errors
         else:
             logging.webhook_log_error(command_error)
 

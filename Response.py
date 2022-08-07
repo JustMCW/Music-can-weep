@@ -49,7 +49,7 @@ class MessageString:
     queue_empty_msg = "📦 Queue is empty ... play some songs !"
     queue_disabled_msg = "This server has queuing disabled, run \"{}config queue on\" to turn it on again (requires admin permission)"
 
-    bot_lack_perm_msg = f"I am missing the permission to do that :("
+    bot_lack_perm_msg = "I am missing the permission : `[{}]` to do that :("
 
 # MessageString.fav_empty_msg
 
@@ -70,7 +70,9 @@ class Embeds:
         choices_string:str  = ""
         components    :list = []
 
+        
         for i,video in enumerate(search_result):
+            
             title = video["title"]["runs"][0]["text"]
             length = video["lengthText"]["simpleText"]
 

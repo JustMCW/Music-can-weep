@@ -116,7 +116,7 @@ class MusicCommands(commands.Cog):
         if queue:
             from discord_components import Button,ButtonStyle
             message = await ctx.send(f"There are {len(queue)} tracks in the queue, resume ?",components=[
-                Button(label="Yes",style=ButtonStyle.green)
+                Button(label="Yes",style=ButtonStyle.green,custom_id="resume_queue")
             ])
 
             try:
@@ -484,16 +484,19 @@ class MusicCommands(commands.Cog):
             logging.error(yt_dl_error)
             raise yt_dl_error
 
-        #Extraction Success
+        #Extraction Successful
         else:
             logging.info("Succesfully extraced info")
             #Stop current audio (if queuing is disabled)
-            if voice_client and not queue.enabled:
-                guild.voice_client.stop()
-
-            #Join Voice channel
-            elif author.voice:
-                await voice_state.join_voice_channel(guild,author.voice.channel)
+            if guild.voice_client: 
+                if not queue.enabled:
+                    guild.voice_client.stop()
+            else:
+                #Join Voice channel
+                if author.voice:
+                    await voice_state.join_voice_channel(guild,author.voice.channel)
+                else: #User left during the loading is taking place
+                    await reply_msg.edit(content = "User left the voice channel, the track was cancled.")
 
             queue.append(NewTrack)
             
@@ -519,7 +522,6 @@ class MusicCommands(commands.Cog):
                 target=Subtitles.sync_subtitles,
                 args=(queue,ctx.channel,NewTrack)
             ).start()
-            
             #Play the audio
             try:
                 NewTrack.play(guild.voice_client,
@@ -529,18 +531,20 @@ class MusicCommands(commands.Cog):
                                                                           start_time,
                                                                           voice_error))
             except discord.errors.ClientException as cl_exce:
-                if queue.enabled:
-                    await reply_msg.edit(embed=discord.Embed(title = f"\"{NewTrack.title}\" has been added to the queue",
-                                            color=discord.Color.from_rgb(255, 255, 255))
-                                .add_field(name="Length ↔️",
-                                            value=f"`{Convert.length_format(NewTrack.duration)}`")
-                                .add_field(name = "Position in queue 🔢",
-                                            value=len(queue)-1)
-                            .set_thumbnail(url = NewTrack.thumbnail))
-                    
+                if cl_exce.args[0] == 'Already playing audio.':
+                    if queue.enabled:
+                        await reply_msg.edit(embed=discord.Embed(title = f"\"{NewTrack.title}\" has been added to the queue",
+                                                color=discord.Color.from_rgb(255, 255, 255))
+                                    .add_field(name="Length ↔️",
+                                                value=f"`{Convert.length_format(NewTrack.duration)}`")
+                                    .add_field(name = "Position in queue 🔢",
+                                                value=len(queue)-1)
+                                .set_thumbnail(url = NewTrack.thumbnail))
+                        
+                    else:
+                        await ctx.reply("Unable to play this track because another tracks was requested at the same time")
                 else:
-                    await ctx.reply("Unable to play this track because another tracks was requested at the same time")
-                raise cl_exce
+                    raise cl_exce
             else:
                 await voice_state.create_audio_message(NewTrack,reply_msg or ctx.channel)
             
@@ -813,8 +817,11 @@ class MusicCommands(commands.Cog):
                     
                     #Leave the vc if after 30 second still no one is in vc
                     await asyncio.sleep(30)
-                    if voice_client and not voice_state.get_non_bot_vc_members(guild):
-                        await voice_client.disconnect()
+                    try:
+                        if voice_client and not voice_state.get_non_bot_vc_members(guild):
+                            await voice_client.disconnect()
+                    except commands.errors.NotInVoiceChannel:
+                        pass
         #---------------------#
         #Bot moved channel
         elif member == self.bot.user:
