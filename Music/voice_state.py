@@ -140,7 +140,7 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
         # print(queue.time_position)
         queue.audio_control_status = None
         queue.player_loop_passed.clear()
-        try:print(queue.time_position)
+        try:print(queue.time_position*queue.speed,queue[0].duration)
         except: ...
         #Check stage 1
 
