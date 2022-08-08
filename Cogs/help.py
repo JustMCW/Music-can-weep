@@ -23,7 +23,7 @@ class MCWHelpCommand(commands.HelpCommand):
 
     async def send_bot_help(self, mapping):
         channel:discord.DMChannel = self.get_destination()
-        description = "\n".join([f'**{cog.qualified_name.replace("_"," ")}**\n{", ".join(f"`{cmd.name}`" for cmd in cog.get_commands())}\n' for cog in mapping if cog is not None and len(cog.get_commands()) != 0 and cog.qualified_name != "bot_admin_commands"])
+        description = "\n".join([f'**{cog.qualified_name.replace("_"," ")}**\n{", ".join(f"`{cmd.name}`" for cmd in cog.get_commands())}\n' for cog in mapping if cog is not None and len(cog.get_commands()) != 0 and "admin" not in cog.qualified_name.lower()])
 
         await channel.send(embed= discord.Embed(title="🎶 This is a simple music bot ~",
                                                 description = f"Run `{self.clean_prefix}help command` for more infomation about that command\n\n"+description,

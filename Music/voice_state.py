@@ -63,10 +63,14 @@ def get_non_bot_vc_members(guild:discord.Guild)->list:
 
 
 async def join_voice_channel(guild:discord.Guild, voice_channel:discord.VoiceChannel):
+    #Check perm
+    if not list(voice_channel.permissions_for(guild.me))[20][1]:
+        raise commands.errors.BotMissingPermissions({"connect"})
     if guild.voice_client is None: 
         await voice_channel.connect()
     else: 
-        await guild.voice_client.move_to(voice_channel)
+        await guild.change_voice_state(channel=voice_channel)
+
 
 
 @playing_audio
@@ -94,28 +98,16 @@ def skip_audio(guild:discord.Guild):
 
 
 @playing_audio
-async def restart_audio(guild:discord.Guild,position:float=0):
+async def restart_audio(guild:discord.Guild):
     queue: SongQueue = guild.song_queue
-
-    if position and position>= queue[0].duration:
-        raise IndexError("Seek out of range")
 
     voice_client:discord.VoiceChannel = guild.voice_client
 
     queue.audio_control_status = "RESTART"
 
     voice_client.stop()
-    
-    abs_loop        :asyncio.AbstractEventLoop  = asyncio.get_running_loop()
-    new_start_time  :float                      =float(time.perf_counter())
 
-    queue[0].play(voice_client,
-                    volume=queue.volume,
-                    after = lambda voice_error: after_playing(abs_loop,
-                                                              guild,
-                                                              new_start_time,
-                                                              voice_error) ,
-                    position = position)
+    queue.play_first(voice_client)
 
 
 def after_playing(event_loop:asyncio.AbstractEventLoop,
@@ -145,10 +137,11 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
         voice_client         :discord.VoiceClient = guild.voice_client
         queue                :SongQueue           = guild.song_queue
         audio_control_status :str                 = queue.audio_control_status
-
+        # print(queue.time_position)
         queue.audio_control_status = None
         queue.player_loop_passed.clear()
-
+        try:print(queue.time_position)
+        except: ...
         #Check stage 1
 
         #Ensure in voice chat
@@ -256,12 +249,7 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
         
         #Play the audio
         new_start_time =float(time.perf_counter())
-        NextTrack.play(voice_client,
-                        after=lambda voice_error: after_playing(event_loop,
-                                                                    guild,
-                                                                    new_start_time,
-                                                                    voice_error),
-                        volume= queue.volume)
+        queue.play_first(voice_client)
 
     event_loop.create_task(_async_after())
 
@@ -277,8 +265,10 @@ async def create_audio_message(Track:SongTrack,Target):
     guild       :discord.Guild = Target.guild
     queue       :SongQueue     = guild.song_queue
 
+    queue.found_lyrics = FoundLyrics
+
     #the message for displaying and controling the audio
-    audio_embed     :discord.Embed = Embeds.audio_playing_embed(queue,FoundLyrics)
+    audio_embed     :discord.Embed = Embeds.audio_playing_embed(queue)
     control_buttons :list          = Buttons.AudioControllerButtons
     
     #if it's found then dont disable
@@ -318,7 +308,7 @@ async def clear_audio_message(guild:discord.Guild=None,specific_message:discord.
 
     newEmbed:discord.Embed = audio_message.embeds[0]
 
-    for _ in range(4):
+    for _ in range(7):
         newEmbed.remove_field(2)
 
     if newEmbed.image:
@@ -359,22 +349,5 @@ async def update_audio_msg(guild):
 
         if audio_msg: 
 
-            new_embed:discord.Embed = audio_msg.embeds[0]
-            
-            #Replacing the orignal states field
-            for _ in range(3):
-                new_embed.remove_field(3)
-
-
-            new_embed.insert_field_at(index=3,
-                                    name="🔊 Voice Channel",
-                                    value=f"*{get_current_vc(guild).mention}*")
-            new_embed.insert_field_at(index=4,
-                                    name="📶 Volume",
-                                    value=f"`{get_volume_percentage(guild)}%`")
-            new_embed.insert_field_at(index=5,
-                                    name="🔂 Looping",
-                                    value=f"**{Convert.bool_to_str(guild.song_queue.looping)}**")
-
             #Apply the changes                  
-            await audio_msg.edit(embed=new_embed)
+            await audio_msg.edit(embed=Embeds.audio_playing_embed(guild.song_queue))

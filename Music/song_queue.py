@@ -12,10 +12,16 @@ class SongQueue(deque):
         self.guild                :discord.Guild   = guild 
 
         self.volume               :float           = BOT_INFO.InitialVolume
+
+        self.pitch                :float           = 1
+        self.speed                :float           = 1
+
         self.audio_control_status :str             = None
 
         self.looping              :bool            = BOT_INFO.InitialLooping
         self.queue_looping        :bool            = BOT_INFO.InitialQueueLooping
+
+        self.found_lyrics         :bool            = None
 
         self.audio_message        :discord.Message = None
 
@@ -54,7 +60,34 @@ class SongQueue(deque):
         voicec    :discord.VoiceClient = self.guild.voice_client
         loop_pass :list                = self.player_loop_passed
 
-        return (voicec._player.loops + sum(loop_pass[:-1] if voicec.is_paused() else loop_pass)) // 50
+        return ((voicec._player.loops + sum(loop_pass[:-1] if voicec.is_paused() else loop_pass)) * self.speed) // 50
+
+
+    def play_first(self,voice_client:discord.VoiceClient,**kwargs):
+        """
+        Plays the first track in the queue, while also appling the volume, pitch and sound from the queue to the track
+        """
+        from Music.voice_state import after_playing
+        import time
+        import asyncio
+
+        start_time = float(time.perf_counter())
+        event_loop = asyncio.get_running_loop()
+
+
+        self[0].play(
+            voice_client,
+            after= lambda voice_error: after_playing(event_loop,
+                                                    voice_client.guild,
+                                                    start_time,
+                                                    voice_error),
+
+            volume = self.volume,
+            pitch  = self.pitch,
+            speed  = self.speed,
+
+            **kwargs
+        )
 
     def swap(self,pos1:int,pos2:int) -> None:
         

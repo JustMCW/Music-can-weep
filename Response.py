@@ -88,7 +88,7 @@ class Embeds:
 
 
     @staticmethod
-    def audio_playing_embed(queue,foundLyrics:bool) -> discord.Embed:
+    def audio_playing_embed(queue) -> discord.Embed:
         """the discord embed for displaying the audio that is playing"""
         from Music import voice_state
         
@@ -112,14 +112,21 @@ class Embeds:
                 .add_field(name="↔️ Length",
                             value=f'`{Convert.length_format(getattr(SongTrackPlaying,"duration"))}`')\
                 .add_field(name="📝 Lyrics",
-                            value=f'*{"Available" if foundLyrics else "Unavailable"}*')\
+                            value=f'*{"Available" if queue.found_lyrics else "Unavailable"}*')\
+                \
+                .add_field(name="📶 Volume ",
+                            value=f"`{voice_state.get_volume_percentage(queue.guild)}%`")\
+                .add_field(name="⏩ Speed",
+                            value=f"`{queue.speed:.2f}`")\
+                .add_field(name="ℹ️ Pitch",
+                            value=f'`{queue.pitch:.2f}`')\
                 \
                 .add_field(name="🔊 Voice Channel",
                             value=f"{queue.guild.voice_client.channel.mention}")\
-                .add_field(name="📶 Volume ",
-                            value=f"`{voice_state.get_volume_percentage(queue.guild)}%`")\
                 .add_field(name="🔂 Looping",
-                            value=f'**{Convert.bool_to_str(queue.looping)}**')
+                            value=f'**{Convert.bool_to_str(queue.looping)}**')\
+                .add_field(name="🔂 Queue looping",
+                            value=f'**{Convert.bool_to_str(queue.queue_looping)}**')\
 
     NoTrackSelectedEmbed = discord.Embed(title=f"{Emojis.cute_panda} No track was selected !",
                                         description=f"You thought for too long ( {2} minutes ), use the command again !",

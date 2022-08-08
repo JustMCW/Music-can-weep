@@ -54,12 +54,22 @@ class SongTrack:
             voice_client:discord.VoiceClient,
             after:callable(str)=None,
             volume:float=1,
-            position:float=0):
-      
-        FFMPEG_OPTION ={
+            pitch:float = 1, #slowed
+            speed:float = 1,
+            position:float=0
+        ):
+        """
+        pitch 1 + offset , speed 1
+        pitch 0.5 + offset, speed 2
+        higher pitch, higher speed.
+        """
+        offset = 1.086378737541528 #1.105 #  0.187 # 0.089
+        FFMPEG_OPTION ={ #0.09 SUPER TINY FASTER
                         "before_options":"-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-                        "options": f"-vn -ss {position}"
+                        "options": f'-vn -ss {position} -af asetrate={44100 * pitch * offset},aresample=44100,atempo={max(round(speed/pitch,8),0.5)}' # -f:a atempo={speed} atempo={speed * 1/pitch}
                        }
+
+
         
         src_url:str = self.formats[0].get("url")
         

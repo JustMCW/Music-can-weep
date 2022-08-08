@@ -3,7 +3,6 @@ import discord
 import logging
 import requests
 import re
-import threading
 
 import Convert
 
@@ -111,7 +110,7 @@ class Subtitles:
         Sync the subtitle with the audio
         """
         
-        if not queue.sync_lyrics:
+        if True or not queue.sync_lyrics:
             return logging.info("Syncing disabled")
 
         sub_options:dict = getattr(song_track,"subtitles",None)

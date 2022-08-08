@@ -197,13 +197,7 @@ class MusicCommands(commands.Cog):
                 args=(queue,ctx.channel,current_track)
             ).start()
 
-            start_time = float(time.perf_counter())
-            current_track.play(guild.voice_client,
-                                volume = queue.volume,
-                                after = lambda voice_error: voice_state.after_playing(self.bot.loop,
-                                                                                    guild,
-                                                                                    start_time,
-                                                                                    voice_error))
+            queue.play_first(guild.voice_client)
 
             await voice_state.create_audio_message(current_track, await ctx.send("▶️ Continue to play tracks in the queue"))
         
@@ -233,28 +227,30 @@ class MusicCommands(commands.Cog):
             return voicec.stop()
 
         voice_state.pause_audio(guild)
-        for _ in range(fwd_sec * 50):
+        for _ in range(round(fwd_sec * 50 / queue.speed)):
             try: voicec.source.read()
             except AttributeError: break #Finshed the audio
 
         queue.player_loop_passed.append(fwd_sec * 50)
         voice_state.resume_audio(guild)
 
-        await ctx.reply(f"*⏭ Fast-fowarded for {Convert.length_format(fwd_sec)} seconds*")
+        await ctx.reply(f"*⏭ Fast-fowarded for {Convert.length_format(fwd_sec)}*")
 
     @commands.guild_only()
     @commands.command(aliases=["jump"],
                       description="⏏️ Move the time position of the current audio, format : [Hours:Minutes:Seconds] or literal seconds like 3600 (an hour). This is a experimental command.",
                       usage="{}seek 2:30")
     async def seek(self,ctx:commands.Context,*,time_position):
-
+        
         try:
             position_sec:float = Convert.time_to_sec(time_position)
+            if position_sec >= ctx.guild.song_queue[0].duration:
+                await ctx.voice_client.stop()
             await voice_state.restart_audio(ctx.guild,position=position_sec)
+        except AttributeError:
+            raise discord.errors.NoAudioPlaying
         except ValueError:
             await ctx.reply(f"Invaild time position, format : {ctx.prefix}{ctx.invoked_with} [Hours:Minutes:Seconds]")
-        except IndexError:
-            await ctx.voice_client.stop()
         else:
             await ctx.reply(f"⏏️ Moving audio's time position to `{Convert.length_format(position_sec)}` (It might take a while depend on the length of the audio)")
 
@@ -332,6 +328,52 @@ class MusicCommands(commands.Cog):
 
         await ctx.reply(f"🔊 Volume has been set to {round(volume_percentage,3)}%")
         await voice_state.update_audio_msg(guild)
+
+    @commands.guild_only()
+    @commands.command(aliasas=[],
+                      description="Changes the pitch of the audio playing. ",
+                      usage="{}pitch 1.1")
+    async def pitch(self,ctx:commands.Context, new_pitch):
+
+        guild = ctx.guild
+
+        try:
+            if float(new_pitch) <= 0:
+                raise ValueError
+
+            #speed / pitch >= 0.5
+            guild.song_queue.pitch = float(new_pitch)
+        except ValueError:
+            return await ctx.reply("Invalid pitch.")
+        if guild.voice_client and guild.voice_client._player:
+            await voice_state.restart_audio(ctx.guild) #position= ctx.guild.song_queue.time_position,
+        await ctx.reply(f"Successful changed the pitch to `{new_pitch}`.")
+        await voice_state.update_audio_msg(guild)
+
+    commands.guild_only()
+    @commands.command(aliasas=[],
+                      description="Changes the speed of the audio playing, can range between `0.5` - `5` ",
+                      usage="{}speed 1.1")
+    async def speed(self,ctx:commands.Context, new_speed):
+        guild = ctx.guild
+
+        try:
+            new_speed = float(new_speed)
+            if new_speed <= 0:
+                voice_state.pause_audio(guild)
+                return await ctx.reply(MessageString.paused_audio_msg)
+            elif new_speed < 0.5 or new_speed > 5:
+                return await ctx.reply("Speed can only range between `0.5-5`.")
+
+            guild.song_queue.speed = new_speed
+        except ValueError:
+            return await ctx.reply("Invalid speed.")
+        if guild.voice_client and guild.voice_client._player:
+            await voice_state.restart_audio(guild) #position= ctx.guild.song_queue.time_position,
+
+        await ctx.reply(f"Successful changed the speed to `{new_speed}`.")
+        await voice_state.update_audio_msg(guild)
+
 
     @commands.guild_only()
     @commands.command(aliases=["looping","repeat"],
@@ -516,7 +558,6 @@ class MusicCommands(commands.Cog):
                 NewTrack = queue[0]
 
             #Repeat function after the audio
-            start_time = float(time.perf_counter())
 
             threading.Thread(
                 target=Subtitles.sync_subtitles,
@@ -524,12 +565,7 @@ class MusicCommands(commands.Cog):
             ).start()
             #Play the audio
             try:
-                NewTrack.play(guild.voice_client,
-                            volume = queue.volume,
-                            after= lambda voice_error: voice_state.after_playing(self.bot.loop,
-                                                                          guild,
-                                                                          start_time,
-                                                                          voice_error))
+                queue.play_first(guild.voice_client)
             except discord.errors.ClientException as cl_exce:
                 if cl_exce.args[0] == 'Already playing audio.':
                     if queue.enabled:
@@ -675,7 +711,6 @@ class MusicCommands(commands.Cog):
 
         queue.clear()
         queue.extend(track_in_vc)
-
         await ctx.reply(f"Successfully removed `{remove_count}` tracks from the queue.")
 
     @commands.guild_only()
@@ -741,6 +776,9 @@ class MusicCommands(commands.Cog):
 
         queue.queue_looping = new_qloop
         await ctx.reply(MessageString.queue_loop_audio_msg.format(Convert.bool_to_str(new_qloop)))
+        await voice_state.update_audio_msg(guild)
+
+
 
 #----------------------------------------------------------------#
 
@@ -865,7 +903,7 @@ class MusicCommands(commands.Cog):
             if not btn.custom_id.isnumeric() and not btn.responded and btn.message.embeds:
                 new_embed:discord.Embed = btn.message.embeds[0]
                 await btn.edit_origin(content=btn.message.content)
-                if len(new_embed.fields) == 6:
+                if len(new_embed.fields) == 9:
                     await voice_state.clear_audio_message(specific_message=btn.message)
 
         elif btn.custom_id == Buttons.SubtitlesButton.custom_id:
