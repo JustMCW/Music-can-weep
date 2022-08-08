@@ -942,7 +942,7 @@ class MusicCommands(commands.Cog):
             return await audio_message.reply("*🎧 This is the audio playing right now ~* [{}/{}]".format(Convert.length_format(queue.time_position),
                                                                                                          Convert.length_format(queue[0].duration)))
         #Or not
-        await ctx.send(f"🎶 Now playing in {voice_state.get_current_vc(ctx.guild).mention} - **{queue[0].get('title')}**")
+        await ctx.send(f"🎶 Now playing in {voice_state.get_current_vc(ctx.guild).mention} - **{queue[0].title}**")
 #----------------------------------------------------------------#
 #Favourites
 
