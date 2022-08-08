@@ -345,8 +345,8 @@ class MusicCommands(commands.Cog):
             guild.song_queue.pitch = float(new_pitch)
         except ValueError:
             return await ctx.reply("Invalid pitch.")
-        if guild.voice_client and guild.voice_client._player:
-            await voice_state.restart_audio(ctx.guild) #position= ctx.guild.song_queue.time_position,
+        if guild.voice_client and guild.voice_client._player and guild.song_queue:
+            await voice_state.restart_audio(ctx.guild)
         await ctx.reply(f"Successful changed the pitch to `{new_pitch}`.")
         await voice_state.update_audio_msg(guild)
 
@@ -368,8 +368,8 @@ class MusicCommands(commands.Cog):
             guild.song_queue.speed = new_speed
         except ValueError:
             return await ctx.reply("Invalid speed.")
-        if guild.voice_client and guild.voice_client._player:
-            await voice_state.restart_audio(guild) #position= ctx.guild.song_queue.time_position,
+        if guild.voice_client and guild.voice_client._player and guild.song_queue:
+            await voice_state.restart_audio(guild)
 
         await ctx.reply(f"Successful changed the speed to `{new_speed}`.")
         await voice_state.update_audio_msg(guild)
