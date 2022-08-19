@@ -1,7 +1,6 @@
 #Built-ins
 import asyncio
 import logging
-import time
 import re
 import os
 import datetime
@@ -227,11 +226,10 @@ class MusicCommands(commands.Cog):
             return voicec.stop()
 
         voice_state.pause_audio(guild)
-        for _ in range(round(fwd_sec * 50 / queue.speed)):
-            try: voicec.source.read()
-            except AttributeError: break #Finshed the audio
+        add_loop = round(fwd_sec * 50 / queue.speed)
+        queue._raw_fwd(add_loop) #Finshed the audio
 
-        queue.player_loop_passed.append(fwd_sec * 50)
+        queue.player_loop_passed.append(add_loop)
         voice_state.resume_audio(guild)
 
         await ctx.reply(f"*⏭ Fast-fowarded for {Convert.length_format(fwd_sec)}*")
@@ -246,7 +244,7 @@ class MusicCommands(commands.Cog):
             position_sec:float = Convert.time_to_sec(time_position)
             if position_sec >= ctx.guild.song_queue[0].duration:
                 await ctx.voice_client.stop()
-            await voice_state.restart_audio(ctx.guild,position=position_sec)
+            await voice_state.restart_audio(ctx.guild,position=position_sec/ctx.guild.song_queue.speed)
         except AttributeError:
             raise discord.errors.NoAudioPlaying
         except ValueError:
@@ -278,7 +276,11 @@ class MusicCommands(commands.Cog):
     @commands.command(description='⏹ stop the current audio from playing 🚫',
                       usuge="{}stop")
     async def stop(self, ctx:commands.Context):
+        """
+        Planning : 
 
+        
+        """
         #Checking
         if not ctx.voice_client:
             raise commands.errors.NotInVoiceChannel
@@ -336,17 +338,20 @@ class MusicCommands(commands.Cog):
     async def pitch(self,ctx:commands.Context, new_pitch):
 
         guild = ctx.guild
-
+        queue = guild.song_queue
         try:
             if float(new_pitch) <= 0:
                 raise ValueError
 
             #speed / pitch >= 0.5
-            guild.song_queue.pitch = float(new_pitch)
+            queue.pitch = float(new_pitch)
         except ValueError:
             return await ctx.reply("Invalid pitch.")
-        if guild.voice_client and guild.voice_client._player and guild.song_queue:
-            await voice_state.restart_audio(ctx.guild)
+        if guild.voice_client and guild.voice_client._player and queue:
+            voice_state.pause_audio(guild)
+            await voice_state.restart_audio(ctx.guild)#,passing=True,position = (queue._player_loops)/50)
+            
+
         await ctx.reply(f"Successful changed the pitch to `{new_pitch}`.")
         await voice_state.update_audio_msg(guild)
 
@@ -415,7 +420,9 @@ class MusicCommands(commands.Cog):
         6.Play it if there is no other tracks in the queue
         7.Send the discord message indicating the audio track playing
         """
-       
+        
+
+
         guild       : discord.Guild       = ctx.guild
         author      : discord.Member      = getattr(btn,"author",ctx.author)
         voice_client: discord.VoiceClient = ctx.voice_client or author.voice #It can be either our bots vc or the user's vc
@@ -437,11 +444,13 @@ class MusicCommands(commands.Cog):
         #URL
         elif "https://" in query or "HTTP://" in query:
             #Match the link in the query
-            youtube_link_match_result = re.findall(r"(https|HTTP)://(youtu\.be|www.youtube.com)(/shorts)?/(watch\?v=)?([A-Za-z0-9\-_]{11})",query)
+            yt_vid_link_matches = re.findall(r"(https|HTTP)://(youtu\.be|www.youtube.com)(/shorts)?/(watch\?v=)?([A-Za-z0-9\-_]{11})",query)
+            # yt_pl_link_matches = re.findall(r"(https|HTTP)://(youtu\.be|www.youtube.com)(/shorts)?/(watch\?v=)?([A-Za-z0-9\-_]{11})",query)
+            #https://www.youtube.com/playlist?list=PLVl73jKWzwn-20H8azDxpg8Ewop5DlZzT
             
             #Matched
-            if youtube_link_match_result: 
-                query = "https://www.youtube.com/watch?v="+youtube_link_match_result[0][4]
+            if yt_vid_link_matches: 
+                query = "https://www.youtube.com/watch?v="+yt_vid_link_matches[0][4]
                 reply_msg = await ctx.send(f"{Emojis.YOUTUBE_ICON} A Youtube link is selected")
 
             #Sound cloud link
@@ -531,7 +540,7 @@ class MusicCommands(commands.Cog):
             logging.info("Succesfully extraced info")
             #Stop current audio (if queuing is disabled)
             if guild.voice_client: 
-                if not queue.enabled:
+                if not (await queue.enabled):
                     guild.voice_client.stop()
             else:
                 #Join Voice channel
@@ -568,7 +577,7 @@ class MusicCommands(commands.Cog):
                 queue.play_first(guild.voice_client)
             except discord.errors.ClientException as cl_exce:
                 if cl_exce.args[0] == 'Already playing audio.':
-                    if queue.enabled:
+                    if await queue.enabled:
                         await reply_msg.edit(embed=discord.Embed(title = f"\"{NewTrack.title}\" has been added to the queue",
                                                 color=discord.Color.from_rgb(255, 255, 255))
                                     .add_field(name="Length ↔️",
@@ -594,7 +603,7 @@ class MusicCommands(commands.Cog):
         
         guild:discord.Guild = ctx.guild
 
-        if not guild.song_queue.enabled: raise commands.errors.QueueDisabled("Queuing is disabled in {0}.".format(guild.name))
+        if not (await guild.song_queue.enabled): raise commands.errors.QueueDisabled("Queuing is disabled in {0}.".format(guild.name))
 
         if ctx.invoked_subcommand is None:
             def get_params_str(cmd)->str:
@@ -640,7 +649,8 @@ class MusicCommands(commands.Cog):
             raise commands.errors.QueueEmpty("There must be songs in the queue to be removed.")
 
         if ctx.invoked_subcommand is None:     
-
+            #Removing by position
+            
             position:str = ctx.subcommand_passed
 
             if not position:
@@ -656,14 +666,10 @@ class MusicCommands(commands.Cog):
             else:
                 poped_track = queue.get(position)
                 
-                #Also skip the audio if the one we are removing is currentl yplaying
-                if position == 0 and ctx.voice_client.source:
-                    voice_state.skip_audio(guild)
-                    if queue.queue_looping: #
-                        del queue[0]
-                else:
-                    del queue[position]
+                del queue[position]
 
+                if position == 0 and ctx.voice_client and ctx.voice_client.source:
+                    voice_state.restart_audio(guild)
                 
             
                 await ctx.reply(f"**#{position}** - `{poped_track.title}` has been removed from the queue")

@@ -39,7 +39,7 @@ class OtherCommands(commands.Cog):
 
         try:
             status_embed.add_field(name = 'Server Prefix',
-                                  value = f'`{ctx.guild.database.get("prefix")}`'
+                                  value = f'`{(await ctx.guild.database).get("prefix")}`'
                       ).add_field(name = 'Server Voice Channel',
                                   value = f"`{ctx.voice_client.channel if ctx.voice_client else 'None'}`")
         except AttributeError: 
@@ -71,7 +71,7 @@ class OtherCommands(commands.Cog):
         if len(new_prefix) > 5: 
             return await ctx.reply("🚫 Prefix cannot be longer than 5 characters")
         
-        Management.overwrite_server_database(ctx.guild,
+        await Management.overwrite_server_database(ctx.guild,
                                             key="prefix",
                                             value=new_prefix)
 
@@ -86,7 +86,7 @@ class OtherCommands(commands.Cog):
         if mode == False and ctx.guild.song_queue:
             return await ctx.reply(f"There are still tracks remaining in the queue, it must be empty to perform this command. ( `{ctx.prefix}queue clear` will clear it for you )")
 
-        Management.overwrite_server_database(ctx.guild,
+        await Management.overwrite_server_database(ctx.guild,
                                             key="queuing",
                                             value=mode)
         await ctx.reply("Song tracks will now queue up when being requested" if mode else "Song tracks will now be instantly played when requested")

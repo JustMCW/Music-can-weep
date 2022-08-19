@@ -44,24 +44,34 @@ class SongQueue(deque):
         except IndexError: return None
     
     @property
-    def enabled(self) -> bool:
-        return self.guild.database.get("queuing")
+    async def enabled(self) -> bool:
+        return (await self.guild.database).get("queuing")
 
     @property
-    def sync_lyrics(self) -> bool:
-        return self.guild.database.get("sync_lyrics")
+    async def sync_lyrics(self) -> bool:
+        return (await self.guild.database).get("sync_lyrics")
 
     @property
     def total_length(self) -> int:
         return sum( map( lambda t: t.duration, self ) ) 
 
     @property
-    def time_position(self) -> int:
+    def _player_loops(self) -> int:
         voicec    :discord.VoiceClient = self.guild.voice_client
         loop_pass :list                = self.player_loop_passed
 
-        return ((voicec._player.loops + sum(loop_pass[:-1] if voicec.is_paused() else loop_pass)) * self.speed) // 50
+        return voicec._player.loops + sum(loop_pass[:-1] if voicec.is_paused() else loop_pass)
 
+    @property
+    def time_position(self) -> int:
+        return (self._player_loops * self.speed) // 50
+
+    def _raw_fwd(self,loop_count : int):
+
+        voicec = self.guild.voice_client
+        for _ in range(loop_count):
+            try: voicec.source.read()
+            except AttributeError: break
 
     def play_first(self,voice_client:discord.VoiceClient,**kwargs):
         """
@@ -83,8 +93,8 @@ class SongQueue(deque):
                                                     voice_error),
 
             volume = self.volume,
-            pitch  = self.pitch,
-            speed  = self.speed,
+            pitch  = self.pitch ,
+            speed  = self.speed ,
 
             **kwargs
         )

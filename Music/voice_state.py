@@ -98,16 +98,16 @@ def skip_audio(guild:discord.Guild):
 
 
 @playing_audio
-async def restart_audio(guild:discord.Guild):
+async def restart_audio(guild:discord.Guild,passing = False,**kwargs):
     queue: SongQueue = guild.song_queue
 
     voice_client:discord.VoiceChannel = guild.voice_client
 
-    queue.audio_control_status = "RESTART"
+    queue.audio_control_status = "RESTART" if not passing else "PASS"
 
     voice_client.stop()
 
-    queue.play_first(voice_client)
+    queue.play_first(voice_client,**kwargs)
 
 
 def after_playing(event_loop:asyncio.AbstractEventLoop,
@@ -137,8 +137,10 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
         voice_client         :discord.VoiceClient = guild.voice_client
         queue                :SongQueue           = guild.song_queue
         audio_control_status :str                 = queue.audio_control_status
-        # print(queue.time_position)
+
         queue.audio_control_status = None
+        if audio_control_status == "PASS": return
+        
         queue.player_loop_passed.clear()
         try:print(queue.time_position*queue.speed,queue[0].duration)
         except: ...
@@ -148,7 +150,7 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
         if not voice_client or not voice_client.is_connected():
             await clear_audio_message(guild)
 
-            if not queue.enabled:
+            if not (await queue.enabled):
                 queue.popleft()
 
             await clean_up_queue(guild)
@@ -193,7 +195,7 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
             ).start()
         
         #Queuing disabled
-        elif not queue.enabled:
+        elif not (await queue.enabled):
             queue.popleft()
             await clear_audio_message(guild)
             return logging.info("Queue disabled")
@@ -328,7 +330,7 @@ async def clean_up_queue(guild:discord.Guild):
     queue:SongQueue = guild.song_queue
     clear_after = 600
 
-    if queue and queue.guild.database.get("auto_clear_queue"):
+    if queue and (await queue.guild.database).get("auto_clear_queue"):
         logging.info(f"Wait for {clear_after} sec then clear queue")
         await asyncio.sleep(clear_after)
         

@@ -59,26 +59,29 @@ class SongTrack:
             position:float=0
         ):
         """
-        pitch 1 + offset , speed 1
-        pitch 0.5 + offset, speed 2
+        pitch 1   , speed 1
+        pitch 0.5 , speed 2
         higher pitch, higher speed.
+        speed = set_speed / set_pitch
         """
-        offset = 1.086378737541528 #1.105 #  0.187 # 0.089
-        FFMPEG_OPTION ={ #0.09 SUPER TINY FASTER
-                        "before_options":"-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-                        "options": f'-vn -ss {position} -af asetrate={44100 * pitch * offset},aresample=44100,atempo={max(round(speed/pitch,8),0.5)}' # -f:a atempo={speed} atempo={speed * 1/pitch}
-                       }
-
-
         
-        src_url:str = self.formats[0].get("url")
+
+        selected_format : dict = None
         
-        if src_url.startswith("https://manifest.googlevideo.com"):
-            logging.info("Is fragment url")
-            try:
-                src_url = self.formats[0]["fragment_base_url"]
-            except KeyError:
-                logging.WARNING(src_url)
+        #Pick the right format in which we can use ffmpeg on it.
+        for fm in self.formats:
+            if fm["url"].startswith("https://rr"):
+                selected_format = fm
+                break
+        
+        src_url   = selected_format["url"]
+        audio_asr = selected_format["asr"]
+        #offset = 1.086378737541528 #1.105 #  0.187 # 0.089 Stupid stuff i have done b4
+        print(position)
+        FFMPEG_OPTION = {
+            "before_options":"-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+            "options": f'-vn -ss {position} -af asetrate={audio_asr * pitch},aresample={audio_asr},atempo={max(round(speed/pitch,8),0.5)}' # -f:a atempo={speed} atempo={speed * 1/pitch}
+        }
 
         try:
             src = discord.FFmpegPCMAudio(source=src_url, **FFMPEG_OPTION)
@@ -91,5 +94,3 @@ class SongTrack:
                                                 volume = volume)
         logging.info("Successfully Transformed into PCM")
         voice_client.play(vol_src,after=after)
-    
-
