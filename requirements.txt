@@ -1,6 +1,6 @@
 
 discord >=1.7.3
-discord-components>=2.1.2
+discord-components
 PyNaCl~=1.5.0
 
 langcodes>=3.3.0
