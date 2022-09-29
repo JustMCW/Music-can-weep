@@ -2,7 +2,6 @@ import asyncio
 import discord
 from discord import ButtonStyle,Interaction
 from discord.ui import View,Button,Select
-import interactions
 from Response import MessageString
 from subtitles import Subtitles
 
