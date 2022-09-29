@@ -86,10 +86,10 @@ class Event(commands.Cog):
                     raise
             except commands.errors.ExtensionAlreadyLoaded:
                 return
-            except commands.errors.ExtensionFailed as ExtFailure:
-                logging.error(ExtFailure)
-                await self.bot.close()
-                raise ExtFailure.__cause__.with_traceback(ExtFailure.__cause__.__traceback__)
+            # except commands.errors.ExtensionFailed as ExtFailure:
+            #     logging.error(ExtFailure)
+            #     await self.bot.close()
+            #     raise ExtFailure.__cause__.with_traceback(ExtFailure.__cause__.__traceback__)
 
         #Since we cannot edit it direactly
         self.bot.get_command("help").description = "☁️ Send guides about this bot and it's commands"
