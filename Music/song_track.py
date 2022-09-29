@@ -113,9 +113,9 @@ class SongTrack:
             
         #     src = discord.FFmpegPCMAudio(source=self.src_url, **FFMPEG_OPTION)
         # except discord.ClientException as e:
-        logging.info(f"{e}, looking for the ffmpeg locally")
+        # logging.info(f"{e}, looking for the ffmpeg locally")
         src = discord.FFmpegPCMAudio(executable="./ffmpeg",
-                                        source=self.src_url, **FFMPEG_OPTION)
+                                    source=self.src_url, **FFMPEG_OPTION)
         
         vol_src = PCMVolumeTimePositionTransformer(original = src,
                                                    volume = volume)
