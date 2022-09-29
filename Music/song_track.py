@@ -109,13 +109,13 @@ class SongTrack:
             "options": f'-vn -ss {position} -af asetrate={audio_asr * pitch},aresample={audio_asr},atempo={max(round(speed/pitch,8),0.5)}' # -f:a atempo={speed} atempo={speed * 1/pitch}
         }
         
-        # try:
+        try:
             
-        #     src = discord.FFmpegPCMAudio(source=self.src_url, **FFMPEG_OPTION)
-        # except discord.ClientException as e:
-        # logging.info(f"{e}, looking for the ffmpeg locally")
-        src = discord.FFmpegPCMAudio(executable="./ffmpeg",
-                                    source=self.src_url, **FFMPEG_OPTION)
+            src = discord.FFmpegPCMAudio(source=self.src_url, **FFMPEG_OPTION)
+        except discord.ClientException as e:
+            logging.info(f"{e}, looking for the ffmpeg locally")
+            src = discord.FFmpegPCMAudio(executable="./ffmpeg",
+                                         source=self.src_url, **FFMPEG_OPTION)
         
         vol_src = PCMVolumeTimePositionTransformer(original = src,
                                                    volume = volume)
