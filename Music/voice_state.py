@@ -6,11 +6,9 @@ import threading
 
 from discord.ext      import commands
 
-import Convert
-
 from main             import BOT_INFO
 
-from Music.song_queue import SongQueue
+from Music.song_queue import SongQueue,AudioControlState
 from Music.song_track import SongTrack
 
 from Buttons          import Buttons
@@ -78,32 +76,29 @@ def pause_audio(guild:discord.Guild):
     voice_client:discord.VoiceClient = guild.voice_client
     voice_client.pause()
 
-    #Since the loop count resets after we pause and resume it so we have to save the loop count (basically the time position)
-    guild.song_queue.player_loop_passed.append(voice_client._player.loops)
-
 @playing_audio
 def resume_audio(guild:discord.Guild):
     guild.voice_client.resume()
 
 @playing_audio
-def rewind_audio(guild:discord.Guild):
-    guild.song_queue.audio_control_status = "REWIND"
+def rewind_track(guild:discord.Guild):
+    guild.song_queue.audio_control_status = AudioControlState.REWIND
     guild.voice_client.stop()
 
 
 @playing_audio
-def skip_audio(guild:discord.Guild):
-    guild.song_queue.audio_control_status = "SKIP"
+def skip_track(guild:discord.Guild):
+    guild.song_queue.audio_control_status = AudioControlState.SKIP
     guild.voice_client.stop()
 
 
 @playing_audio
-async def restart_audio(guild:discord.Guild,passing = False,**kwargs):
+async def restart_track(guild:discord.Guild,**kwargs):
     queue: SongQueue = guild.song_queue
 
     voice_client:discord.VoiceChannel = guild.voice_client
 
-    queue.audio_control_status = "RESTART" if not passing else "PASS"
+    queue.audio_control_status = AudioControlState.RESTART
 
     voice_client.stop()
 
@@ -139,9 +134,7 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
         audio_control_status :str                 = queue.audio_control_status
 
         queue.audio_control_status = None
-        if audio_control_status == "PASS": return
         
-        queue.player_loop_passed.clear()
         try:print(queue.time_position*queue.speed,queue[0].duration)
         except: ...
         #Check stage 1
@@ -158,10 +151,10 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
             return logging.info("Ignore loop : NOT IN VOICE CHANNEL")
         
         #Ignore if some commands are triggered
-        if audio_control_status == "RESTART":
+        if audio_control_status == AudioControlState.RESTART:
             return logging.info(f"Ignore loop : RESTART")
 
-        if audio_control_status == "CLEAR":
+        if audio_control_status == AudioControlState.CLEAR:
             await clear_audio_message(guild)
 
             return logging.info("Ignore loop : CLEAR QUEUE")
@@ -202,11 +195,15 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
 
         #Finshed naturaly / skipped or rewind
         else:
+
             queue[0].request_message = None
             
-            if audio_control_status == "REWIND": queue.rotate(1)
+            if audio_control_status == AudioControlState.REWIND: queue.appendleft(queue.history.pop(-1))
             elif queue_looping: queue.rotate(-1)    
             else: queue.popleft()
+
+            if audio_control_status != AudioControlState.REWIND:
+                queue.history.append(FinshedTrack)
 
             #Get the next track ( first song in the queue )
             NextTrack = queue.get(0)
@@ -220,16 +217,11 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
             #To prevent sending the same audio message again
             if NextTrack != FinshedTrack:
                 logging.info(f"Play next track : {NextTrack.title}")
-
                 target = text_channel
                 
                 if queue.audio_message.reference is None:
                     #if within 3 message, found the now playing message then use that as the target for editing
-
-                    history = target.history(limit = 3)
-                    history = await history.flatten()
-                    
-                    for msg in history:
+                    async for msg in target.history(limit = 3):
                         if msg.id == queue.audio_message.id:
                             target = await target.fetch_message(msg.id)
 
@@ -245,7 +237,7 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
                 ).start()
             
             #Skipping the only track in the queue
-            elif audio_control_status == "SKIP":
+            elif audio_control_status == AudioControlState.SKIP:
                 await text_channel.send("There are no other tracks in queue to be played.")
 
         
@@ -263,22 +255,20 @@ async def create_audio_message(Track:SongTrack,Target):
     """
 
     #Getting the subtitle
-    FoundLyrics :bool          = Subtitles.find_subtitle_and_language(getattr(Track,"subtitles",None))[0]
+    found_lyrics :bool          = Subtitles.find_subtitle_and_language(getattr(Track,"subtitles",None))[0]
     guild       :discord.Guild = Target.guild
     queue       :SongQueue     = guild.song_queue
 
-    queue.found_lyrics = FoundLyrics
+    queue.found_lyrics = found_lyrics
 
     #the message for displaying and controling the audio
-    audio_embed     :discord.Embed = Embeds.audio_playing_embed(queue)
-    control_buttons :list          = Buttons.AudioControllerButtons
+    audio_embed     :discord.Embed   = Embeds.audio_playing_embed(queue)
+    control_buttons :discord.ui.View = Buttons.AudioControllerButtons()
     
     #if it's found then dont disable
-    control_buttons[1][2].disabled = not FoundLyrics 
-
     message_info = {
         "embed":audio_embed,
-        "components":control_buttons
+        "view": control_buttons
     }
 
     audio_message_created = None
@@ -315,12 +305,12 @@ async def clear_audio_message(guild:discord.Guild=None,specific_message:discord.
 
     if newEmbed.image:
         newEmbed.set_thumbnail(url=newEmbed.image.url)
-        newEmbed.set_image(url=discord.Embed.Empty)
+        newEmbed.set_image(url=None)
     
 
     await audio_message.edit(#content = content,
                             embed=newEmbed,
-                            components= Buttons.AfterAudioButtons)
+                            view= Buttons.AfterAudioButtons())
     logging.info("Succesfully removed audio messsage.")
 
     if not specific_message: guild.song_queue.audio_message = None

@@ -23,7 +23,7 @@ from Music.song_queue import SongQueue
 from Music.song_track import SongTrack
 from Music            import voice_state
 
-from Buttons          import Buttons, Interaction
+from discord          import Interaction
 
 #Literals
 from Response         import MessageString, Emojis, Embeds
@@ -113,15 +113,16 @@ class MusicCommands(commands.Cog):
 
         queue : SongQueue = ctx.guild.song_queue
         if queue:
-            from discord_components import Button,ButtonStyle
-            message = await ctx.send(f"There are {len(queue)} tracks in the queue, resume ?",components=[
-                Button(label="Yes",style=ButtonStyle.green,custom_id="resume_queue")
-            ])
+            from discord import Button,ButtonStyle
+            message = await ctx.send(
+                f"There are {len(queue)} tracks in the queue, resume ?",
+                view=discord.ui.View().add_item(discord.ui.Button(label="Yes",style=ButtonStyle.green,custom_id="resume_queue"))
+            )
 
             try:
-                await self.bot.wait_for("button_click",
+                await self.bot.wait_for("interaction",
                                         timeout=20,
-                                        check=lambda btn: btn.message.id == message.id and btn.author.id == ctx.author.id)
+                                        check=lambda interaction: interaction.data["component_type"] == 2 and "custom_id" in interaction.data.keys() and interaction.message.id == message.id and interaction.author.id == ctx.author.id)
             except asyncio.TimeoutError:
                 pass
             else:
@@ -228,8 +229,6 @@ class MusicCommands(commands.Cog):
         voice_state.pause_audio(guild)
         add_loop = round(fwd_sec * 50 / queue.speed)
         queue._raw_fwd(add_loop) #Finshed the audio
-
-        queue.player_loop_passed.append(add_loop)
         voice_state.resume_audio(guild)
 
         await ctx.reply(f"*⏭ Fast-fowarded for {Convert.length_format(fwd_sec)}*")
@@ -239,28 +238,31 @@ class MusicCommands(commands.Cog):
                       description="⏏️ Move the time position of the current audio, format : [Hours:Minutes:Seconds] or literal seconds like 3600 (an hour). This is a experimental command.",
                       usage="{}seek 2:30")
     async def seek(self,ctx:commands.Context,*,time_position):
-        
+        queue = ctx.guild.song_queue
         try:
             position_sec:float = Convert.time_to_sec(time_position)
-            if position_sec >= ctx.guild.song_queue[0].duration:
+            if position_sec >= queue[0].duration:
                 await ctx.voice_client.stop()
-            await voice_state.restart_audio(ctx.guild,position=position_sec/ctx.guild.song_queue.speed)
+            await voice_state.restart_track(ctx.guild,position=position_sec/queue.speed)
         except AttributeError:
             raise discord.errors.NoAudioPlaying
         except ValueError:
             await ctx.reply(f"Invaild time position, format : {ctx.prefix}{ctx.invoked_with} [Hours:Minutes:Seconds]")
         else:
             await ctx.reply(f"⏏️ Moving audio's time position to `{Convert.length_format(position_sec)}` (It might take a while depend on the length of the audio)")
+            queue[0].time_position = position_sec
 
     @commands.guild_only()
     @commands.command(aliases=["previous"],
                       description="⏪ Return to the last song played",
                       usage="{}previous")
     async def last(self, ctx:commands.Context):
+        if ctx.guild.song_queue.history:
+            voice_state.rewind_track(ctx.guild)
 
-        voice_state.rewind_audio(ctx.guild)
-
-        await ctx.reply(MessageString.rewind_audio_msg)
+            await ctx.reply(MessageString.rewind_audio_msg)
+        else:
+            await ctx.reply("N")
         
     @commands.guild_only()
     @commands.command(aliases=["next"],
@@ -268,7 +270,7 @@ class MusicCommands(commands.Cog):
                       usage="{}skip")
     async def skip(self, ctx:commands.Context):
         
-        voice_state.skip_audio(ctx.guild)
+        voice_state.skip_track(ctx.guild)
 
         await ctx.reply(MessageString.skipped_audio_msg)    
 
@@ -276,18 +278,13 @@ class MusicCommands(commands.Cog):
     @commands.command(description='⏹ stop the current audio from playing 🚫',
                       usuge="{}stop")
     async def stop(self, ctx:commands.Context):
-        """
-        Planning : 
-
-        
-        """
         #Checking
         if not ctx.voice_client:
             raise commands.errors.NotInVoiceChannel
         if not ctx.voice_client.is_playing():
             raise commands.errors.NoAudioPlaying
         
-        voice_state.skip_audio()
+        voice_state.skip_track()
         await ctx.voice_client.disconnect()
 
         await ctx.reply(MessageString.stopped_audio_msg)
@@ -298,7 +295,7 @@ class MusicCommands(commands.Cog):
                       usage="{}replay")
     async def restart(self, ctx:commands.Context):
 
-        await voice_state.restart_audio(ctx.guild)
+        await voice_state.restart_track(ctx.guild)
 
         await ctx.reply(MessageString.restarted_audio_msg)
         
@@ -349,7 +346,7 @@ class MusicCommands(commands.Cog):
             return await ctx.reply("Invalid pitch.")
         if guild.voice_client and guild.voice_client._player and queue:
             voice_state.pause_audio(guild)
-            await voice_state.restart_audio(ctx.guild)#,passing=True,position = (queue._player_loops)/50)
+            await voice_state.restart_track(ctx.guild)#,passing=True,position = (queue._player_loops)/50)
             
 
         await ctx.reply(f"Successful changed the pitch to `{new_pitch}`.")
@@ -374,7 +371,7 @@ class MusicCommands(commands.Cog):
         except ValueError:
             return await ctx.reply("Invalid speed.")
         if guild.voice_client and guild.voice_client._player and guild.song_queue:
-            await voice_state.restart_audio(guild)
+            await voice_state.restart_track(guild)
 
         await ctx.reply(f"Successful changed the speed to `{new_speed}`.")
         await voice_state.update_audio_msg(guild)
@@ -422,24 +419,23 @@ class MusicCommands(commands.Cog):
         """
         
 
-
         guild       : discord.Guild       = ctx.guild
-        author      : discord.Member      = getattr(btn,"author",ctx.author)
+        author      : discord.Member      = getattr(btn,"user",ctx.author)
         voice_client: discord.VoiceClient = ctx.voice_client or author.voice #It can be either our bots vc or the user's vc
         reply_msg   : discord.Message     = None  #This will be the message for the audio message
 
         #Check for voice channel
         if voice_client is None:
             if btn:
-                #Give a button respond instead so it doesn't inform everyone else
-                return await btn.respond(type=4,content=MessageString.user_not_in_vc_msg)
+                #Give a button respond instead so it doesn't tell everyone else
+                return await btn.response.send_message(content=MessageString.user_not_in_vc_msg,ephemeral=True)
             raise commands.errors.UserNotInVoiceChannel("You need to be in a voice channel.")
 
         #Triggered by play_again button (so it must be a valid URL because it was played successful before)            
         if btn:
             #Suppress the interaction failed message and response 
-            await btn.edit_origin(content=btn.message.content)
-            reply_msg = await ctx.reply(content=f"🎻 {btn.author.mention} requests to play this song again")
+            await btn.response.edit_message(content=btn.message.content)
+            reply_msg = await ctx.reply(content=f"🎻 {author.mention} requests to play this song again")
 
         #URL
         elif "https://" in query or "HTTP://" in query:
@@ -492,22 +488,24 @@ class MusicCommands(commands.Cog):
             
             #Get which button user pressed, and make sure that it is the user who press the buttons
             try:
-                choicesInteraction:Interaction = await self.bot.wait_for("button_click",
+                choicesInteraction: discord.Interaction = await self.bot.wait_for("interaction",
                                                             timeout=TIMEOUT_SECONDS,
-                                                            check=lambda btn: btn.author == author and btn.message.id == option_message.id)
+                                                            check=lambda interaction: interaction.data["component_type"] == 2 and "custom_id" in interaction.data.keys()
+                                                            # check=lambda btn: btn.author == author and btn.message.id == option_message.id
+                                                            )
             #Not selected
             except asyncio.TimeoutError:
                 return await option_message.edit(embed=Embeds.NoTrackSelectedEmbed,
-                                            components=[])
+                                            view=None)
             #Received option
             else:
-                selected_index = int(choicesInteraction.custom_id)
-                await choicesInteraction.edit_origin(content=f"{Emojis.YOUTUBE_ICON} Song **#{selected_index+1}** in the youtube search result has been selected",
-                                                    components = [])
+                selected_index = int(choicesInteraction.data["custom_id"])
+
+                await choicesInteraction.response.edit_message(content=f"{Emojis.YOUTUBE_ICON} Song **#{selected_index+1}** in the youtube search result has been selected",view = None)
                 reply_msg = await ctx.fetch_message(option_message.id)
                 query = f'https://www.youtube.com/watch?v={search_result[selected_index]["videoId"]}'
-              
-        
+
+
         #We now have the exact url that lead us to the audio regardless of what the user've typed, let's find and play it.
         
         queue = guild.song_queue
@@ -591,6 +589,7 @@ class MusicCommands(commands.Cog):
                 else:
                     raise cl_exce
             else:
+                #Make our audio message
                 await voice_state.create_audio_message(NewTrack,reply_msg or ctx.channel)
             
 #----------------------------------------------------------------#
@@ -669,7 +668,7 @@ class MusicCommands(commands.Cog):
                 del queue[position]
 
                 if position == 0 and ctx.voice_client and ctx.voice_client.source:
-                    voice_state.restart_audio(guild)
+                    voice_state.restart_track(guild)
                 
             
                 await ctx.reply(f"**#{position}** - `{poped_track.title}` has been removed from the queue")
@@ -724,9 +723,10 @@ class MusicCommands(commands.Cog):
                    aliases=["empty","clr"],
                    usage="{}queue clear")
     async def clear(self,ctx):
+        from Music.song_queue import AudioControlState
         queue:SongQueue = ctx.guild.song_queue
 
-        queue.audio_control_status = "CLEAR"
+        queue.audio_control_status = AudioControlState.CLEAR
         queue.clear()
 
         await voice_state.clear_audio_message(ctx.guild)
@@ -877,54 +877,60 @@ class MusicCommands(commands.Cog):
 
 #Button detecting
     @commands.Cog.listener()
-    async def on_button_click(self, btn:Interaction):
+    async def on_interaction(self, interaction:Interaction):
+
+        if not (interaction.data["component_type"] == 2 and "custom_id" in interaction.data.keys()):
+            return print("Oof")
+
+        btn = interaction
+        custom_id = btn.data["custom_id"]
 
         from Buttons import Buttons
-        btn.channel
         guild = btn.guild
 
         if logging.root.isEnabledFor(logging.getLevelName("COMMAND_INFO")):
             asyncio.create_task(logging.webhook_log(embed= discord.Embed(title = f"{btn.guild.name+' | ' if btn.guild else ''}{btn.channel}",
-                                                                        description = f"**Pressed the {btn.custom_id} button**",
+                                                                        description = f"**Pressed the {custom_id} button**",
                                                                         color=discord.Color.from_rgb(255,255,255),
                                                                         timestamp = datetime.datetime.now()
                                                                         ).set_author(
                                                                         name =btn.author,
-                                                                        icon_url= btn.author.avatar_url),
+                                                                        icon_url= btn.author.display_avatar),
                                                     username="Button Logger"))
         
-        if btn.responded or guild is None:  return
+        if interaction.response.is_done() or guild is None:  return
         
         queue = guild.song_queue
 
-        #Buttons
-        if btn.custom_id == Buttons.FavouriteButton.custom_id:
+        #Tons of Buttons
+        if custom_id == Buttons.FavouriteButton.custom_id:
             await Buttons.on_favourite_btn_press(btn)
 
-        elif btn.custom_id == Buttons.PlayAgainButton.custom_id:
+        elif custom_id == Buttons.PlayAgainButton.custom_id:
             await Buttons.on_play_again_btn_press(btn,self.bot)
 
         #Clearing glitched messages
-        elif queue.get(0) is None or queue.audio_message is None or queue.audio_message.id != btn.message.id or not voice_state.is_playing(guild):
-            if not btn.custom_id.isnumeric() and not btn.responded and btn.message.embeds:
-                new_embed:discord.Embed = btn.message.embeds[0]
-                await btn.edit_origin(content=btn.message.content)
+        elif queue.get(0) is None or queue.audio_message is None or queue.audio_message.id != interaction.message.id or not voice_state.is_playing(guild):
+            if not custom_id.isnumeric() and btn.message.embeds:
+                new_embed:discord.Embed = interaction.message.embeds[0]
+                await btn.response.edit_message(content=btn.message.content)
                 if len(new_embed.fields) == 9:
-                    await voice_state.clear_audio_message(specific_message=btn.message)
+                    await voice_state.clear_audio_message(specific_message=interaction.message)
 
-        elif btn.custom_id == Buttons.SubtitlesButton.custom_id:
+        elif custom_id == Buttons.SubtitlesButton.custom_id:
             await Buttons.on_subtitles_btn_press(btn,self.bot)
-        elif btn.custom_id == Buttons.PauseButton.custom_id:
-            await Buttons.on_pause_btn_press(btn)
-        elif btn.custom_id == Buttons.ResumeButton.custom_id:
-            await Buttons.on_resume_btn_press(btn)
-        elif btn.custom_id == Buttons.LoopButton.custom_id:
+        elif custom_id == Buttons.PlayPauseButton.custom_id:
+            await Buttons.on_playpause_btn_press(btn)
+        elif custom_id == Buttons.RewindButton.custom_id:
+            await Buttons.on_rewind_btn_press(btn)
+        elif custom_id == Buttons.LoopButton.custom_id:
             await Buttons.on_loop_btn_press(btn)
             await voice_state.update_audio_msg(guild)
-        elif btn.custom_id == Buttons.RestartButton.custom_id:
+        elif custom_id == Buttons.RestartButton.custom_id:
             await Buttons.on_restart_btn_press(btn)
-        elif btn.custom_id == Buttons.SkipButton.custom_id:
+        elif custom_id == Buttons.SkipButton.custom_id:
             await Buttons.on_skip_btn_press(btn)
+
 #----------------------------------------------------------------#
 #Now playing
 
@@ -949,73 +955,123 @@ class MusicCommands(commands.Cog):
                                                                                                          Convert.length_format(queue[0].duration)))
         #Or not
         await ctx.send(f"🎶 Now playing in {voice_state.get_current_vc(ctx.guild).mention} - **{queue[0].title}**")
-#----------------------------------------------------------------#
-#Favourites
 
     @commands.guild_only()
-    @commands.command(aliases=["save", "fav"],
-                      description='👍🏻 Add the current song playing to your favourites',
-                      usage="{}fav")
-    async def favourite(self, ctx:commands.Context):
-        ctx.channel
-        #No audio playing
-        if not voice_state.is_playing(ctx.guild):
-            return await ctx.reply(MessageString.free_to_use_msg)
-
-        Track = ctx.guild.song_queue[0]
-
-        #Add to the list
-        position:int = Favourites.add_track(ctx.author, Track.title, Track.webpage_url)
-
-        #Responding
-        await ctx.reply(MessageString.added_fav_msg.format(Track.title,position))
-
-#Unfavouriting song
-
-    @commands.command(aliases=['unfav'],
-                      description='❣🗒 Remove a song from your favourites',
-                      usage="{}unfav 3")
-    async def unfavourite(self, ctx:commands.Context,*,index):
-        
+    @commands.command(description="Send the current audio as a file which is available for downloading.")
+    async def download(self,ctx:commands.Context):
+        queue = ctx.guild.song_queue
         try:
-            index = Convert.extract_int_from_str(index) - 1
-            removedTrackTitle = Favourites.get_track_by_index(ctx.author,index)[0]
-            Favourites.remove_track(ctx.author,index)
-        except ValueError:
-            await ctx.reply("✏ Please enter a vaild index")
-        except FileNotFoundError:
-            await ctx.reply(MessageString.fav_empty_msg)
-        else: 
-            await ctx.reply(f"`{removedTrackTitle}` has been removed from your favourites")
+            playing_track : SongTrack = queue[0]
+        except IndexError:
+            raise discord.errors.NoAudioPlaying
+
+        src_url:str = playing_track.src_url
+        file_name:str = playing_track.title.replace("/","|") + ".mp3"
         
-#Display Favourites
+        import subprocess
 
-    @commands.command(aliases=["favlist", "myfav"],
-                      description='❣🗒 Display every song in your favourites',
-                      usage="{}myfav")
-    async def display_favourites(self, ctx:commands.Context):
-      
+        proc_mes = await ctx.reply("Processing ...")
+        subprocess.Popen(args=["./ffmpeg",
+                    "-i",f"{src_url}",
+                    '-loglevel','warning',
+                    # '-ac', '2',
+                    f"./{file_name}"
+                    ],creationflags=0)
+        cd = 3
+        last_progress = 0
+        combo = 0
 
-      #Grouping the list in string
-      try:
-          favs_list = Favourites.get_data(ctx.author)
-      except FileNotFoundError:
-          return await ctx.reply(MessageString.fav_empty_msg)
+        for _ in range(300):
+            
+            try:
+                progress = os.path.getsize(f'./{file_name}')/playing_track.filesize
 
-      wholeList = ""
-      for index, title in enumerate(favs_list):
-          wholeList += "***{}.*** {}\n".format(index + 1,title)
+                if progress == last_progress:
+                    combo += 1
+                else:
+                    last_progress = progress
+                    combo = 0
 
-      #embed =>
-      favouritesEmbed = discord.Embed(title=f"🤍 🎧 Favourites of {ctx.author.name} 🎵",
-                                      description=wholeList,
-                                      color=discord.Color.from_rgb(255, 255, 255),
-                                      timestamp=datetime.datetime.now()
-                        ).set_footer(text="Your favourites would be the available in every server")
-
-      #sending the embed
-      await ctx.reply(embed=favouritesEmbed)
+                if combo > 2:
+                    await proc_mes.edit(content="Successful !")
+                    await proc_mes.reply(file=discord.File(f"./{file_name}"))
+                    os.remove(f"./{file_name}")
+                    return
+                else:
+                    await proc_mes.edit(proc_mes.content + f" [{round(progress * 100,1)}%]")
+                    await asyncio.sleep(cd)
+            except FileNotFoundError:
+                await asyncio.sleep(cd)
+        
+       
 
 #----------------------------------------------------------------#
-def setup(BOT):
-    BOT.add_cog(MusicCommands(BOT))
+#Favourites (disabled)
+
+#     @commands.guild_only()
+#     @commands.command(aliases=["save", "fav"],
+#                       description='👍🏻 Add the current song playing to your favourites',
+#                       usage="{}fav")
+#     async def favourite(self, ctx:commands.Context):
+#         ctx.channel
+#         #No audio playing
+#         if not voice_state.is_playing(ctx.guild):
+#             return await ctx.reply(MessageString.free_to_use_msg)
+
+#         Track = ctx.guild.song_queue[0]
+
+#         #Add to the list
+#         position:int = Favourites.add_track(ctx.author, Track.title, Track.webpage_url)
+
+#         #Responding
+#         await ctx.reply(MessageString.added_fav_msg.format(Track.title,position))
+
+# #Unfavouriting song
+
+#     @commands.command(aliases=['unfav'],
+#                       description='❣🗒 Remove a song from your favourites',
+#                       usage="{}unfav 3")
+#     async def unfavourite(self, ctx:commands.Context,*,index):
+        
+#         try:
+#             index = Convert.extract_int_from_str(index) - 1
+#             removedTrackTitle = Favourites.get_track_by_index(ctx.author,index)[0]
+#             Favourites.remove_track(ctx.author,index)
+#         except ValueError:
+#             await ctx.reply("✏ Please enter a vaild index")
+#         except FileNotFoundError:
+#             await ctx.reply(MessageString.fav_empty_msg)
+#         else: 
+#             await ctx.reply(f"`{removedTrackTitle}` has been removed from your favourites")
+        
+# #Display Favourites
+
+#     @commands.command(aliases=["favlist", "myfav"],
+#                       description='❣🗒 Display every song in your favourites',
+#                       usage="{}myfav")
+#     async def display_favourites(self, ctx:commands.Context):
+      
+
+#       #Grouping the list in string
+#       try:
+#           favs_list = Favourites.get_data(ctx.author)
+#       except FileNotFoundError:
+#           return await ctx.reply(MessageString.fav_empty_msg)
+
+#       wholeList = ""
+#       for index, title in enumerate(favs_list):
+#           wholeList += "***{}.*** {}\n".format(index + 1,title)
+
+#       #embed =>
+#       favouritesEmbed = discord.Embed(title=f"🤍 🎧 Favourites of {ctx.author.name} 🎵",
+#                                       description=wholeList,
+#                                       color=discord.Color.from_rgb(255, 255, 255),
+#                                       timestamp=datetime.datetime.now()
+#                         ).set_footer(text="Your favourites would be the available in every server")
+
+#       #sending the embed
+#       await ctx.reply(embed=favouritesEmbed)
+
+#----------------------------------------------------------------#
+async def setup(BOT):
+    await BOT.add_cog(MusicCommands(BOT))

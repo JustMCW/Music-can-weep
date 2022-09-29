@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 
-def setup(*_): pass
+async def setup(*_): pass
 
 class MCWHelpCommand(commands.HelpCommand):
     def __init__(self):

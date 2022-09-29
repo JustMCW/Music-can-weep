@@ -2,10 +2,18 @@ import discord
 from discord.ext import commands
 from collections import deque
 from typing_extensions import Self
+from typing import List
+from enum import Enum,auto
 
-from main        import BOT_INFO
-
+from main import BOT_INFO
+from Music.song_track import SongTrack
 hash_maps = {}
+
+class AudioControlState(Enum):
+    REWIND = auto()
+    SKIP = auto()
+    RESTART = auto()
+    CLEAR = auto()
 
 class SongQueue(deque):
     def __init__(self,guild):
@@ -16,7 +24,7 @@ class SongQueue(deque):
         self.pitch                :float           = 1
         self.speed                :float           = 1
 
-        self.audio_control_status :str             = None
+        self.audio_control_status :AudioControlState = None
 
         self.looping              :bool            = BOT_INFO.InitialLooping
         self.queue_looping        :bool            = BOT_INFO.InitialQueueLooping
@@ -25,7 +33,7 @@ class SongQueue(deque):
 
         self.audio_message        :discord.Message = None
 
-        self.player_loop_passed   :list            = []
+        self.history              :List[SongTrack] = []
 
         super().__init__()
 
@@ -56,15 +64,11 @@ class SongQueue(deque):
         return sum( map( lambda t: t.duration, self ) ) 
 
     @property
-    def _player_loops(self) -> int:
-        voicec    :discord.VoiceClient = self.guild.voice_client
-        loop_pass :list                = self.player_loop_passed
-
-        return voicec._player.loops + sum(loop_pass[:-1] if voicec.is_paused() else loop_pass)
-
-    @property
     def time_position(self) -> int:
-        return (self._player_loops * self.speed) // 50
+        try:
+            return self[0].time_position
+        except IndexError:
+            return None
 
     def _raw_fwd(self,loop_count : int):
 

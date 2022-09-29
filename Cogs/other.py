@@ -4,7 +4,6 @@ from typing import Any
 import discord
 from discord.ext import commands
 import logging
-from discord_components import Button, ButtonStyle , ActionRow 
 
 from Database import Management
 
@@ -91,5 +90,5 @@ class OtherCommands(commands.Cog):
                                             value=mode)
         await ctx.reply("Song tracks will now queue up when being requested" if mode else "Song tracks will now be instantly played when requested")
 
-def setup(BOT):
-    BOT.add_cog(OtherCommands(BOT))
+async def setup(BOT):
+    await BOT.add_cog(OtherCommands(BOT))

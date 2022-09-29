@@ -55,7 +55,7 @@ class MessageString:
 
 import Convert
 import discord
-import discord_components
+# import discord_components
 
 class Embeds:
 
@@ -68,22 +68,24 @@ class Embeds:
         """
         #Add the buttons and texts for user to pick
         choices_string:str  = ""
-        components    :list = []
 
-        
+
+        class _components(discord.ui.View):...
+        components = _components()
+
         for i,video in enumerate(search_result):
             
             title = video["title"]["runs"][0]["text"]
             length = video["lengthText"]["simpleText"]
 
             choices_string += f'{i+1}: {title} `[{length}]`\n'
-            components.append(discord_components.Button(label=str(i+1),custom_id=str(i),style=discord_components.ButtonStyle.blue))
+            components.add_item(discord.ui.Button(label=f"{i+1}",custom_id=f"{i}",style=discord.ButtonStyle.blurple,row=0))
         
         return {
             "embed":discord.Embed(title="🎵  Select a song you would like to play : ( click the buttons below )",
                                   description=choices_string,
                                   color=discord.Color.from_rgb(255, 255, 255)),
-            "components": discord_components.ActionRow(components)
+            "view": components
         }
 
 
@@ -104,7 +106,7 @@ class Embeds:
                             color=discord.Color.from_rgb(255, 255, 255))\
                 \
                 .set_author(name=f"Requested by {SongTrackPlaying.requester.display_name}",
-                            icon_url=SongTrackPlaying.requester.avatar_url)\
+                            icon_url=SongTrackPlaying.requester.display_avatar)\
                 .set_image(url = SongTrackPlaying.thumbnail)\
                 \
                 .add_field(name=f"{Emojis.YOUTUBE_ICON} YT channel" if YT_creator else "💡 Creator",
@@ -125,7 +127,7 @@ class Embeds:
                             value=f"{queue.guild.voice_client.channel.mention}")\
                 .add_field(name="🔂 Looping",
                             value=f'**{Convert.bool_to_str(queue.looping)}**')\
-                .add_field(name="🔂 Queue looping",
+                .add_field(name="🔁 Queue looping",
                             value=f'**{Convert.bool_to_str(queue.queue_looping)}**')\
 
     NoTrackSelectedEmbed = discord.Embed(title=f"{Emojis.cute_panda} No track was selected !",

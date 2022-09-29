@@ -7,7 +7,6 @@ A discord music bot :
 """
 import asyncio
 import os
-import json
 import traceback
 import logging
 import discord
@@ -17,11 +16,12 @@ from discord.ext import commands
 from datetime    import datetime
 
 #Logging
-logging.basicConfig(level=22,format="%(levelname)s from %(module)s:%(lineno)d (%(funcName)s) : %(message)s")
+logging.basicConfig(level=30,format="%(levelname)s from %(module)s:%(lineno)d (%(funcName)s) : %(message)s")
 logging.addLevelName(22, "COMMAND_INFO")
 logging.addLevelName(27, "BOT_EVENT")
 
 async def webhook_log(self:logging.RootLogger,message=None,**options):
+    return print(message)
     async with aiohttp.ClientSession() as session:
         webhook = discord.Webhook.from_url('https://discord.com/api/webhooks/954928052767457350/BVexILQ8JmXeUKrR2WdWPkW6TSZVxTRsMYSqBsrbbkzdO6kc2uMnRB_UfpsH5rsMT0w-', 
                                             adapter=discord.AsyncWebhookAdapter(session))
@@ -34,7 +34,7 @@ def webhook_log_context(self:logging.RootLogger,ctx:commands.Context,*args,**kwa
                                                                 color=discord.Color.from_rgb(255,255,255),
                                                                 timestamp = datetime.now()).set_author(
                                                                 name =ctx.author,
-                                                                icon_url= ctx.author.avatar_url),
+                                                                icon_url= ctx.author.display_avatar),
                                             username="Context Logger"))
 
 def webhook_log_event(self:logging.RootLogger,message,**kwargs):
@@ -47,7 +47,7 @@ def webhook_log_event(self:logging.RootLogger,message,**kwargs):
 def webhook_log_error(self:logging.RootLogger,error:Exception,**kwargs):
     if self.isEnabledFor(logging.ERROR):
         try: 
-            raise error
+            raise error 
         except:
             asyncio.create_task(self.webhook_log(message="<@812808602997620756>",
                                                 embed= discord.Embed(title = f"ERROR : {error.__class__.__name__}",
@@ -86,35 +86,35 @@ class BOT_INFO:
 async def get_prefix(bot, message:discord.Message):
     guild:discord.Guild = message.guild
     if guild:
-        with open("Database/DiscordServers.json","r") as jsonfr:
-            return commands.when_mentioned_or(json.load(jsonfr)[str(guild.id)].get("prefix", BOT_INFO.DefaultDatabase["prefix"]))(bot, message)
+        return commands.when_mentioned_or((await guild.database).get("prefix", BOT_INFO.DefaultDatabase["prefix"]))(bot, message)
     return commands.when_mentioned_or(BOT_INFO.DefaultDatabase["prefix"])(bot, message)
 
 async def on_message(self,message:discord.Message):
         
     if message.author.bot:
         return
+        
     guild = message.guild
     ctx:commands.Context = await self.get_context(message)
     
-    async with aiohttp.ClientSession() as session:
-        chat = discord.Webhook.from_url("https://discord.com/api/webhooks/969015910742519928/2Ks2ADioKYyEQSuS_K9-uH726-JcbWr5YVC2WrTRfmcwkujZ1KwNRTv35XQ9jcqle10z",adapter=discord.AsyncWebhookAdapter(session))
+    # async with aiohttp.ClientSession() as session:
+    #     chat = discord.Webhook.from_url("https://discord.com/api/webhooks/969015910742519928/2Ks2ADioKYyEQSuS_K9-uH726-JcbWr5YVC2WrTRfmcwkujZ1KwNRTv35XQ9jcqle10z",adapter=discord.AsyncWebhookAdapter(session))
         
-        attachs = "\n".join(map(lambda a:a.url,message.attachments)) if message.attachments else ''
+    #     attachs = "\n".join(map(lambda a:a.url,message.attachments)) if message.attachments else ''
 
-        if guild:
-            if guild.id != 915104477521014834:
-                await chat.send(content = f"{message.content} {attachs}\n> #{message.channel} | {message.guild}",
-                        username= message.author.name,
-                        avatar_url=message.author.avatar_url)
-        else:
-            await chat.send(content = f"{message.content} {attachs}\n> #{message.channel}",
-                            username= message.author.name,
-                            avatar_url=message.author.avatar_url)
+    #     if guild:
+    #         if guild.id != 915104477521014834:
+    #             await chat.send(content = f"{message.content} {attachs}\n> #{message.channel} | {message.guild}",
+    #                     username= message.author.name,
+    #                     display_avatar=message.author.display_avatar)
+    #     else:
+    #         await chat.send(content = f"{message.content} {attachs}\n> #{message.channel}",
+    #                         username= message.author.name,
+    #                         display_avatar=message.author.display_avatar)
     if ctx.valid:
-        await ctx.trigger_typing()
-        await self.process_commands(message)
-        logging.webhook_log_context(ctx)
+        async with ctx.typing():
+            await self.process_commands(message)
+            # logging.webhook_log_context(ctx)
 
 commands.Bot.on_message = on_message
 
@@ -122,7 +122,7 @@ commands.Bot.on_message = on_message
 
 
 from Cogs.help import MCWHelpCommand
-BOT = commands.Bot(command_prefix=get_prefix,
+Bot = commands.Bot(command_prefix=get_prefix,
                    intents=discord.Intents.all(),
                    help_command= MCWHelpCommand(),
                    case_insensitive=True,
@@ -133,7 +133,7 @@ def main():
 
     #Add event cog for the BOT
     from Cogs.event import Event
-    BOT.add_cog(Event(BOT, BOT_INFO))
+    asyncio.run(Bot.add_cog(Event(Bot, BOT_INFO)))
 
     BOT_TOKEN = os.environ.get("TOKEN")
     
@@ -151,10 +151,9 @@ def main():
 
         if not discord.opus.is_loaded():
             logging.info("Loading opus ...")
-            discord.opus.load_opus("./exe/libopus.0.dylib")
+            discord.opus.load_opus("./libopus.0.dylib")
 
-
-    BOT.run(BOT_TOKEN)
+    Bot.run(BOT_TOKEN)
     logging.info("Program exited")
       
 

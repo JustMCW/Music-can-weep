@@ -48,9 +48,6 @@ class Event(commands.Cog):
 
         logging.warning(f"Running as {self.bot.user.name} :")
 
-        from discord_components import DiscordComponents
-        DiscordComponents(self.bot)
-
         #Register the custom errors
         import custom_errors
 
@@ -83,7 +80,7 @@ class Event(commands.Cog):
         
         for cog_name in cogs:
             try:
-                self.bot.load_extension(f'Cogs.{cog_name}')
+                await self.bot.load_extension(f'Cogs.{cog_name}')
             except commands.errors.NoEntryPointError:
                 if cog_name != self.qualified_name.lower():
                     raise
@@ -99,7 +96,7 @@ class Event(commands.Cog):
         self.bot.get_command("help").usage = "{}help play"
 
         # Message that tell us we have logged in
-        logging.webhook_log_event(f"Logged in as {self.bot.user.name} ( running in {len(self.bot.guilds)} servers ) ;",thumbnail = self.bot.user.avatar_url)
+        logging.webhook_log_event(f"Logged in as {self.bot.user.name} ( running in {len(self.bot.guilds)} servers ) ;",)
 
         await Management.check_server_database(self.bot)
 

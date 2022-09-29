@@ -1,8 +1,12 @@
 #These commands are for me to test stuff
 
+
+import os
 from discord.ext import commands
 import discord
 import logging
+
+from Music.song_track import SongTrack
 
 class AdminCommands(commands.Cog,command_attrs=dict(hidden=True)):
     def __init__(self,bot):
@@ -18,7 +22,55 @@ class AdminCommands(commands.Cog,command_attrs=dict(hidden=True)):
     @commands.is_owner() 
     @admin.command()
     async def test(self,ctx:commands.Context,*_):
-        await ctx.reply("This is a testing command.")
+        await ctx.send("test")
+
+    @commands.is_owner() 
+    @admin.command()
+    async def source(self,ctx:commands.Context,file_name:str = None):
+        if not file_name:
+            return await ctx.send(f"Pick a file")
+        await ctx.send(file=discord.File(f"./{file_name}"))
+
+    
+    @admin.command()
+    async def earrape(self,ctx:commands.Context):
+        queue = ctx.guild.song_queue
+        import audioop
+
+        def f(frag): return audioop.reverse(audioop.mul(frag,2,15),2)
+
+        queue[0].source.filter = f
+
+    @admin.command()
+    async def filter_test(self,ctx:commands.Context):
+        queue = ctx.guild.song_queue
+        import audioop
+
+    @admin.command()
+    async def normal(self,ctx:commands.Context):
+        queue = ctx.guild.song_queue
+
+        def f(frag): return frag
+
+        queue[0].source.filter = f  
+
+    @commands.is_owner() 
+    @admin.command()
+    async def save(self,ctx:commands.Context):
+        queue = ctx.guild.song_queue
+        try:
+            playing_track : SongTrack = queue[0]
+        except IndexError:
+            raise discord.errors.NoAudioPlaying
+
+        import subprocess
+        subprocess.Popen(args=[
+            "./save.zsh",
+            playing_track.src_url,
+            playing_track.thumbnail,
+            playing_track.title.replace("/","|") + ".mp3"
+        ])
+        await ctx.reply("ok")
 
     @admin.command()
     async def cleanup(self,ctx):
@@ -154,5 +206,5 @@ class AdminCommands(commands.Cog,command_attrs=dict(hidden=True)):
             await ctx.reply("Failed to get guild")
 
 
-def setup(BOT):
-    BOT.add_cog(AdminCommands(BOT))
+async def setup(BOT):
+    await BOT.add_cog(AdminCommands(BOT))
