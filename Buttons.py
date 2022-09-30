@@ -74,12 +74,12 @@ class Buttons:
         ac_btns = self._audio_controller_btns.copy()
     
         if voice_state.is_paused(btn.guild):
-            ac_btns[1].emoji = "⏸"
             voice_state.resume_audio(btn.guild)
+            ac_btns[1].emoji = "⏸"
         else:
-            ac_btns[1].emoji = "▶️"
             voice_state.pause_audio(btn.guild)
-        print(ac_btns[1].emoji)
+            ac_btns[1].emoji = "▶️"
+
         v=View()
         for item in ac_btns: v.add_item(item)
 
@@ -90,22 +90,22 @@ class Buttons:
     async def on_rewind_btn_press(self,btn : Interaction):
         queue = btn.guild.song_queue
         if queue.history:
-            await btn.response.defer()
             voice_state.rewind_track(btn.guild)
+            await btn.response.defer()
             await self.inform_changes(btn,MessageString.rewind_audio_msg)
         else:
             await btn.response.send_message(content="This is already the last track",ephemeral=True)
 
     @classmethod
     async def on_skip_btn_press(self,btn : Interaction):
-        await btn.response.defer()
         voice_state.skip_track(btn.guild)
+        await btn.response.defer()
         await self.inform_changes(btn,MessageString.stopped_audio_msg)
 
     @classmethod
     async def on_restart_btn_press(self,btn : Interaction):
-        await btn.response.defer()
         await voice_state.restart_track(btn.guild)
+        await btn.response.defer()
         await self.inform_changes(btn,MessageString.restarted_audio_msg)
 
     @classmethod

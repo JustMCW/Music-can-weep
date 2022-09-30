@@ -16,15 +16,16 @@ from discord.ext import commands
 from datetime    import datetime
 
 #Logging
-logging.basicConfig(level=30,format="%(levelname)s from %(module)s:%(lineno)d (%(funcName)s) : %(message)s")
+logging.basicConfig(level=22,format="%(levelname)s from %(module)s:%(lineno)d (%(funcName)s) : %(message)s")
 logging.addLevelName(22, "COMMAND_INFO")
 logging.addLevelName(27, "BOT_EVENT")
-
+discord.Webhook
 async def webhook_log(self:logging.RootLogger,message=None,**options):
-    return print(message)
     async with aiohttp.ClientSession() as session:
+        
+
         webhook = discord.Webhook.from_url('https://discord.com/api/webhooks/954928052767457350/BVexILQ8JmXeUKrR2WdWPkW6TSZVxTRsMYSqBsrbbkzdO6kc2uMnRB_UfpsH5rsMT0w-', 
-                                            adapter=discord.AsyncWebhookAdapter(session))
+                                            session=session)
         await webhook.send(content = message,**options)
 
 def webhook_log_context(self:logging.RootLogger,ctx:commands.Context,*args,**kwargs):

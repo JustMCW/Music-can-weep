@@ -110,7 +110,6 @@ class SongTrack:
         }
         
         try:
-            
             src = discord.FFmpegPCMAudio(source=self.src_url, **FFMPEG_OPTION)
         except discord.ClientException as e:
             logging.info(f"{e}, looking for the ffmpeg locally")
@@ -122,8 +121,7 @@ class SongTrack:
 
         logging.info("Successfully Transformed into PCM")
         self.source = vol_src
-        import io
-
+        #import io
         # _stdout:io.BufferedReader = self.source.original._stdout
         # _stdout.read(int(round(discord.opus._OpusStruct.FRAME_SIZE * 50 * position)))
         #['__class__', '__del__', '__delattr__', '__dict__', '__dir__', '__doc__', '__enter__', '__eq__', '__exit__', '__format__', '__ge__', '__getattribute__', '__gt__', '__hash__', '__init__', '__init_subclass__', '__iter__', '__le__', '__lt__', '__ne__', '__new__', '__next__', '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__sizeof__', '__str__', '__subclasshook__', '_checkClosed', '_checkReadable', '_checkSeekable', '_checkWritable', '_dealloc_warn', '_finalizing', 'close', 'closed', 'detach', 'fileno', 'flush', 'isatty', 'mode', 'name', 'peek', 'raw', 'read', 'read1', 'readable', 'readinto', 'readinto1', 'readline', 'readlines', 'seek', 'seekable', 'tell', 'truncate', 'writable', 'write', 'writelines']
