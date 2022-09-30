@@ -1,4 +1,4 @@
-from Response import Emojis
+from string_literals import Emojis
 import re
 
 def extract_int_from_str(string:str)->int:

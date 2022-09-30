@@ -21,8 +21,8 @@ class AdminCommands(commands.Cog,command_attrs=dict(hidden=True)):
     
     @commands.is_owner() 
     @admin.command()
-    async def test(self,ctx:commands.Context,*_):
-        await ctx.send("test")
+    async def test(self,ctx:commands.Context):
+        ...
 
     @commands.is_owner() 
     @admin.command()

@@ -11,10 +11,50 @@ from main             import BOT_INFO
 from Music.song_queue import SongQueue,AudioControlState
 from Music.song_track import SongTrack
 
-from Buttons          import Buttons
+from my_buttons          import Buttons
 from subtitles        import Subtitles
-from Response         import Embeds
+from string_literals         import Emojis
+import convert
 
+def audio_playing_embed(queue) -> discord.Embed:
+    """the discord embed for displaying the audio that is playing"""
+    from Music import voice_state
+    
+    SongTrackPlaying = queue[0]
+
+    YT_creator = getattr(SongTrackPlaying,"channel",None) 
+    Creator = YT_creator or getattr(SongTrackPlaying,"uploader")
+    Creator_url = getattr(SongTrackPlaying,"channel_url",getattr(SongTrackPlaying,"uploader_url",None))
+    Creator = "[{}]({})".format(Creator,Creator_url) if Creator_url else Creator
+
+    return discord.Embed(title= SongTrackPlaying.title,
+                        url= SongTrackPlaying.webpage_url,
+                        color=discord.Color.from_rgb(255, 255, 255))\
+            \
+            .set_author(name=f"Requested by {SongTrackPlaying.requester.display_name}",
+                        icon_url=SongTrackPlaying.requester.display_avatar)\
+            .set_image(url = SongTrackPlaying.thumbnail)\
+            \
+            .add_field(name=f"{Emojis.YOUTUBE_ICON} YT channel" if YT_creator else "💡 Creator",
+                        value=Creator)\
+            .add_field(name="↔️ Length",
+                        value=f'`{convert.length_format(getattr(SongTrackPlaying,"duration"))}`')\
+            .add_field(name="📝 Lyrics",
+                        value=f'*{"Available" if queue.found_lyrics else "Unavailable"}*')\
+            \
+            .add_field(name="📶 Volume ",
+                        value=f"`{voice_state.get_volume_percentage(queue.guild)}%`")\
+            .add_field(name="⏩ Speed",
+                        value=f"`{queue.speed:.2f}`")\
+            .add_field(name="ℹ️ Pitch",
+                        value=f'`{queue.pitch:.2f}`')\
+            \
+            .add_field(name="🔊 Voice Channel",
+                        value=f"{queue.guild.voice_client.channel.mention}")\
+            .add_field(name="🔂 Looping",
+                        value=f'**{convert.bool_to_str(queue.looping)}**')\
+            .add_field(name="🔁 Queue looping",
+                        value=f'**{convert.bool_to_str(queue.queue_looping)}**')
 
 def is_playing(guild:discord.Guild)-> bool:
     if not guild.voice_client: 
@@ -262,7 +302,7 @@ async def create_audio_message(Track:SongTrack,Target):
     queue.found_lyrics = found_lyrics
 
     #the message for displaying and controling the audio
-    audio_embed     :discord.Embed   = Embeds.audio_playing_embed(queue)
+    audio_embed     :discord.Embed   = audio_playing_embed(queue)
     control_buttons :discord.ui.View = Buttons.AudioControllerButtons()
     
     #if it's found then dont disable
@@ -342,4 +382,4 @@ async def update_audio_msg(guild):
         if audio_msg: 
 
             #Apply the changes                  
-            await audio_msg.edit(embed=Embeds.audio_playing_embed(guild.song_queue))
+            await audio_msg.edit(embed=audio_playing_embed(guild.song_queue))

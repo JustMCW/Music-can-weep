@@ -1,12 +1,12 @@
 import asyncio
 import discord
 from discord import ButtonStyle,Interaction
-from discord.ui import View,Button,Select
-from Response import MessageString
+from discord.ui import View,Button,Select,Modal,TextInput
+from string_literals import MessageString
 from subtitles import Subtitles
 
-import Favourites
-import Convert
+import favourites
+import convert
 from Music import voice_state
 
 #BUTTONS
@@ -20,18 +20,23 @@ class Buttons:
     SkipButton = Button(#label="Skip",
                         custom_id="Skip",
                         style=ButtonStyle.grey,
-                        emoji="⏭")
+                        emoji="▶️")
     RestartButton = Button(#label="Restart",
                             custom_id="restart",
                             style=ButtonStyle.grey,
                             emoji="🔄")
     RewindButton = Button(custom_id="rewind",
                                 style=ButtonStyle.grey,
-                                emoji="⏮")
+                                emoji="◀️")
     LoopButton = Button(#label="Toggle looping",
                         custom_id="loop",
                         style=ButtonStyle.grey,
                         emoji="🔂")
+
+    ConfigButton = Button(  custom_id="configure",
+                            style=ButtonStyle.grey,
+                            emoji="⚙️" )
+
 
     FavouriteButton = Button(#label="Favourite",
                               custom_id="fav",
@@ -46,7 +51,8 @@ class Buttons:
                               style=ButtonStyle.primary,
                               emoji="🎧")
 
-    _audio_controller_btns = [RewindButton, PlayPauseButton,SkipButton,RestartButton,LoopButton]
+    _audio_controller_btns = [RewindButton, PlayPauseButton,SkipButton,LoopButton,
+                               ConfigButton].copy()
 
     @classmethod
     def AudioControllerButtons(self):
@@ -71,7 +77,7 @@ class Buttons:
 
     @classmethod
     async def on_playpause_btn_press(self,btn : Interaction):
-        ac_btns = self._audio_controller_btns.copy()
+        ac_btns = self._audio_controller_btns
     
         if voice_state.is_paused(btn.guild):
             voice_state.resume_audio(btn.guild)
@@ -113,14 +119,99 @@ class Buttons:
         await btn.response.defer()
         current_loop =btn.guild.song_queue.looping
         btn.guild.song_queue.looping = not current_loop
-        await self.inform_changes(btn,MessageString.loop_audio_msg.format(Convert.bool_to_str(btn.guild.song_queue.looping)))
+        await self.inform_changes(btn,MessageString.loop_audio_msg.format(convert.bool_to_str(btn.guild.song_queue.looping)))
+
+    @classmethod
+    async def on_config_btn_press(self,btn:Interaction):
+        
+        class ConfigModal(Modal,title = "Configuration of the audio"):
+            volume_space = TextInput(label='Volume', style=discord.TextStyle.short,placeholder="1-200%",max_length=3,required=False)
+            speed_space = TextInput(label='Speed', style=discord.TextStyle.short,placeholder="0.5-2.5",max_length=3,required=False)
+            pitch_space = TextInput(label='Pitch', style=discord.TextStyle.short,placeholder="0.5-2.5",max_length=3,required=False)
+            
+            async def on_submit(_self, interaction: Interaction) -> None:
+
+                guild = interaction.guild
+
+                vol_changed,speed_changed,pitch_changed = False,False,False
+
+                volume_to_set = str(_self.volume_space)
+                new_speed = str(_self.speed_space)
+                new_pitch = str(_self.pitch_space)
+
+                if volume_to_set:
+
+                    try: volume_percentage = convert.extract_int_from_str(volume_to_set)
+                    except ValueError: ...
+                    else:
+                        from main import BOT_INFO
+                        from Cogs.music import VOLUME_PERCENTAGE_LIMIT
+                        #Volume higher than the limit
+                        if volume_percentage > VOLUME_PERCENTAGE_LIMIT and interaction.user.id != self.bot.owner_id:
+                            return await interaction.response.send_message(f"🚫 Please enter a volume below {VOLUME_PERCENTAGE_LIMIT}% (to protect yours and other's ears 👍🏻)",ephemeral=True)
+                        else:
+                            vol_changed = not vol_changed
+                            voice_client:discord.VoiceClient = guild.voice_client
+                            true_volume :float               = volume_percentage / 100 * BOT_INFO.InitialVolume #Actual volume to be set to
+                            
+                            #Updating to the new value
+                            guild.song_queue.volume = true_volume
+                            if voice_client and voice_client.source:
+                                voice_client.source.volume = true_volume
+
+
+                if new_speed:
+
+                    try:
+                        new_speed = float(new_speed)
+                        if new_speed <= 0:
+                            voice_state.pause_audio(guild)
+                            return await interaction.reply(MessageString.paused_audio_msg)
+                        elif new_speed < 0.5 or new_speed > 5:
+                            return await interaction.response.send_message("Speed can only range between `0.5-5`.",ephemeral=True)
+
+                    except ValueError:
+                        return await interaction.response.send_message("Invalid speed.",ephemeral=True)
+                    else:
+                        guild.song_queue.speed = new_speed
+                        speed_changed = not speed_changed
+
+                if new_pitch:
+                    queue = guild.song_queue
+                    
+                    try:
+                        if float(new_pitch) <= 0:
+                            raise ValueError
+                        #speed / pitch >= 0.5
+                    except ValueError:
+                        return  await interaction.response.send_message("Invalid pitch.",ephemeral=True)
+                    else:
+                        queue.pitch = float(new_pitch)
+                        pitch_changed = not pitch_changed
+
+
+                #Applying 
+                await interaction.response.defer()
+                
+                if not (vol_changed or speed_changed or pitch_changed):
+                    return
+
+                await voice_state.update_audio_msg(guild)
+                if pitch_changed or speed_changed:
+                    if guild.voice_client and guild.voice_client._player and guild.song_queue:
+                        voice_state.pause_audio(guild)
+                        await voice_state.restart_track(guild)
+
+                await self.inform_changes(btn,"New configuration of the audio set")
+
+        await btn.response.send_modal(ConfigModal())
 
     @staticmethod
     async def on_favourite_btn_press(btn : Interaction):
         return await btn.response.defer()
         title = btn.message.embeds[0].title
         url = btn.message.embeds[0].url
-        await btn.response.send_message(content=MessageString.added_fav_msg.format(title,Favourites.add_track(btn.user, title, url)))
+        await btn.response.send_message(content=MessageString.added_fav_msg.format(title,favourites.add_track(btn.user, title, url)))
 
     @staticmethod
     async def on_subtitles_btn_press(btn : Interaction, bot : discord.Client):

@@ -4,7 +4,7 @@ import logging
 import requests
 import re
 
-import Convert
+import convert
 
 from difflib import SequenceMatcher
 from googletrans import Translator
@@ -109,7 +109,7 @@ class Subtitles:
         """
         Sync the subtitle with the audio
         """
-        
+        return
         if True or not queue.sync_lyrics:
             return logging.info("Syncing disabled")
 
@@ -153,14 +153,14 @@ class Subtitles:
                     like_percentage = SequenceMatcher(None,text,pron).quick_ratio()
                     if like_percentage < 0.3:
                         
-                        sent.append(f"> {Convert.length_format(queue.time_position)} - {Convert.length_format(queue.time_position+duration)}\n{text}\n{pron}")
+                        sent.append(f"> {convert.length_format(queue.time_position)} - {convert.length_format(queue.time_position+duration)}\n{text}\n{pron}")
                         return await display.edit(
                         embed=discord.Embed( title="Lyrics ~",
                                                 description="\n".join(sent))
                         )
                         # return sent.append(await channel.send(embed=discord.Embed(title=f"{text}\n{pron}")))
                         
-                sent.append(f"> {Convert.length_format(queue.time_position)} - {Convert.length_format(queue.time_position+duration)}\n{text}")
+                sent.append(f"> {convert.length_format(queue.time_position)} - {convert.length_format(queue.time_position+duration)}\n{text}")
                 return await display.edit(embed=discord.Embed( title="Lyrics ~",
                                                 description="\n".join(sent)))
             except discord.errors.NotFound:

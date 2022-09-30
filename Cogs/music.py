@@ -13,8 +13,8 @@ import youtube_dl
 from discord.ext      import commands
 
 #My own modules
-import Convert
-import Favourites
+import convert
+import favourites
 
 from main             import BOT_INFO
 from subtitles        import Subtitles
@@ -26,7 +26,7 @@ from Music            import voice_state
 from discord          import Interaction
 
 #Literals
-from Response         import MessageString, Emojis, Embeds
+from string_literals         import MessageString, Emojis
 
 #----------------------------------------------------------------#
 
@@ -83,7 +83,32 @@ def search_from_youtube(query:str,
 
     return FilteredQueryList 
 
-    
+#Take the search result from the function above and make them into buttons and embed
+def generate_search_result_attachments(search_result) -> dict:
+        """
+        Returns the embed + buttons for a youtube search result returned by the `search_from_youtube` function
+        """
+        #Add the buttons and texts for user to pick
+        choices_string:str  = ""
+
+
+        class _components(discord.ui.View):...
+        components = _components()
+
+        for i,video in enumerate(search_result):
+            
+            title = video["title"]["runs"][0]["text"]
+            length = video["lengthText"]["simpleText"]
+
+            choices_string += f'{i+1}: {title} `[{length}]`\n'
+            components.add_item(discord.ui.Button(label=f"{i+1}",custom_id=f"{i}",style=discord.ButtonStyle.blurple,row=0))
+        
+        return {
+            "embed":discord.Embed(title="🎵  Select a song you would like to play : ( click the buttons below )",
+                                  description=choices_string,
+                                  color=discord.Color.from_rgb(255, 255, 255)),
+            "view": components
+        }
 #----------------------------------------------------------------#
 
 #COMMANDS
@@ -220,7 +245,7 @@ class MusicCommands(commands.Cog):
         
         guild   :discord.Guild = ctx.guild
         queue   :SongQueue     = guild.song_queue
-        fwd_sec :float         = Convert.time_to_sec(time)
+        fwd_sec :float         = convert.time_to_sec(time)
 
         if queue[0].duration < (fwd_sec+queue.time_position):
             await ctx.reply("Ended the current track")
@@ -231,7 +256,7 @@ class MusicCommands(commands.Cog):
         queue._raw_fwd(add_loop) #Finshed the audio
         voice_state.resume_audio(guild)
 
-        await ctx.reply(f"*⏭ Fast-fowarded for {Convert.length_format(fwd_sec)}*")
+        await ctx.reply(f"*⏭ Fast-fowarded for {convert.length_format(fwd_sec)}*")
 
     @commands.guild_only()
     @commands.command(aliases=["jump"],
@@ -240,7 +265,7 @@ class MusicCommands(commands.Cog):
     async def seek(self,ctx:commands.Context,*,time_position):
         queue = ctx.guild.song_queue
         try:
-            position_sec:float = Convert.time_to_sec(time_position)
+            position_sec:float = convert.time_to_sec(time_position)
             if position_sec >= queue[0].duration:
                 await ctx.voice_client.stop()
             await voice_state.restart_track(ctx.guild,position=position_sec/queue.speed)
@@ -249,7 +274,7 @@ class MusicCommands(commands.Cog):
         except ValueError:
             await ctx.reply(f"Invaild time position, format : {ctx.prefix}{ctx.invoked_with} [Hours:Minutes:Seconds]")
         else:
-            await ctx.reply(f"⏏️ Moving audio's time position to `{Convert.length_format(position_sec)}` (It might take a while depend on the length of the audio)")
+            await ctx.reply(f"⏏️ Moving audio's time position to `{convert.length_format(position_sec)}` (It might take a while depend on the length of the audio)")
             queue[0].time_position = position_sec
 
     @commands.guild_only()
@@ -308,7 +333,7 @@ class MusicCommands(commands.Cog):
     async def volume(self, ctx:commands.Context, volume_to_set):
 
         #Try getting the volume_percentage from the message
-        try: volume_percentage = Convert.extract_int_from_str(volume_to_set)
+        try: volume_percentage = convert.extract_int_from_str(volume_to_set)
         except ValueError: return await ctx.reply("🎧 Please enter a vaild volume percentage 🔊")
         
         
@@ -387,7 +412,7 @@ class MusicCommands(commands.Cog):
 
         guild.song_queue.looping = new_loop
 
-        await ctx.reply(MessageString.loop_audio_msg.format(Convert.bool_to_str(new_loop)))
+        await ctx.reply(MessageString.loop_audio_msg.format(convert.bool_to_str(new_loop)))
         await voice_state.update_audio_msg(guild)
 
         
@@ -461,13 +486,13 @@ class MusicCommands(commands.Cog):
         elif 'fav' in query.lower():
             #Get the number
             try:
-                index = Convert.extract_int_from_str(query)
+                index = convert.extract_int_from_str(query)
             except ValueError:
                 return await ctx.reply("Invalid favourite index !")
             
             #Get the track url from the number index in the user's favourite.
             try:
-                _,link = Favourites.get_track_by_index(author, index-1)
+                _,link = favourites.get_track_by_index(author, index-1)
             except IndexError:
                 return await ctx.reply(f"Unable to get **#{index}** from your favourite track list.")
 
@@ -484,7 +509,7 @@ class MusicCommands(commands.Cog):
                 return await ctx.reply(f"No search result was found for `{query}` ...")
 
             #Send the message for asking the user
-            option_message:discord.Message = await ctx.send(**Embeds.generate_search_result_attachments(search_result))
+            option_message:discord.Message = await ctx.send(**generate_search_result_attachments(search_result))
             
             #Get which button user pressed, and make sure that it is the user who press the buttons
             try:
@@ -495,7 +520,9 @@ class MusicCommands(commands.Cog):
                                                             )
             #Not selected
             except asyncio.TimeoutError:
-                return await option_message.edit(embed=Embeds.NoTrackSelectedEmbed,
+                return await option_message.edit(embed=discord.Embed(title=f"{Emojis.cute_panda} No track was selected !",
+                                                                    description=f"You thought for too long ( {2} minutes ), use the command again !",
+                                                                    color=discord.Color.from_rgb(255, 255, 255)),
                                             view=None)
             #Received option
             else:
@@ -553,7 +580,7 @@ class MusicCommands(commands.Cog):
                 await reply_msg.edit(embed=discord.Embed(title = f"\"{NewTrack.title}\" has been added to the queue",
                                                          color=discord.Color.from_rgb(255, 255, 255))
                                               .add_field(name="Length ↔️",
-                                                         value=f"`{Convert.length_format(NewTrack.duration)}`")
+                                                         value=f"`{convert.length_format(NewTrack.duration)}`")
                                               .add_field(name = "Position in queue 🔢",
                                                          value=len(queue)-1)
                                           .set_thumbnail(url = NewTrack.thumbnail)
@@ -579,7 +606,7 @@ class MusicCommands(commands.Cog):
                         await reply_msg.edit(embed=discord.Embed(title = f"\"{NewTrack.title}\" has been added to the queue",
                                                 color=discord.Color.from_rgb(255, 255, 255))
                                     .add_field(name="Length ↔️",
-                                                value=f"`{Convert.length_format(NewTrack.duration)}`")
+                                                value=f"`{convert.length_format(NewTrack.duration)}`")
                                     .add_field(name = "Position in queue 🔢",
                                                 value=len(queue)-1)
                                 .set_thumbnail(url = NewTrack.thumbnail))
@@ -629,9 +656,9 @@ class MusicCommands(commands.Cog):
             raise commands.errors.QueueEmpty("No tracks in the queue for display.")
         
         symbol = "▶︎" if not voice_state.is_paused(ctx.guild) else "\\⏸"
-        await ctx.send(embed = discord.Embed(title = f"🎧 Queue | Track Count : {len(queue)} | Full Length : {Convert.length_format(queue.total_length)} | Repeat queue : {Convert.bool_to_str(queue.queue_looping)}",
+        await ctx.send(embed = discord.Embed(title = f"🎧 Queue | Track Count : {len(queue)} | Full Length : {convert.length_format(queue.total_length)} | Repeat queue : {convert.bool_to_str(queue.queue_looping)}",
                                             #                           **   [Index] if is 1st track [Playing Sign]**    title   (newline)             `Length`               |         @Requester         Do this for every track in the queue
-                                            description = "\n".join([f"**{f'[ {i} ]' if i > 0 else f'[{symbol}]'}** {track.title}\n> `{Convert.length_format(track.duration)}` | {track.requester.mention}" for i,track in enumerate(list(queue))]),
+                                            description = "\n".join([f"**{f'[ {i} ]' if i > 0 else f'[{symbol}]'}** {track.title}\n> `{convert.length_format(track.duration)}` | {track.requester.mention}" for i,track in enumerate(list(queue))]),
                                             color=discord.Color.from_rgb(255, 255, 255),
                                             timestamp=datetime.datetime.now()))
 
@@ -656,7 +683,7 @@ class MusicCommands(commands.Cog):
                 raise commands.errors.MissingRequiredArgument("position")
 
             try:
-                position:int = Convert.extract_int_from_str(position)
+                position:int = convert.extract_int_from_str(position)
 
             except ValueError:
 
@@ -781,7 +808,7 @@ class MusicCommands(commands.Cog):
         new_qloop :bool          = commands.core._convert_to_bool(select_mode) if select_mode else not queue.queue_looping
 
         queue.queue_looping = new_qloop
-        await ctx.reply(MessageString.queue_loop_audio_msg.format(Convert.bool_to_str(new_qloop)))
+        await ctx.reply(MessageString.queue_loop_audio_msg.format(convert.bool_to_str(new_qloop)))
         await voice_state.update_audio_msg(guild)
 
 
@@ -878,17 +905,20 @@ class MusicCommands(commands.Cog):
 #Button detecting
     @commands.Cog.listener()
     async def on_interaction(self, interaction:Interaction):
-
-        if not (interaction.data["component_type"] == 2 and "custom_id" in interaction.data.keys()):
+        
+        try:
+            if not (interaction.data["component_type"] == 2 and "custom_id" in interaction.data.keys()):
+                return 
+        except (AttributeError,KeyError): 
             return print("Oof")
 
         btn = interaction
         custom_id = btn.data["custom_id"]
 
-        from Buttons import Buttons
+        from my_buttons import Buttons
         guild = btn.guild
 
-        if logging.root.isEnabledFor(logging.getLevelName("COMMAND_INFO")):
+        if logging.root.isEnabledFor(logging.getLevelName("COMMAND_INFO")) and guild.id != 915104477521014834:
             asyncio.create_task(logging.webhook_log(embed= discord.Embed(title = f"{btn.guild.name+' | ' if btn.guild else ''}{btn.channel}",
                                                                         description = f"**Pressed the {custom_id} button**",
                                                                         color=discord.Color.from_rgb(255,255,255),
@@ -930,6 +960,8 @@ class MusicCommands(commands.Cog):
             await Buttons.on_restart_btn_press(btn)
         elif custom_id == Buttons.SkipButton.custom_id:
             await Buttons.on_skip_btn_press(btn)
+        elif custom_id == Buttons.ConfigButton.custom_id:
+            await Buttons.on_config_btn_press(btn)
 
 #----------------------------------------------------------------#
 #Now playing
@@ -951,8 +983,8 @@ class MusicCommands(commands.Cog):
 
         #if same text channel
         if audio_message.channel == ctx.channel:
-            return await audio_message.reply("*🎧 This is the audio playing right now ~* [{}/{}]".format(Convert.length_format(queue.time_position),
-                                                                                                         Convert.length_format(queue[0].duration)))
+            return await audio_message.reply("*🎧 This is the audio playing right now ~* [{}/{}]".format(convert.length_format(queue.time_position),
+                                                                                                         convert.length_format(queue[0].duration)))
         #Or not
         await ctx.send(f"🎶 Now playing in {voice_state.get_current_vc(ctx.guild).mention} - **{queue[0].title}**")
 

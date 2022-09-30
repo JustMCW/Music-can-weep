@@ -3,7 +3,7 @@ import os
 import logging
 import discord
 from discord.ext import commands, tasks
-from Response    import MessageString
+from string_literals    import MessageString
 from Database import Management
 
 
