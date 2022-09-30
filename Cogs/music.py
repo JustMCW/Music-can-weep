@@ -894,8 +894,8 @@ class MusicCommands(commands.Cog):
                                                                         color=discord.Color.from_rgb(255,255,255),
                                                                         timestamp = datetime.datetime.now()
                                                                         ).set_author(
-                                                                        name =btn.author,
-                                                                        icon_url= btn.author.display_avatar),
+                                                                        name =btn.user,
+                                                                        icon_url= btn.user.display_avatar),
                                                     username="Button Logger"))
         
         if interaction.response.is_done() or guild is None:  return
