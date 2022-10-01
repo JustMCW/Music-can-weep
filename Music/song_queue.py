@@ -5,7 +5,7 @@ from typing_extensions import Self
 from typing import List
 from enum import Enum,auto
 
-from main import BOT_INFO
+from main import BotInfo
 from Music.song_track import SongTrack
 hash_maps = {}
 
@@ -19,17 +19,15 @@ class SongQueue(deque):
     def __init__(self,guild):
         self.guild                :discord.Guild   = guild 
 
-        self.volume               :float           = BOT_INFO.InitialVolume
+        self.volume               :float           = BotInfo.InitialVolume
 
         self.pitch                :float           = 1
         self.speed                :float           = 1
 
         self.audio_control_status :AudioControlState = None
 
-        self.looping              :bool            = BOT_INFO.InitialLooping
-        self.queue_looping        :bool            = BOT_INFO.InitialQueueLooping
-
-        self.found_lyrics         :bool            = None
+        self.looping              :bool            = BotInfo.InitialLooping
+        self.queue_looping        :bool            = BotInfo.InitialQueueLooping
 
         self.audio_message        :discord.Message = None
 
@@ -52,12 +50,8 @@ class SongQueue(deque):
         except IndexError: return None
     
     @property
-    async def enabled(self) -> bool:
-        return (await self.guild.database).get("queuing")
-
-    @property
-    async def sync_lyrics(self) -> bool:
-        return (await self.guild.database).get("sync_lyrics")
+    def enabled(self) -> bool:
+        return self.guild.database.get("queuing")
 
     @property
     def total_length(self) -> int:
@@ -66,7 +60,7 @@ class SongQueue(deque):
     @property
     def time_position(self) -> int:
         try:
-            return self[0].time_position
+            return self[0].time_position * self.speed
         except IndexError:
             return None
 

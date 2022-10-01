@@ -1,6 +1,7 @@
+#fav is given up
+
 import os
 import json
-
 FavouritesDir = "Database/Favourites/"
 Indentation = 3
 

@@ -1,18 +1,17 @@
+from typing import Union
 import discord
 import time
 import asyncio
 import logging
-import threading
 
 from discord.ext      import commands
 
-from main             import BOT_INFO
+from main             import BotInfo
 
 from Music.song_queue import SongQueue,AudioControlState
 from Music.song_track import SongTrack
 
-from my_buttons          import Buttons
-from subtitles        import Subtitles
+from my_buttons          import MusicButtons
 from string_literals         import Emojis
 import convert
 
@@ -20,27 +19,27 @@ def audio_playing_embed(queue) -> discord.Embed:
     """the discord embed for displaying the audio that is playing"""
     from Music import voice_state
     
-    SongTrackPlaying = queue[0]
+    current_track = queue[0]
 
-    YT_creator = getattr(SongTrackPlaying,"channel",None) 
-    Creator = YT_creator or getattr(SongTrackPlaying,"uploader")
-    Creator_url = getattr(SongTrackPlaying,"channel_url",getattr(SongTrackPlaying,"uploader_url",None))
+    YT_creator = getattr(current_track,"channel",None) 
+    Creator = YT_creator or getattr(current_track,"uploader")
+    Creator_url = getattr(current_track,"channel_url",getattr(current_track,"uploader_url",None))
     Creator = "[{}]({})".format(Creator,Creator_url) if Creator_url else Creator
 
-    return discord.Embed(title= SongTrackPlaying.title,
-                        url= SongTrackPlaying.webpage_url,
+    return discord.Embed(title= current_track.title,
+                        url= current_track.webpage_url,
                         color=discord.Color.from_rgb(255, 255, 255))\
             \
-            .set_author(name=f"Requested by {SongTrackPlaying.requester.display_name}",
-                        icon_url=SongTrackPlaying.requester.display_avatar)\
-            .set_image(url = SongTrackPlaying.thumbnail)\
+            .set_author(name=f"Requested by {current_track.requester.display_name}",
+                        icon_url=current_track.requester.display_avatar)\
+            .set_image(url = current_track.thumbnail)\
             \
             .add_field(name=f"{Emojis.YOUTUBE_ICON} YT channel" if YT_creator else "💡 Creator",
                         value=Creator)\
             .add_field(name="↔️ Length",
-                        value=f'`{convert.length_format(getattr(SongTrackPlaying,"duration"))}`')\
+                        value=f'`{convert.length_format(getattr(current_track,"duration"))}`')\
             .add_field(name="📝 Lyrics",
-                        value=f'*{"Available" if queue.found_lyrics else "Unavailable"}*')\
+                        value=f"*Available in {len(current_track.subtitles)} languages*" if getattr(current_track,"subtitles",None) else "*Unavailable*")\
             \
             .add_field(name="📶 Volume ",
                         value=f"`{voice_state.get_volume_percentage(queue.guild)}%`")\
@@ -90,7 +89,7 @@ def get_current_vc(guild:discord.Guild)->discord.VoiceChannel:
 
 
 def get_volume_percentage(guild:discord.Guild)->int:
-    return round(guild.song_queue.volume / BOT_INFO.InitialVolume * 100)
+    return round(guild.song_queue.volume / BotInfo.InitialVolume * 100)
 
 
 def get_non_bot_vc_members(guild:discord.Guild)->list:
@@ -167,6 +166,7 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
     11. Recursion after finsh playing (back to step 1) until it stop
     """
     async def _async_after():
+        #warning : You are about to enter the most chaotic code in my whole project.
         if voice_error is not None: return logging.error("Voice error :",voice_error)
 
         voice_client         :discord.VoiceClient = guild.voice_client
@@ -183,7 +183,7 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
         if not voice_client or not voice_client.is_connected():
             await clear_audio_message(guild)
 
-            if not (await queue.enabled):
+            if not queue.enabled:
                 queue.popleft()
 
             await clean_up_queue(guild)
@@ -222,13 +222,9 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
         #Single song looping is on
         elif looping and audio_control_status is None:
             NextTrack = FinshedTrack
-            threading.Thread(
-                target=Subtitles.sync_subtitles,
-                args=(queue,text_channel,NextTrack)
-            ).start()
         
         #Queuing disabled
-        elif not (await queue.enabled):
+        elif not queue.enabled:
             queue.popleft()
             await clear_audio_message(guild)
             return logging.info("Queue disabled")
@@ -241,7 +237,8 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
             if audio_control_status == AudioControlState.REWIND: queue.appendleft(queue.history.pop(-1))
             elif queue_looping: queue.rotate(-1)    
             else: queue.popleft()
-
+            
+            #Make the history
             if audio_control_status != AudioControlState.REWIND:
                 queue.history.append(FinshedTrack)
 
@@ -259,22 +256,30 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
                 logging.info(f"Play next track : {NextTrack.title}")
                 target = text_channel
                 
-                if queue.audio_message.reference is None:
-                    #if within 3 message, found the now playing message then use that as the target for editing
-                    async for msg in target.history(limit = 3):
-                        if msg.id == queue.audio_message.id:
-                            target = await target.fetch_message(msg.id)
 
-                if isinstance(target,discord.TextChannel):
+                is_first_msg_a_requesting = True #Sadly can't use enumerate
+                async for msg in target.history(limit = 3):
+                    
+                    if NextTrack.request_message:
+                        #if the request message is the first message, make it one
+                        if msg.id == NextTrack.request_message.id and is_first_msg_a_requesting:
+                            target = NextTrack.request_message
+                            break
+                    is_first_msg_a_requesting = False
+
+                    if msg.id == queue.audio_message.id:
+                        
+                        #if within 3 message, found the now playing message then use that as the target for editing
+                        if queue.audio_message.reference is None:
+                            target = await target.fetch_message(msg.id)
+                        
+                    
+                
+                if isinstance(target,discord.TextChannel) or is_first_msg_a_requesting: #
                     await clear_audio_message(guild)
                         
                 await create_audio_message(Track = NextTrack,
-                                                Target = target)
-                    
-                threading.Thread(
-                    target=Subtitles.sync_subtitles,
-                    args=(queue,text_channel,NextTrack)
-                ).start()
+                                            Target = target)
             
             #Skipping the only track in the queue
             elif audio_control_status == AudioControlState.SKIP:
@@ -288,43 +293,36 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
     event_loop.create_task(_async_after())
 
 
-async def create_audio_message(Track:SongTrack,Target):
+async def create_audio_message(Track:SongTrack,Target:Union[discord.TextChannel,discord.Message]):
     
     """
     Create the discord message for displaying audio playing, including buttons and embed
+    accecpt a text channel or a message to be edited
     """
 
     #Getting the subtitle
-    found_lyrics :bool          = Subtitles.find_subtitle_and_language(getattr(Track,"subtitles",None))[0]
     guild       :discord.Guild = Target.guild
     queue       :SongQueue     = guild.song_queue
 
-    queue.found_lyrics = found_lyrics
-
-    #the message for displaying and controling the audio
-    audio_embed     :discord.Embed   = audio_playing_embed(queue)
-    control_buttons :discord.ui.View = Buttons.AudioControllerButtons()
-    
-    #if it's found then dont disable
     message_info = {
-        "embed":audio_embed,
-        "view": control_buttons
+        "embed": audio_playing_embed(queue),
+        "view": MusicButtons.AudioControllerButtons(queue,force_paused=True)
     }
-
-    audio_message_created = None
 
     if isinstance(Target,discord.Message):
         await Target.edit(**message_info)
-        audio_message_created = await Target.channel.fetch_message(Target.id)
+        queue.audio_message = await Target.channel.fetch_message(Target.id)
 
     elif isinstance(Target,discord.TextChannel):
 
-        if Track.request_message:
-            audio_message_created = await Track.request_message.reply(**message_info)
-        else:
-            audio_message_created = await Target.send(**message_info)
+        try:
+            if Track.request_message.channel.id == Target.id:
+                queue.audio_message = await Track.request_message.reply(**message_info)
+            else:
+                raise AttributeError("Not the same channel.")
+        except (AttributeError):
+            queue.audio_message = await Target.send(**message_info)
     
-    queue.audio_message = audio_message_created
 
 
 async def clear_audio_message(guild:discord.Guild=None,specific_message:discord.Message = None):
@@ -350,7 +348,7 @@ async def clear_audio_message(guild:discord.Guild=None,specific_message:discord.
 
     await audio_message.edit(#content = content,
                             embed=newEmbed,
-                            view= Buttons.AfterAudioButtons())
+                            view= MusicButtons.AfterAudioButtons())
     logging.info("Succesfully removed audio messsage.")
 
     if not specific_message: guild.song_queue.audio_message = None
@@ -360,7 +358,7 @@ async def clean_up_queue(guild:discord.Guild):
     queue:SongQueue = guild.song_queue
     clear_after = 600
 
-    if queue and (await queue.guild.database).get("auto_clear_queue"):
+    if queue and queue.guild.database.get("auto_clear_queue"):
         logging.info(f"Wait for {clear_after} sec then clear queue")
         await asyncio.sleep(clear_after)
         
@@ -380,6 +378,9 @@ async def update_audio_msg(guild):
         audio_msg:discord.Message = guild.song_queue.audio_message
 
         if audio_msg: 
-
+            from my_buttons import MusicButtons
             #Apply the changes                  
-            await audio_msg.edit(embed=audio_playing_embed(guild.song_queue))
+            await audio_msg.edit(
+                embed=audio_playing_embed(guild.song_queue),
+                view=MusicButtons.AudioControllerButtons(guild.song_queue)
+            )

@@ -1,6 +1,6 @@
 from string_literals import Emojis
 import re
-
+#I stored some useful function here :)
 def extract_int_from_str(string:str)->int:
     """
     Find the first number in a string, raises `ValueError` if not found

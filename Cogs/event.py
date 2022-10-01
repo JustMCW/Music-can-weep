@@ -56,7 +56,7 @@ class Event(commands.Cog):
         import discord
 
         #Init 
-        Management.initialize(self.bot)
+        # Management.initialize(self.bot)
 
         @property
         def song_queue(self) -> SongQueue:
@@ -68,11 +68,11 @@ class Event(commands.Cog):
         discord.Guild.song_queue=song_queue
 
         @property
-        async def database(self) -> dict:
+        def database(self) -> dict:
             """
             Represents the database which is from `Database.DiscordServers.json` of the guild 
             """
-            return await Management.read_database_of(self)
+            return Management.read_database_of(self)
         discord.Guild.database=database
         
         #Load the cogs for the bot
@@ -98,7 +98,7 @@ class Event(commands.Cog):
         # Message that tell us we have logged in
         logging.webhook_log_event(f"Logged in as {self.bot.user.name} ( running in {len(self.bot.guilds)} servers ) ;",)
 
-        await Management.check_server_database(self.bot)
+        Management.check_server_database(self.bot)
 
         # Start a background task  
         self.changeBotPresence.start()

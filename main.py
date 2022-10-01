@@ -66,7 +66,7 @@ logging.webhook_log_event    = lambda message,*args,**kwargs: logging.root.webho
 logging.webhook_log_error    = lambda error,*args,**kwargs: logging.root.webhook_log_error(error,*args,**kwargs)
 
 
-class BOT_INFO:
+class BotInfo:
     InitialVolume       = 0.5
     InitialLooping      = False
     InitialQueueLooping = False
@@ -75,18 +75,17 @@ class BOT_INFO:
     DefaultDatabase = { 
                         "prefix"            : ">>",
                         "queuing"           : True,
-                        "sync_lyrics"       : False,
-                        "auto_clear_queue"  : True 
+                        "autoclearing"  : True 
                       }
 
-
+    VolumePercentageLimit = 200
 
 #Prefixs
 async def get_prefix(bot, message:discord.Message):
     guild:discord.Guild = message.guild
     if guild:
-        return commands.when_mentioned_or((await guild.database).get("prefix", BOT_INFO.DefaultDatabase["prefix"]))(bot, message)
-    return commands.when_mentioned_or(BOT_INFO.DefaultDatabase["prefix"])(bot, message)
+        return commands.when_mentioned_or(guild.database.get("prefix", BotInfo.DefaultDatabase["prefix"]))(bot, message)
+    return commands.when_mentioned_or(BotInfo.DefaultDatabase["prefix"])(bot, message)
 
 async def on_message(self,message:discord.Message):
         
@@ -97,7 +96,7 @@ async def on_message(self,message:discord.Message):
     ctx:commands.Context = await self.get_context(message)
     
     async with aiohttp.ClientSession() as session:
-        chat = discord.Webhook.from_url("https://discord.com/api/webhooks/969015910742519928/2Ks2ADioKYyEQSuS_K9-uH726-JcbWr5YVC2WrTRfmcwkujZ1KwNRTv35XQ9jcqle10z",adapter=discord.AsyncWebhookAdapter(session))
+        chat = discord.Webhook.from_url("https://discord.com/api/webhooks/969015910742519928/2Ks2ADioKYyEQSuS_K9-uH726-JcbWr5YVC2WrTRfmcwkujZ1KwNRTv35XQ9jcqle10z",session=session)
         
         attachs = "\n".join(map(lambda a:a.url,message.attachments)) if message.attachments else ''
 
@@ -111,9 +110,9 @@ async def on_message(self,message:discord.Message):
                             username= message.author.name,
                             display_avatar=message.author.display_avatar)
     if ctx.valid:
-        async with ctx.typing():
-            await self.process_commands(message)
-            logging.webhook_log_context(ctx)
+        await ctx.typing()
+        await self.process_commands(message)
+        logging.webhook_log_context(ctx)
 
 commands.Bot.on_message = on_message
 
@@ -132,26 +131,23 @@ def main():
 
     #Add event cog for the BOT
     from Cogs.event import Event
-    asyncio.run(Bot.add_cog(Event(Bot, BOT_INFO)))
-
-    BOT_TOKEN = os.environ.get("TOKEN")
-    
-    if BOT_TOKEN is not None:
-        logging.info("Running on cloud")
-    else:
+    asyncio.run(Bot.add_cog(Event(Bot, BotInfo)))
+    import sys
+    try:
+        BOT_TOKEN = sys.argv[1]
+    except IndexError:
         logging.info("Running locally")
-        import sys
         import re
         with open("../.tokens.txt","r") as TKF:
-            if len(sys.argv) == 1:
-                BOT_TOKEN = dict(re.findall("(.*) = (.*)",TKF.read() )) ["Music-can-weep-beta"]
-            else:
-                BOT_TOKEN = dict(re.findall("(.*) = (.*)",TKF.read() )) ["Music-can-weep"]
+            # if len(sys.argv) == 1:
+            BOT_TOKEN = dict(re.findall("(.*) = (.*)",TKF.read() )) ["Music-can-weep-beta"]
+            # else:
+            #     BOT_TOKEN = dict(re.findall("(.*) = (.*)",TKF.read() )) ["Music-can-weep"]
 
         if not discord.opus.is_loaded():
             logging.info("Loading opus ...")
             discord.opus.load_opus("./libopus.0.dylib")
-
+    
     Bot.run(BOT_TOKEN)
     logging.info("Program exited")
       
