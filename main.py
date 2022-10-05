@@ -6,7 +6,7 @@ A discord music bot :
   - Most of the action can be done with buttons and commands
 """
 import asyncio
-import os
+import re
 import traceback
 import logging
 import discord
@@ -19,7 +19,7 @@ from datetime    import datetime
 logging.basicConfig(level=22,format="%(levelname)s from %(module)s:%(lineno)d (%(funcName)s) : %(message)s")
 logging.addLevelName(22, "COMMAND_INFO")
 logging.addLevelName(27, "BOT_EVENT")
-discord.Webhook
+
 async def webhook_log(self:logging.RootLogger,message=None,**options):
     async with aiohttp.ClientSession() as session:
         webhook = discord.Webhook.from_url('https://discord.com/api/webhooks/954928052767457350/BVexILQ8JmXeUKrR2WdWPkW6TSZVxTRsMYSqBsrbbkzdO6kc2uMnRB_UfpsH5rsMT0w-', 
@@ -104,11 +104,11 @@ async def on_message(self,message:discord.Message):
             if guild.id != 915104477521014834:
                 await chat.send(content = f"{message.content} {attachs}\n> #{message.channel} | {message.guild}",
                         username= message.author.name,
-                        display_avatar=message.author.display_avatar)
+                        avatar_url=message.author.display_avatar)
         else:
             await chat.send(content = f"{message.content} {attachs}\n> #{message.channel}",
                             username= message.author.name,
-                            display_avatar=message.author.display_avatar)
+                            avatar_url=message.author.display_avatar)
     if ctx.valid:
         await ctx.typing()
         await self.process_commands(message)
@@ -117,8 +117,6 @@ async def on_message(self,message:discord.Message):
 commands.Bot.on_message = on_message
 
 #Bot itself
-
-
 from Cogs.help import MCWHelpCommand
 Bot = commands.Bot(command_prefix=get_prefix,
                    intents=discord.Intents.all(),
@@ -127,27 +125,28 @@ Bot = commands.Bot(command_prefix=get_prefix,
                    owner_id=812808602997620756)
 
 def main():
-    logging.debug("Started the code")
-
     #Add event cog for the BOT
     from Cogs.event import Event
     asyncio.run(Bot.add_cog(Event(Bot, BotInfo)))
-    import sys
-    try:
-        BOT_TOKEN = sys.argv[1]
-    except IndexError:
-        logging.info("Running locally")
-        import re
-        with open("../.tokens.txt","r") as TKF:
-            # if len(sys.argv) == 1:
-            BOT_TOKEN = dict(re.findall("(.*) = (.*)",TKF.read() )) ["Music-can-weep-beta"]
-            # else:
-            #     BOT_TOKEN = dict(re.findall("(.*) = (.*)",TKF.read() )) ["Music-can-weep"]
 
-        if not discord.opus.is_loaded():
-            logging.info("Loading opus ...")
-            discord.opus.load_opus("./libopus.0.dylib")
-    
+    #Getting out token through various of ways
+    import sys,os
+    try:
+        BOT_TOKEN = os.environ("TOKEN")
+        if not BOT_TOKEN:
+            BOT_TOKEN = sys.argv[1] #passing of an argument
+    except IndexError: #mcw test bot
+        with open("../.tokens.txt","r") as TKF:
+            BOT_TOKEN = dict(re.findall("(.*) = (.*)",TKF.read() )) ["Music-can-weep-beta"]
+    else: #mcw bot
+        if BOT_TOKEN.lower() == "mcw":
+            with open("../.tokens.txt","r") as TKF:
+                BOT_TOKEN = dict(re.findall("(.*) = (.*)",TKF.read() )) ["Music-can-weep"]
+
+
+    if not discord.opus.is_loaded():
+        logging.info("Loading opus ...")
+        discord.opus.load_opus("./libopus.0.dylib")
     Bot.run(BOT_TOKEN)
     logging.info("Program exited")
       
