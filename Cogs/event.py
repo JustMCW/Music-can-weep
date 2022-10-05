@@ -98,8 +98,6 @@ class Event(commands.Cog):
         # Message that tell us we have logged in
         logging.webhook_log_event(f"Logged in as {self.bot.user.name} ( running in {len(self.bot.guilds)} servers ) ;",)
 
-        Management.check_server_database(self.bot)
-
         # Start a background task  
         self.changeBotPresence.start()
 
@@ -204,7 +202,7 @@ class Event(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild:discord.Guild):
-        link = await guild.system_channel.create_invite(xkcd=True, max_age=0, max_uses=0)
+        link = await guild.system_channel.create_invite(unique=False, max_age=0, max_uses=0)
         logging.webhook_log_event(f"Joined {guild.name}",url = link)
 
         # welcome embed

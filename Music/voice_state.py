@@ -1,6 +1,5 @@
 from typing import Union
 import discord
-import time
 import asyncio
 import logging
 
@@ -9,13 +8,13 @@ from discord.ext      import commands
 from main             import BotInfo
 
 from Music.song_queue import SongQueue,AudioControlState
-from Music.song_track import SongTrack
+from Music.song_track import SongTrack,AutoPlayUser
 
 from my_buttons          import MusicButtons
-from string_literals         import Emojis
+from string_literals         import MyEmojis
 import convert
 
-def audio_playing_embed(queue) -> discord.Embed:
+def AudioPlayingEmbed(queue : SongQueue) -> discord.Embed:
     """the discord embed for displaying the audio that is playing"""
     from Music import voice_state
     
@@ -26,7 +25,7 @@ def audio_playing_embed(queue) -> discord.Embed:
     Creator_url = getattr(current_track,"channel_url",getattr(current_track,"uploader_url",None))
     Creator = "[{}]({})".format(Creator,Creator_url) if Creator_url else Creator
 
-    return discord.Embed(title= current_track.title,
+    rembed = discord.Embed(title= current_track.title,
                         url= current_track.webpage_url,
                         color=discord.Color.from_rgb(255, 255, 255))\
             \
@@ -34,7 +33,7 @@ def audio_playing_embed(queue) -> discord.Embed:
                         icon_url=current_track.requester.display_avatar)\
             .set_image(url = current_track.thumbnail)\
             \
-            .add_field(name=f"{Emojis.YOUTUBE_ICON} YT channel" if YT_creator else "💡 Creator",
+            .add_field(name=f"{MyEmojis.YOUTUBE_ICON} YT channel" if YT_creator else "💡 Creator",
                         value=Creator)\
             .add_field(name="↔️ Length",
                         value=f'`{convert.length_format(getattr(current_track,"duration"))}`')\
@@ -43,8 +42,8 @@ def audio_playing_embed(queue) -> discord.Embed:
             \
             .add_field(name="📶 Volume ",
                         value=f"`{voice_state.get_volume_percentage(queue.guild)}%`")\
-            .add_field(name="⏩ Speed",
-                        value=f"`{queue.speed:.2f}`")\
+            .add_field(name="⏩ Tempo",
+                        value=f"`{queue.tempo:.2f}`")\
             .add_field(name="ℹ️ Pitch",
                         value=f'`{queue.pitch:.2f}`')\
             \
@@ -54,6 +53,11 @@ def audio_playing_embed(queue) -> discord.Embed:
                         value=f'**{convert.bool_to_str(queue.looping)}**')\
             .add_field(name="🔁 Queue looping",
                         value=f'**{convert.bool_to_str(queue.queue_looping)}**')
+    if queue.get(1):
+        rembed.set_footer(text=f"Next track : {queue[1].title}",icon_url=queue[1].thumbnail)
+    elif queue.auto_play:
+        rembed.set_footer(text=f"Auto-play : {queue.recommend.title}",icon_url=queue.recommend.thumbnail)
+    return rembed
 
 def is_playing(guild:discord.Guild)-> bool:
     if not guild.voice_client: 
@@ -132,7 +136,7 @@ def skip_track(guild:discord.Guild):
 
 
 @playing_audio
-async def restart_track(guild:discord.Guild,**kwargs):
+async def restart_track(guild:discord.Guild):
     queue: SongQueue = guild.song_queue
 
     voice_client:discord.VoiceChannel = guild.voice_client
@@ -141,12 +145,8 @@ async def restart_track(guild:discord.Guild,**kwargs):
 
     voice_client.stop()
 
-    queue.play_first(voice_client,**kwargs)
-
-
 def after_playing(event_loop:asyncio.AbstractEventLoop,
                 guild:discord.Guild, 
-                start_time:float,
                 voice_error:str = None):
     """
     if any check 1-3 gives true, stop.
@@ -172,13 +172,18 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
         voice_client         :discord.VoiceClient = guild.voice_client
         queue                :SongQueue           = guild.song_queue
         audio_control_status :str                 = queue.audio_control_status
+        
 
         queue.audio_control_status = None
-        
-        try:print(queue.time_position*queue.speed,queue[0].duration)
-        except: ...
+        FinshedTrack  :SongTrack           = queue[0]
+        #I moved it here because cleanup runs after the this function in the orginal code, and we need the cleanup function to access the return code
+        FinshedTrack.source.original.cleanup() 
+        returncode = FinshedTrack.source.original.returncode
+        # try:
+        #     print(queue.time_position*queue.tempo,queue[0].duration)
+        #     print(audio_control_status)
+        # except: ...
         #Check stage 1
-
         #Ensure in voice chat
         if not voice_client or not voice_client.is_connected():
             await clear_audio_message(guild)
@@ -192,24 +197,22 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
         
         #Ignore if some commands are triggered
         if audio_control_status == AudioControlState.RESTART:
-            return logging.info(f"Ignore loop : RESTART")
+            return queue.play_first(voice_client)
 
         if audio_control_status == AudioControlState.CLEAR:
+            queue.clear()
             await clear_audio_message(guild)
 
             return logging.info("Ignore loop : CLEAR QUEUE")
         
         #Check stage 2
-        FinshedTrack  :SongTrack           = queue[0]
         NextTrack     :SongTrack           = None
         looping       :bool                = queue.looping
         queue_looping :bool                = queue.queue_looping
         text_channel  :discord.TextChannel = queue.audio_message.channel if queue.audio_message else None
 
-        #403 forbidden error (an error that try cannot catch, but it makes the audio ends instantly)
-        if (time.perf_counter() - start_time) < 0.5 and audio_control_status is None:
-
-            logging.warning(f"Ignore loop : HTTP ERROR, Time (ns) = {time.perf_counter() - start_time}")
+        #403 forbidden error (most like to be it)
+        if returncode == 1:
 
             #Get a new piece of info
             NextTrack = SongTrack.create_track(query = FinshedTrack.webpage_url,
@@ -247,9 +250,16 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
 
             #No song in the queue
             if NextTrack is None:
-                # await text_channel.send("\\☑️ All tracks in the queue has been played (if you want to repeat the queue, run \" >>queue repeat on \")",delete_after=30)
-                await clear_audio_message(guild)
-                return logging.info("Queue is empty")
+                if queue.auto_play:
+                    next_url = queue.recommend.url
+                    NextTrack = SongTrack.create_track(query=next_url,requester=AutoPlayUser)
+                    queue.append(NextTrack)
+                else:
+                    # await text_channel.send("\\☑️ All tracks in the queue has been played (if you want to repeat the queue, run \" >>queue repeat on \")",delete_after=30)
+                    await clear_audio_message(guild)
+                    return logging.info("Queue is empty")
+            elif len(queue) == 1:
+                queue.generate_rec()
 
             #To prevent sending the same audio message again
             if NextTrack != FinshedTrack:
@@ -275,7 +285,7 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
                         
                     
                 
-                if isinstance(target,discord.TextChannel) or is_first_msg_a_requesting: #
+                if isinstance(target,discord.TextChannel) or (is_first_msg_a_requesting and NextTrack.request_message): #
                     await clear_audio_message(guild)
                         
                 await create_audio_message(Track = NextTrack,
@@ -287,7 +297,6 @@ def after_playing(event_loop:asyncio.AbstractEventLoop,
 
         
         #Play the audio
-        new_start_time =float(time.perf_counter())
         queue.play_first(voice_client)
 
     event_loop.create_task(_async_after())
@@ -305,8 +314,8 @@ async def create_audio_message(Track:SongTrack,Target:Union[discord.TextChannel,
     queue       :SongQueue     = guild.song_queue
 
     message_info = {
-        "embed": audio_playing_embed(queue),
-        "view": MusicButtons.AudioControllerButtons(queue,force_paused=True)
+        "embed": AudioPlayingEmbed(queue),
+        "view": MusicButtons.AudioControllerButtons()
     }
 
     if isinstance(Target,discord.Message):
@@ -330,13 +339,12 @@ async def clear_audio_message(guild:discord.Guild=None,specific_message:discord.
     """
     Edit the audio message to give it play again button and make the embed smaller
     """
-
     audio_message:discord.Message = specific_message or guild.song_queue.audio_message
 
     if audio_message is None:  
         return logging.warning("Audio message is none")
 
-    newEmbed:discord.Embed = audio_message.embeds[0]
+    newEmbed : discord.Embed = audio_message.embeds[0].remove_footer()
 
     for _ in range(7):
         newEmbed.remove_field(2)
@@ -345,10 +353,10 @@ async def clear_audio_message(guild:discord.Guild=None,specific_message:discord.
         newEmbed.set_thumbnail(url=newEmbed.image.url)
         newEmbed.set_image(url=None)
     
-
+    audio_message.components
     await audio_message.edit(#content = content,
                             embed=newEmbed,
-                            view= MusicButtons.AfterAudioButtons())
+                            view=MusicButtons.PlayAgainButton)
     logging.info("Succesfully removed audio messsage.")
 
     if not specific_message: guild.song_queue.audio_message = None
@@ -381,6 +389,6 @@ async def update_audio_msg(guild):
             from my_buttons import MusicButtons
             #Apply the changes                  
             await audio_msg.edit(
-                embed=audio_playing_embed(guild.song_queue),
-                view=MusicButtons.AudioControllerButtons(guild.song_queue)
+                embed= AudioPlayingEmbed(guild.song_queue),
+                view = MusicButtons.AudioControllerButtons()
             )

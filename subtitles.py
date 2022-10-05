@@ -1,8 +1,8 @@
-import asyncio
 import discord
 import logging
 import requests
 import re
+from Music.song_queue import SongQueue
 
 import convert
 
@@ -26,7 +26,7 @@ def sec_in_time_string(time_string:str) -> int:
     #Turn them into int and give each of them a variable
     hour,min,sec,millisec = map(lambda x: int(x.replace(":","").replace(".","")) if x is not None else x, time_group) 
 
-    #if min doesnt exist but the hour then the hour must actually be the min
+    #if min doesnt exist but the hour does, then the hour must actually be the min (11:00 -> this is 11mins, not hours)
     if hour and min is None:
         min = hour
         hour = 0
@@ -90,7 +90,7 @@ class Subtitles:
                         continue
             subtitles.append(line)
 
-        return subtitles_url,subtitles
+        return subtitles_url,"\n".join(subtitles)
 
     @staticmethod
     async def send_subtitles(channel, subtitles_text:str):
@@ -105,13 +105,45 @@ class Subtitles:
             await channel.send(full)
 
     @staticmethod
+    def sync_lyrics(language : str,queue : SongQueue, message_obj : discord.Message, loop):
+        current_track = queue[0]
+        subtitle_url = current_track.subtitles[language][4]["url"]
+        subtitle_content = requests.get(subtitle_url).content.decode("utf-8")
+        subr = re.findall(r"^(\d{2}:\d{2}:\d{2}\.\d{3}) --> \d{2}:\d{2}:\d{2}\.\d{3}\n((^.+\n)+)\n",subtitle_content,re.MULTILINE)
+        
+        subr = list(map(lambda sub:(sec_in_time_string(sub[0]),sub[1]),subr)) #Format the time
+
+        import time,asyncio
+        prev_text = ""
+        offset = 0.5
+        
+
+        async def on_change(new_text:str):
+            await message_obj.edit(content=new_text)
+
+        from Music import voice_state
+        
+        while voice_state.is_playing(queue.guild):
+            try:
+                for i,(timing,next_text) in enumerate(subr):
+                    if timing > queue.time_position + offset and i:
+                        text = subr[i-1][1]
+
+                        if prev_text != text:
+                            prev_text = text
+                            loop.create_task(on_change(text+"\n"+next_text))
+
+                        break
+            except TypeError:
+                break
+            
+            time.sleep(0.1)
+
+    @staticmethod
     def sync_subtitles(queue,channel,song_track):
         """
-        Sync the subtitle with the audio
+        Sync the subtitle with the audio, trash code is all in here
         """
-        return
-        if True or not queue.sync_lyrics:
-            return logging.info("Syncing disabled")
 
         sub_options:dict = getattr(song_track,"subtitles",None)
         if not sub_options:
@@ -130,14 +162,13 @@ class Subtitles:
         sent:list[discord.Message] = []
         text_sent:list[str] = []
 
-        # display:discord.Message = asyncio.run(channel.send(
-        #     embed = discord.Embed(
-        #         title="Lyrics ~"
-        #     )
-        # ))
+        display:discord.Message = asyncio.run(channel.send(
+            embed = discord.Embed(
+                title="Lyrics ~"
+            )
+        ))
 
         async def send_text(text,duration):
-            return
             if len(sent) > 5:
                 sent.pop(0)
 

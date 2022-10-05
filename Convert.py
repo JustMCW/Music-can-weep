@@ -1,4 +1,4 @@
-from string_literals import Emojis
+from string_literals import MyEmojis
 import re
 #I stored some useful function here :)
 def extract_int_from_str(string:str)->int:
@@ -24,8 +24,8 @@ def str_to_bool(string:str)->bool:
 
 
 def bool_to_str(value:bool) -> str:
-    if value == True: return f"On {Emojis.discord_on}"
-    if value == False: return f"Off {Emojis.discord_off}"
+    if value == True: return f"On {MyEmojis.discord_on}"
+    if value == False: return f"Off {MyEmojis.discord_off}"
     return "Unknown"
     
 def length_format(totalSeconds:int) -> str:

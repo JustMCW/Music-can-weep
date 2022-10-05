@@ -4,6 +4,7 @@ import logging
 import re
 import os
 import datetime
+from typing           import List
 from functools        import reduce
 
 #Third party libaries
@@ -25,10 +26,10 @@ from Music.song_queue import SongQueue
 from Music.song_track import SongTrack
 from Music            import voice_state
 from my_buttons       import MusicButtons,UtilityButtons
-
+from youtube_utils    import search_from_youtube,YoutubeVideo
 
 #Literals
-from string_literals         import MessageString, Emojis
+from string_literals         import MessageString, MyEmojis
 
 #----------------------------------------------------------------#
 VOLUME_PERCENTAGE_LIMIT = BotInfo.VolumePercentageLimit
@@ -37,78 +38,33 @@ TIMEOUT_SECONDS         = 60 * 2
 #----------------------------------------------------------------#
 #random functions that i don't know where to place
 
-#Search Audio fromm Youtube
-def search_from_youtube(query:str, 
-                        ResultLengthLimit:int=5,
-                        DurationLimit:int=3*3600) -> list:
-    """
-    Search youtube videos with a given string.
-    Returns a list of search result which the item contains the title, duration, channel etc.
-    """
-    from requests import get
-    from bs4 import BeautifulSoup
-    from json import loads
-
-    #Send the request and grab the html text
-    httpResponse = get(f"https://www.youtube.com/results?search_query={'+'.join(word for word in query.split())}")
-    htmlSoup = BeautifulSoup(httpResponse.text, "lxml")
-
-    #Fliter the html soup ( get rid of other elements such as the search bar and side bar )
-    scripts = [s for s in htmlSoup.find_all("script") if "videoRenderer" in str(s)][0]
-
-    #Find the data we need among the scripts, and load it into json
-    JsonScript = re.search('var ytInitialData = (.+)[,;]{1}',str(scripts)).group(1)
-    JsonData = loads(JsonScript)
-
-    #The Path to the search results
-    QueryList = JsonData["contents"]["twoColumnSearchResultsRenderer"]["primaryContents"]\
-                        ["sectionListRenderer"]["contents"]
-    QueryList = QueryList[len(QueryList)-2]["itemSectionRenderer"]["contents"] 
-
-    #Filters items in the search result
-    FilteredQueryList = []
-    for item in QueryList:
-        VidRend = item.get("videoRenderer")
-        if VidRend and VidRend.get("lengthText"): #Remove channels / playlist / live stream (live has no time length)
-            longText = VidRend["lengthText"]["accessibility"]["accessibilityData"]["label"]
-            if "hours" in longText:
-                #Remove video with 3+ hours duration
-                if int(re.search(r"(.*) hours", longText).group(1)) > DurationLimit: 
-                    continue
-            FilteredQueryList.append(VidRend)
-            
-            #Result length
-            if len(FilteredQueryList) >= ResultLengthLimit: 
-                break
-
-    return FilteredQueryList 
 
 #Take the search result from the function above and make them into buttons and embed
-def generate_search_result_attachments(search_result) -> dict:
-        """
-        Returns the embed + buttons for a youtube search result returned by the `search_from_youtube` function
-        """
-        #Add the buttons and texts for user to pick
-        choices_string:str  = ""
+def generate_search_result_attachments(search_result : List[YoutubeVideo]) -> dict:
+    """
+    Returns the embed + buttons for a youtube search result returned by the `search_from_youtube` function
+    """
+    #Add the buttons and texts for user to pick
+    choices_string:str  = ""
 
 
-        class _components(View):...
-        components = _components()
+    class _components(View):...
+    components = _components()
 
-        for i,video in enumerate(search_result):
-            
-            title = video["title"]["runs"][0]["text"]
-            length = video["lengthText"]["simpleText"]
-
-            choices_string += f'{i+1}: {title} `[{length}]`\n'
-            components.add_item(Button(label=f"{i+1}",custom_id=f"{i}",style=discord.ButtonStyle.blurple,row=0))
+    for i,video in enumerate(search_result):
         
-        return {
-            "embed":discord.Embed(title="🎵  Select a song you would like to play : ( click the buttons below )",
-                                  description=choices_string,
-                                  color=discord.Color.from_rgb(255, 255, 255)),
-            "view": components
-        }
+        title = video.title
+        length = video.length
+
+        choices_string += f'{i+1}: {title} `[{length}]`\n'
+        components.add_item(Button(label=f"{i+1}",custom_id=f"{i}",style=discord.ButtonStyle.blurple,row=0))
+    
+    return {
+        "embed":discord.Embed(title="🎵  Select a song you would like to play : ( click the buttons below )",
+                                description=choices_string,
+                                color=discord.Color.from_rgb(255, 255, 255)),
+        "view": components
+    }
 #----------------------------------------------------------------#
 
 #COMMANDS
@@ -220,9 +176,9 @@ class MusicCommands(commands.Cog):
                     raise resume_error
 
             #Play the track
-            queue.play_first(guild.voice_client)
-
             await voice_state.create_audio_message(current_track, await ctx.send("▶️ Continue to play tracks in the queue"))
+
+            queue.play_first(guild.voice_client)
         
         #Successfully resumed like usual, send response.
         else:
@@ -251,12 +207,30 @@ class MusicCommands(commands.Cog):
             await ctx.reply("Ended the current track")
             return voicec.stop()
 
-        voice_state.pause_audio(guild)
-        add_loop = round(fwd_sec * 50 / queue.speed)
-        queue._raw_fwd(add_loop) #Finshed the audio
-        voice_state.resume_audio(guild)
+        queue.time_position += fwd_sec
 
-        await ctx.reply(f"*⏭ Fast-fowarded for {convert.length_format(fwd_sec)}*")
+        await ctx.reply(f"*⏭ Fast-fowarded for * `{convert.length_format(fwd_sec)}`")
+
+    @commands.guild_only()
+    @commands.command(aliases=["rwd"],
+                      description = "⏭ Fast-foward the time position of the current audio for a certain amount of time.",
+                      usage="{0}fwd 10\n{0}foward 10:30")
+    async def rewind(self,ctx,*,time:str):
+        """
+        Rewind the player by time given by the user
+        """
+        voicec:discord.VoiceClient = ctx.voice_client
+
+        if voicec is None or not voicec.is_playing(): 
+            raise commands.errors.NoAudioPlaying
+        
+        guild   :discord.Guild = ctx.guild
+        queue   :SongQueue     = guild.song_queue
+        rwd_sec :float         = convert.time_to_sec(time)
+
+        queue[0].time_position -= rwd_sec / queue.tempo
+
+        await ctx.reply(f"*⏮ Rewinded for * `{convert.length_format(rwd_sec)}`")
 
     @commands.guild_only()
     @commands.command(aliases=["jump"],
@@ -268,24 +242,27 @@ class MusicCommands(commands.Cog):
             position_sec:float = convert.time_to_sec(time_position)
             if position_sec >= queue[0].duration:
                 await ctx.voice_client.stop()
-            await voice_state.restart_track(ctx.guild,position=position_sec/queue.speed)
+            # await voice_state.restart_track(ctx.guild,position=position_sec/queue.tempo)
         except AttributeError:
             raise discord.errors.NoAudioPlaying
         except ValueError:
             await ctx.reply(f"Invaild time position, format : {ctx.prefix}{ctx.invoked_with} [Hours:Minutes:Seconds]")
         else:
-            await ctx.reply(f"⏏️ Moving audio's time position to `{convert.length_format(position_sec)}` (It might take a while depend on the length of the audio)")
-            queue[0].time_position = position_sec
+            voice_state.pause_audio(ctx.guild)
+            queue.time_position = position_sec
+            voice_state.resume_audio(ctx.guild)
+            await ctx.reply(f"*⏏️ Moved the time position to * `{convert.length_format(position_sec)}`")
+
+
 
 
     @commands.guild_only()
     @commands.command(aliases=["replay", "re"],
-                      description='🔄 restart the current audio track',
+                      description='🔄 restart the current audio track, equivalent to seeking to 0',
                       usage="{}replay")
     async def restart(self, ctx:commands.Context):
 
-        await voice_state.restart_track(ctx.guild)
-
+        ctx.guild.song_queue.time_position = 0
         await ctx.reply(MessageString.restarted_audio_msg)
 
     #----------------------------------------------------------------#
@@ -389,26 +366,26 @@ class MusicCommands(commands.Cog):
 
     commands.guild_only()
     @commands.command(aliasas=[],
-                      description="Changes the speed of the audio playing, can range between `0.5` - `5` ",
-                      usage="{}speed 1.1")
-    async def speed(self,ctx:commands.Context, new_speed):
+                      description="Changes the tempo of the audio playing, can range between `0.5` - `5` ",
+                      usage="{}tempo 1.1")
+    async def tempo(self,ctx:commands.Context, new_tempo):
         guild = ctx.guild
 
         try:
-            new_speed = float(new_speed)
-            if new_speed <= 0:
+            new_tempo = float(new_tempo)
+            if new_tempo <= 0:
                 voice_state.pause_audio(guild)
                 return await ctx.reply(MessageString.paused_audio_msg)
-            elif new_speed < 0.5 or new_speed > 5:
-                return await ctx.reply("Speed can only range between `0.5-5`.")
+            elif new_tempo < 0.5 or new_tempo > 5:
+                return await ctx.reply("Tempo can only range between `0.5-5`.")
 
-            guild.song_queue.speed = new_speed
+            guild.song_queue.tempo = new_tempo
         except ValueError:
-            return await ctx.reply("Invalid speed.")
+            return await ctx.reply("Invalid tempo.")
         if guild.voice_client and guild.voice_client._player and guild.song_queue:
             await voice_state.restart_track(guild)
 
-        await ctx.reply(f"Successful changed the speed to `{new_speed}`.")
+        await ctx.reply(f"Successful changed the tempo to `{new_tempo}`.")
         await voice_state.update_audio_msg(guild)
 
 
@@ -481,7 +458,7 @@ class MusicCommands(commands.Cog):
             #Matched
             if yt_vid_link_matches: 
                 query = "https://www.youtube.com/watch?v="+yt_vid_link_matches[0][4]
-                reply_msg = await ctx.send(f"{Emojis.YOUTUBE_ICON} A Youtube link is selected")
+                reply_msg = await ctx.send(f"{MyEmojis.YOUTUBE_ICON} A Youtube link is selected")
 
             #Sound cloud link
             elif "soundcloud.com" in query:
@@ -529,7 +506,7 @@ class MusicCommands(commands.Cog):
                                                             )
             #Not selected
             except asyncio.TimeoutError:
-                return await option_message.edit(embed=discord.Embed(title=f"{Emojis.cute_panda} No track was selected !",
+                return await option_message.edit(embed=discord.Embed(title=f"{MyEmojis.cute_panda} No track was selected !",
                                                                     description=f"You thought for too long ( {2} minutes ), use the command again !",
                                                                     color=discord.Color.from_rgb(255, 255, 255)),
                                             view=None)
@@ -537,9 +514,9 @@ class MusicCommands(commands.Cog):
             else:
                 selected_index = int(choice_interaction.data["custom_id"])
 
-                await choice_interaction.response.edit_message(content=f"{Emojis.YOUTUBE_ICON} Song **#{selected_index+1}** in the youtube search result has been selected",view = None)
+                await choice_interaction.response.edit_message(content=f"{MyEmojis.YOUTUBE_ICON} Song **#{selected_index+1}** in the youtube search result has been selected",view = None)
                 reply_msg = await ctx.fetch_message(option_message.id)
-                query = f'https://www.youtube.com/watch?v={search_result[selected_index]["videoId"]}'
+                query = f'https://www.youtube.com/watch?v={search_result[selected_index].videoId}'
 
 
 
@@ -597,14 +574,18 @@ class MusicCommands(commands.Cog):
                                           .set_thumbnail(url = NewTrack.thumbnail)
                                     )
                 if voice_state.is_playing(guild):
-            
-                    return queue.append(NewTrack)
+                    
+                    queue.append(NewTrack)
+                    if len(queue) == 2:
+                        await voice_state.update_audio_msg(guild)
+                    return
 
                 reply_msg = ctx.channel
                 NewTrack = queue[0]
 
             queue.append(NewTrack)
-            #Repeat function after the audio
+            # #Make our audio message
+            await voice_state.create_audio_message(NewTrack,reply_msg or ctx.channel)
 
             #Play the audio, we are not actually playing the audio we just extracted, but the first track in queue
             try:
@@ -623,8 +604,7 @@ class MusicCommands(commands.Cog):
                     return await ctx.reply("Unable to play this track because another tracks was requested at the same time")
                 raise cl_exce
 
-            #Make our audio message
-            await voice_state.create_audio_message(NewTrack,reply_msg or ctx.channel)
+           
             
     #----------------------------------------------------------------#
     #QUEUE
@@ -757,16 +737,7 @@ class MusicCommands(commands.Cog):
                    aliases=["empty","clr"],
                    usage="{}queue clear")
     async def clear(self,ctx):
-        from Music.song_queue import AudioControlState
-        queue:SongQueue = ctx.guild.song_queue
-
-        queue.audio_control_status = AudioControlState.CLEAR
-        queue.clear()
-
-        await voice_state.clear_audio_message(ctx.guild)
-
-        if ctx.voice_client: ctx.voice_client.stop()
-
+        ctx.guild.song_queue.cleanup()
         await ctx.reply("🗒 The queue has been cleared")
 
     @commands.guild_only()
@@ -863,7 +834,7 @@ class MusicCommands(commands.Cog):
             except youtube_dl.utils.YoutubeDLError as yt_dl_error:
                 await ctx.send(f"Failed to add {line} to the queue because `{yt_dl_error}`")
 
-        await mes.edit(f"Successfully added {len(data)-1} tracks to the queue !")
+        await mes.edit(content=f"Successfully added {len(data)-1} tracks to the queue !")
                                 
     #----------------------------------------------------------------#
     #EVENTS
@@ -919,55 +890,47 @@ class MusicCommands(commands.Cog):
             if not (interaction.data["component_type"] == 2 and "custom_id" in interaction.data.keys()):
                 return 
         except (AttributeError,KeyError): 
-            return print("Oof")
+            return
 
-        btn = interaction
-        custom_id = btn.data["custom_id"]
-
-        guild = btn.guild
+        guild = interaction.guild
+        custom_id = interaction.data["custom_id"]
 
         if logging.root.isEnabledFor(logging.getLevelName("COMMAND_INFO")) and guild.id != 915104477521014834:
-            asyncio.create_task(logging.webhook_log(embed= discord.Embed(title = f"{btn.guild.name+' | ' if btn.guild else ''}{btn.channel}",
-                                                                        description = f"**Pressed the {custom_id} button**",
+            asyncio.create_task(logging.webhook_log(embed= discord.Embed(title = f"{guild.name+' | ' if guild else ''}{interaction.channel}",
+                                                                        description = f"**Pressed the {interaction} button**",
                                                                         color=discord.Color.from_rgb(255,255,255),
                                                                         timestamp = datetime.datetime.now()
                                                                         ).set_author(
-                                                                        name =btn.user,
-                                                                        icon_url= btn.user.display_avatar),
+                                                                        name =interaction.user,
+                                                                        icon_url= interaction.user.display_avatar),
                                                     username="Button Logger"))
         
-        if interaction.response.is_done() or guild is None:  return
         
-        queue = guild.song_queue
 
         #Tons of Buttons
         if custom_id == "delete":
-            await btn.message.delete()
+            return await interaction.message.delete()
 
-        elif custom_id == MusicButtons.PlayAgainButton.custom_id:
-            await MusicButtons.on_play_again_btn_press(btn,self.bot)
+        elif custom_id == "play_again":
+            return await MusicButtons.on_play_again_btn_press(interaction,self.bot)
 
-        #Clearing glitched messages
+        queue = interaction.guild.song_queue
+
+        if interaction.response.is_done() or guild is None:  
+            return print("Responsed")
+        # Clearing glitched messages
         elif queue.get(0) is None or queue.audio_message is None or queue.audio_message.id != interaction.message.id or not voice_state.is_playing(guild):
-            if not custom_id.isnumeric() and btn.message.embeds:
-                new_embed:discord.Embed = interaction.message.embeds[0]
-                await btn.response.edit_message(content=btn.message.content)
-                if len(new_embed.fields) == 9:
-                    await voice_state.clear_audio_message(specific_message=interaction.message)
-
-        elif custom_id == MusicButtons.PlayPauseButton.custom_id:
-            await MusicButtons.on_playpause_btn_press(btn)
-        elif custom_id == MusicButtons.RewindButton.custom_id:
-            await MusicButtons.on_rewind_btn_press(btn)
-        elif custom_id == MusicButtons.LoopButton.custom_id:
-            await MusicButtons.on_loop_btn_press(btn)
-            await voice_state.update_audio_msg(guild)
-        elif custom_id == MusicButtons.RestartButton.custom_id:
-            await MusicButtons.on_restart_btn_press(btn)
-        elif custom_id == MusicButtons.SkipButton.custom_id:
-            await MusicButtons.on_skip_btn_press(btn)
-        elif custom_id == MusicButtons.ConfigButton.custom_id:
-            await MusicButtons.on_config_btn_press(btn)
+            if not custom_id.isnumeric() and interaction.message.embeds:
+                    new_embed:discord.Embed = interaction.message.embeds[0]
+                    
+                    if len(new_embed.fields) == 9:
+                        try:
+                            await interaction.response.defer()
+                        except discord.errors.HTTPException:
+                            return print("Failed to defer")
+                        else:
+                    
+                            await voice_state.clear_audio_message(specific_message=interaction.message)
 
     #----------------------------------------------------------------#
     #Utility music commands
@@ -993,6 +956,13 @@ class MusicCommands(commands.Cog):
                                                                                                          convert.length_format(queue[0].duration)))
         #Or not
         await ctx.send(f"🎶 Now playing in {voice_state.get_current_vc(ctx.guild).mention} - **{queue[0].title}**")
+
+    @commands.guild_only()
+    @commands.command(aliases=["nxtrec"])
+    async def nextrecommend(self,ctx:commands.Context):
+        queue : SongQueue = ctx.guild.song_queue
+        queue._recommendations.rotate(-1)
+        await voice_state.update_audio_msg(ctx.guild)
 
     @commands.guild_only()
     @commands.command(aliases=["audiomsg"],
@@ -1022,12 +992,13 @@ class MusicCommands(commands.Cog):
         import subprocess
 
         proc_mes = await ctx.reply("Processing ...")
-        subprocess.Popen(args=["./ffmpeg",
+        process = subprocess.Popen(args=["ffmpeg",
                     "-i",f"{src_url}",
                     '-loglevel','warning',
                     # '-ac', '2',
                     f"./{file_name}"
                     ],creationflags=0)
+
         cd = 3
         last_progress = 0
         combo = 0
@@ -1197,7 +1168,6 @@ class MusicCommands(commands.Cog):
                     #Text changed
                     if prev_text != text:
                         prev_text = text
-                        print(text)
                         await m.edit(embed=discord.Embed(
                             title="Streaming the lyrics",
                             description=text

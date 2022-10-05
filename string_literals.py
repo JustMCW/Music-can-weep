@@ -1,10 +1,26 @@
 #Replies / Message
-class Emojis:
+from discord import PartialEmoji
+class MyEmojis:
     YOUTUBE_ICON = "<:youtube_icon:937854541666324581>"
     discord_on = "<:discord_on:938107227762475058>"
     discord_off = "<:discord_off:938107694785654894>"
     cute_panda = "<:panda_with_headphone:938476351550259304>"
 
+    pause = PartialEmoji.from_str("pause:1026270773066874920")
+    resume = PartialEmoji.from_str("resume:1026270955426824242")
+    rewind = PartialEmoji.from_str("rewind:1026270774182555698")
+    fastforward = PartialEmoji.from_str("fastforward:1026270777647038465")
+
+    loop = PartialEmoji.from_str("loop:1026270771875696691")
+    singleloop = PartialEmoji.from_str("singleloop:1026270776334237697")
+
+    previous = PartialEmoji.from_str("previous:1026276265705082955")
+    skip = PartialEmoji.from_str("skip:1026276267550572564")
+
+    config = PartialEmoji.from_str("config:1026270775294034100")
+    queue = PartialEmoji.from_str("queue:1026277428735262732")
+
+    download = PartialEmoji.from_str("download:1027010625030865047")
 
 class MessageString:
     not_in_server_msg = "🏘 This command can only be used in servers ⚜️"
