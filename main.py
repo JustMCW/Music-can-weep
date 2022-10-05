@@ -132,7 +132,7 @@ def main():
     #Getting out token through various of ways
     import sys,os
     try:
-        BOT_TOKEN = os.environ("TOKEN")
+        BOT_TOKEN = os.environ.get("TOKEN")
         if not BOT_TOKEN:
             BOT_TOKEN = sys.argv[1] #passing of an argument
     except IndexError: #mcw test bot
