@@ -147,6 +147,7 @@ def main():
     if not discord.opus.is_loaded():
         logging.info("Loading opus ...")
         discord.opus.load_opus("./libopus.0.dylib")
+    print(BOT_TOKEN)
     Bot.run(BOT_TOKEN)
     logging.info("Program exited")
       
