@@ -159,7 +159,7 @@ class SongTrack:
 
         return cls(requester,request_message,**info)
     
-    def play(self,
+    async def play(self,
             voice_client:discord.VoiceClient,
             after:callable(str)=None,
             volume:float=1,
