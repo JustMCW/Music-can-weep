@@ -200,7 +200,7 @@ class SongTrack:
                                       volume = volume)
 
         logging.info("Successfully Transformed into PCM")
-        self.source = vol_src
+        self.source = await discord.FFmpegOpusAudio.from_probe(source=self.src_url)
         #import io
         # _stdout:io.BufferedReader = self.source.original._stdout
         # _stdout.read(int(round(discord.opus._OpusStruct.FRAME_SIZE * 50 * position)))
