@@ -120,14 +120,14 @@ class SongQueue(deque):
         import asyncio
         event_loop = asyncio.get_running_loop()
 
-        self[0].play(
+        event_loop.create_task(self[0].play(
             voice_client,
             after= lambda voice_error: after_playing(event_loop,voice_client.guild,voice_error),
 
             volume = self.volume,
             pitch  = self.pitch ,
             tempo  = self.tempo ,
-        )
+        ))
 
     def swap(self,pos1:int,pos2:int) -> None:
         
