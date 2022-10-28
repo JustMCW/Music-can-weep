@@ -44,7 +44,7 @@ class OtherCommands(commands.Cog):
         except AttributeError: 
             pass
         finally:
-            await ctx.reply(embed = status_embed)
+            await ctx.replywm(embed = status_embed)
 
     @commands.has_guild_permissions(administrator=True)
     @commands.group(aliases = ["configure","config"],
@@ -53,7 +53,7 @@ class OtherCommands(commands.Cog):
     async def configuration(self,ctx):
         
         if ctx.invoked_subcommand is None:
-            await ctx.reply(embed=discord.Embed(
+            await ctx.replywm(embed=discord.Embed(
                 title = "Configuration command usage : ",
                 description = "\n".join([f"{ctx.prefix}{cmd.qualified_name} [{'] ['.join(list(cmd.clean_params))}]" for cmd in ctx.command.walk_commands() ]),
                 color = discord.Color.from_rgb(255,255,255)
@@ -68,13 +68,13 @@ class OtherCommands(commands.Cog):
         
 
         if len(new_prefix) > 5: 
-            return await ctx.reply("🚫 Prefix cannot be longer than 5 characters")
+            return await ctx.replywm("🚫 Prefix cannot be longer than 5 characters")
         
         Management.overwrite_server_database(ctx.guild,
                                             key="prefix",
                                             value=new_prefix)
 
-        await ctx.reply(f"**✅ Successfully changed prefix to `{new_prefix}`**")
+        await ctx.replywm(f"**✅ Successfully changed prefix to `{new_prefix}`**")
 
     @configuration.command(aliases = ["queue","q"],
                             description="Enable / Disable queuing songs in the server",
@@ -83,12 +83,12 @@ class OtherCommands(commands.Cog):
         mode:bool = commands.converter._convert_to_bool(mode)
 
         if mode == False and ctx.guild.song_queue:
-            return await ctx.reply(f"There are still tracks remaining in the queue, it must be empty to perform this command. ( `{ctx.prefix}queue clear` will clear it for you )")
+            return await ctx.replywm(f"There are still tracks remaining in the queue, it must be empty to perform this command. ( `{ctx.prefix}queue clear` will clear it for you )")
 
         Management.overwrite_server_database(ctx.guild,
                                             key="queuing",
                                             value=mode)
-        await ctx.reply("Song tracks will now queue up when being requested" if mode else "Song tracks will now be instantly played when requested")
+        await ctx.replywm("Song tracks will now queue up when being requested" if mode else "Song tracks will now be instantly played when requested")
 
     @configuration.command(aliases = ["autoclear",],
                             description = "⚙️ clear the queue after leaving the voice channel",
@@ -97,10 +97,10 @@ class OtherCommands(commands.Cog):
         mode:bool = commands.converter._convert_to_bool(mode)
         
         Management.overwrite_server_database(ctx.guild,
-                                            key="prefix",
+                                            key="autoclearing",
                                             value=mode)
 
-        await ctx.reply(f"**✅ Successfully changed auto clearing to `{mode}`**")
+        await ctx.replywm(f"**✅ Successfully changed auto clearing to `{mode}`**")
 
 async def setup(BOT):
     await BOT.add_cog(OtherCommands(BOT))

@@ -12,10 +12,10 @@ DiscordServerDatabase = "Database/DiscordServers.json"
 
 
 class Event(commands.Cog):
-    def __init__(self, bot, info):
+    def __init__(self, bot):
         self.bot:commands.Bot = bot
-        self.DefaultDatabase = info.DefaultDatabase
-        self.DefaultPrefix = info.DefaultDatabase["prefix"]
+        self.DefaultDatabase = Management.DefaultDatabase
+        self.DefaultPrefix = Management.DefaultDatabase["prefix"]
 
 
 # Get prefix in string
@@ -52,28 +52,6 @@ class Event(commands.Cog):
         import custom_errors
 
         #Register the song queue and database on the discord guild object
-        from Music.song_queue import SongQueue
-        import discord
-
-        #Init 
-        # Management.initialize(self.bot)
-
-        @property
-        def song_queue(self) -> SongQueue:
-            """
-            Represents the song queue of the guild
-            """
-            return SongQueue.get_song_queue_for(self)
-            
-        discord.Guild.song_queue=song_queue
-
-        @property
-        def database(self) -> dict:
-            """
-            Represents the database which is from `Database.DiscordServers.json` of the guild 
-            """
-            return Management.read_database_of(self)
-        discord.Guild.database=database
         
         #Load the cogs for the bot
         cogs = [pyf.replace(".py", "") for pyf in filter(lambda name: name.endswith(".py"), os.listdir("./Cogs"))]
@@ -137,48 +115,50 @@ class Event(commands.Cog):
         # Invaild command
         if isinstance(command_error, commands.errors.CommandNotFound):
             wrong_cmd = str(command_error)[9:-14]
-            await ctx.reply(MessageString.command_not_found_msg.format(self.guess_the_command(wrong_cmd,ctx.prefix)))
+            await ctx.replywm(MessageString.command_not_found_msg.format(self.guess_the_command(wrong_cmd,ctx.prefix)))
 
         # Not In Server
         elif isinstance(command_error, commands.errors.NoPrivateMessage):
-            await ctx.reply(MessageString.not_in_server_msg)
+            await ctx.replywm(MessageString.not_in_server_msg)
         
         # Permissions Errors
         elif isinstance(command_error, commands.errors.NotOwner):
             pass
         elif isinstance(command_error, commands.errors.MissingPermissions):
-            await ctx.reply(MessageString.missing_perms_msg)
+            await ctx.replywm(MessageString.missing_perms_msg)
         elif isinstance(command_error, commands.errors.BotMissingPermissions):
-            await ctx.reply(MessageString.bot_lack_perm_msg.format(', '.join(command_error.missing_perms)))
+            await ctx.replywm(MessageString.bot_lack_perm_msg.format(', '.join(command_error.missing_perms)))
+        elif isinstance(command_error, commands.errors.AudioNotSeekable):
+            await ctx.replywm("Audio tracks with 10 mins + duration cannot rewind.")
 
         # Arguments Errors
         elif isinstance(command_error, commands.errors.MissingRequiredArgument):
             missed_arg = str(command_error)[:-40]
-            await ctx.reply(MessageString.missing_arg_msg.format(missed_arg))
+            await ctx.replywm(MessageString.missing_arg_msg.format(missed_arg))
         elif isinstance(command_error, commands.errors.BadBoolArgument):
-            await ctx.reply(MessageString.invaild_bool_msg)
+            await ctx.replywm(MessageString.invaild_bool_msg)
 
         # Not Found Errors
         elif isinstance(command_error, commands.errors.UserNotFound):
-            await ctx.reply(MessageString.user_not_found_msg)
+            await ctx.replywm(MessageString.user_not_found_msg)
         elif isinstance(command_error, commands.errors.ChannelNotFound):
-            await ctx.reply(MessageString.channel_not_found_msg)
+            await ctx.replywm(MessageString.channel_not_found_msg)
         elif isinstance(command_error,discord.errors.NotFound):
             pass
 
         # Voice Errors
         elif isinstance(command_error, commands.errors.UserNotInVoiceChannel):
-            await ctx.reply(MessageString.user_not_in_vc_msg)
+            await ctx.replywm(MessageString.user_not_in_vc_msg)
         elif isinstance(command_error, commands.errors.NotInVoiceChannel):
-            await ctx.reply(MessageString.bot_not_in_vc_msg)
+            await ctx.replywm(MessageString.bot_not_in_vc_msg)
         elif isinstance(command_error, commands.errors.NoAudioPlaying):
-            await ctx.reply(MessageString.not_playing_msg)
+            await ctx.replywm(MessageString.not_playing_msg)
 
         # Queue Errors
         elif isinstance(command_error, commands.errors.QueueEmpty):
-            await ctx.reply(MessageString.queue_empty_msg)
+            await ctx.replywm(MessageString.queue_empty_msg)
         elif isinstance(command_error, commands.errors.QueueDisabled):
-            await ctx.reply(MessageString.queue_disabled_msg.format(ctx.prefix))
+            await ctx.replywm(MessageString.queue_disabled_msg.format(ctx.prefix))
         
         #Others
         elif isinstance(command_error,commands.errors.CommandInvokeError):

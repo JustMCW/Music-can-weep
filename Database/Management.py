@@ -1,16 +1,17 @@
-import logging
-from typing import Any
 import discord
-from discord.ext import commands
 import json
-from main import BotInfo
-
 
 # USER_DATABASE_ID   = 1008808177791414302
 # SERVER_DATABASE_ID = 1008808263057424518
 
 # user_database_channel   : discord.TextChannel = None
 # server_database_channel : discord.TextChannel = None
+
+DefaultDatabase = { 
+                    "prefix"            : ">>",
+                    "queuing"           : True,
+                    "autoclearing"  : True 
+                }
 
 # #json Db
 DISCORD_SERVER_DATABASE = "Database/DiscordServers.json"
@@ -31,14 +32,10 @@ def check_server_database(bot):
 
             #The server wasn't even found
             if ID in data.keys():
-                # print(guild, "lacking Database")
-                # data[ID] = BotInfo.DefaultDatabase
-                if data[ID].keys() != BotInfo.DefaultDatabase.keys():
-                    data[ID] = dict(BotInfo.DefaultDatabase, **data[ID])
+                if data[ID].keys() != DefaultDatabase.keys():
+                    data[ID] = dict(DefaultDatabase, **data[ID])
                     print(guild, "has incorrect key")
-            # elif data[ID] == BOT_INFO.DefaultDatabase:
-            #     data[ID] = None
-            #     logging.info(f"Removed the database of {guild}")
+
         jsonf.seek(0)
         json.dump(data, jsonf, indent=4)
 
@@ -48,7 +45,7 @@ def read_servers_databases() -> dict:
     return data
 
 def read_database_of(guild:discord.Guild) -> dict:
-    return read_servers_databases().get(str(guild.id)) or BotInfo.DefaultDatabase
+    return read_servers_databases().get(str(guild.id)) or DefaultDatabase
 
 def overwrite_server_database(guild:discord.Guild,key:str,value) -> dict:
     data = read_servers_databases()

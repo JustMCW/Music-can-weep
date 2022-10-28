@@ -15,8 +15,13 @@ import aiohttp
 from discord.ext import commands
 from datetime    import datetime
 
+from Music.song_queue import SongQueue
+from Database import Management
+ 
+
+
 #Logging
-logging.basicConfig(level=22,format="%(levelname)s from %(module)s:%(lineno)d (%(funcName)s) : %(message)s")
+logging.basicConfig(level=logging.INFO,format="%(levelname)s from %(module)s:%(lineno)d (%(funcName)s) : %(message)s")
 logging.addLevelName(22, "COMMAND_INFO")
 logging.addLevelName(27, "BOT_EVENT")
 
@@ -66,26 +71,12 @@ logging.webhook_log_event    = lambda message,*args,**kwargs: logging.root.webho
 logging.webhook_log_error    = lambda error,*args,**kwargs: logging.root.webhook_log_error(error,*args,**kwargs)
 
 
-class BotInfo:
-    InitialVolume       = 0.5
-    InitialLooping      = False
-    InitialQueueLooping = False
-    InitialQueuing      = True
-  
-    DefaultDatabase = { 
-                        "prefix"            : ">>",
-                        "queuing"           : True,
-                        "autoclearing"  : True 
-                      }
-
-    VolumePercentageLimit = 200
-
 #Prefixs
 async def get_prefix(bot, message:discord.Message):
     guild:discord.Guild = message.guild
     if guild:
-        return commands.when_mentioned_or(guild.database.get("prefix", BotInfo.DefaultDatabase["prefix"]))(bot, message)
-    return commands.when_mentioned_or(BotInfo.DefaultDatabase["prefix"])(bot, message)
+        return commands.when_mentioned_or(guild.database.get("prefix", Management.DefaultDatabase["prefix"]))(bot, message)
+    return commands.when_mentioned_or(Management.DefaultDatabase["prefix"])(bot, message)
 
 async def on_message(self,message:discord.Message):
         
@@ -127,7 +118,7 @@ Bot = commands.Bot(command_prefix=get_prefix,
 def main():
     #Add event cog for the BOT
     from Cogs.event import Event
-    asyncio.run(Bot.add_cog(Event(Bot, BotInfo)))
+    asyncio.run(Bot.add_cog(Event(Bot)))
 
     #Getting out token through various of ways
     import sys,os
@@ -143,11 +134,32 @@ def main():
             with open("../.tokens.txt","r") as TKF:
                 BOT_TOKEN = dict(re.findall("(.*) = (.*)",TKF.read() )) ["Music-can-weep"]
 
-
     if not discord.opus.is_loaded():
-        logging.info("Loading opus ...")
         discord.opus.load_opus("./libopus.0.dylib")
-    print(BOT_TOKEN)
+        logging.info("Loaded opus")
+
+    #Add 2 property to the guild
+    class _Guild(discord.Guild):
+        @property
+        def song_queue(self) -> SongQueue:
+            """Represents the song queue of the guild"""
+            return SongQueue.get_song_queue_for(self)
+
+        @property
+        def database(self) -> dict:
+            """Represents the database which is from `Database.DiscordServers.json` of the guild"""
+            return Management.read_database_of(self)
+
+    discord.Guild.song_queue = _Guild.song_queue
+    discord.Guild.database = _Guild.database
+
+    #Just overwrite the reply function to never mention author.
+
+    async def reply_without_mention(self : commands.Context, *args,**kwargs):
+        kwargs["mention_author"] = False
+        return await self.reply(*args,**kwargs)
+    commands.Context.replywm = reply_without_mention
+
     Bot.run(BOT_TOKEN)
     logging.info("Program exited")
       

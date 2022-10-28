@@ -39,8 +39,8 @@ def length_format(totalSeconds:int) -> str:
         Sec = int(totalSeconds % 60)
         return f"{Hours}:{Min:02d}:{Sec:02d}"
     
-def time_to_sec(string:str)->int:
-    #Its just a number .
+def timestr_to_sec(string:str)->int:
+    #Its just a number.
     try: return int(string) 
     except ValueError: pass
 
@@ -71,3 +71,31 @@ def time_to_sec(string:str)->int:
                 return int(match[0].group(1))
             except IndexError:
                 return None
+
+def timestr_to_sec_ms(time_string:str) -> int:
+    """timestr to sec but includes ms in the time string"""
+    try:
+        #Hour min and millisec are optional
+        time_group:list = re.match(
+            #           hour       min      sec     millisec
+            pattern=r"(\d{1,2}:)?(\d{1,2}:)?(\d{1,2})(\.\d{3})?",
+            string=time_string
+        ).groups(None)
+    except AttributeError:
+        #No groups means no match found
+        return None
+
+    #Turn them into int and give each of them a variable
+    hour,min,sec,millisec = map(lambda x: int(x.replace(":","").replace(".","")) if x is not None else x, time_group) 
+
+    #if min doesnt exist but the hour does, then the hour must actually be the min (11:00 -> this is 11mins, not hours)
+    if hour and min is None:
+        min = hour
+        hour = 0
+    
+    hour = hour or 0
+    min = min or 0
+    millisec = millisec or 0
+
+    #Give back the result
+    return (hour * 3600) + (min*60) + (sec) + (millisec / 1000)

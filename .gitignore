@@ -1,3 +1,7 @@
 *.json
 *.DS_Store
 *.pyc
+*.txt
+*.zsh
+test.py
+libopus.0.dylib

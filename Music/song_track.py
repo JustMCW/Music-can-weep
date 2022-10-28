@@ -1,10 +1,16 @@
-from typing import Callable,Union
+import logging
+from io import BytesIO,FileIO
+from typing import Callable
+from typing_extensions import Self
+
 import discord
 from discord.utils import MISSING
-import logging
+from discord.opus  import Encoder
+
 from youtube_dl import YoutubeDL
-from io import BytesIO,FileIO
-from discord.opus import Encoder
+import audioop
+import time
+
 FRAME_SIZE = Encoder.FRAME_SIZE
 
 
@@ -16,10 +22,14 @@ RequiredAttr = ("title","webpage_url","duration",
 class FFmpegPCMAudio(discord.FFmpegPCMAudio):
     returncode : int = None
     def _kill_process(self) -> None:
+        logging.info("-------------Kill process-----------------")
+        super()._kill_process()
         if not self._process is MISSING:
-            super()._kill_process()
             self.returncode = self._process.returncode
-            
+
+    def __del__(self) -> None:
+        logging.info(f"Deleted : {self.__class__.__name__}")
+
 discord.FFmpegPCMAudio = FFmpegPCMAudio
 
 class FileAudioSource(discord.AudioSource):
@@ -46,51 +56,52 @@ class SeekableAudioSource(discord.PCMVolumeTransformer):
     frame_counter: :class:`int`
         Manipulate this to seek through the audio.
         One frame is equivalent to 20ms
-    _bytes: :class:`BytesIO`
-        the audio is stored to achieve seeking.
+    audio_bytes: :class:`BytesIO`
+        the audio is stored in this attribute to achieve seeking (backward).
     """
-    audio_filter   : Callable[[bytes],bytes] = None
+    original       : discord.FFmpegPCMAudio #It's not like we're gonna use any other audio source
+    audio_filter   : Callable[[bytes],bytes] = None #You 
     frame_counter  : int # Runs every 20ms and determines the position of our audio
     audio_bytes    : BytesIO
 
-    def __init__(self,*args,**kwargs):
+    def __init__(self,seeking : bool,*args,**kwargs):
         self.frame_counter = 0
+        self.seekable = seeking
         self.audio_bytes = BytesIO()
-
         super().__init__(*args,**kwargs)
 
+    def audio_filter(self,data:bytes) -> bytes:
+        return audioop.mul(data, 2, self.volume)
+
+    def read_from_loaded_audio(self) -> bytes:
+        self.audio_bytes.seek(FRAME_SIZE * self.frame_counter)
+        return self.audio_bytes.read()[:FRAME_SIZE]
 
     def read(self) -> bytes:
-
-        self.write_frame()
-
-
-        self.audio_bytes.seek(FRAME_SIZE * self.frame_counter)
-        data = self.audio_bytes.read()
-
-        if not data:
-            return super().read()
+        if self.seekable:
+            w = self.write_frame()
+            data = self.read_from_loaded_audio() or w
         else:
-            self.frame_counter += 1
+            data = self.original.read()
+        self.frame_counter += 1
 
-        
-        return data
+        return audioop.mul(data, 2, self.volume)
 
-        if self.audio_filter:
-            return self.audio_filter(data)
-        return data
-
-    def write_frame(self) -> None:
-        """Write a frame to attribute `audio_bytes`, but doesn't return it"""
-        data_read = super().read()
-        if data_read:
+    def write_frame(self) -> bytes:
+        """Write a frame to attribute `audio_bytes`"""
+        data_read = self.original.read()
+        if data_read and self.seekable:
             self.audio_bytes.write(data_read)
+            return data_read
 
-
-    #We cleaned the original source somewhere else. So we don't have to here
+    #We cleaned the original source elsewhere. So we don't have to here
     def cleanup(self) -> None:
+        logging.info("Audio thread exited.")
         self.audio_bytes.close()
 
+    def __del__(self) -> None:
+        if not self.audio_bytes.closed:
+            self.audio_bytes.close()
 
 class AutoPlayUser(discord.Member):
     mention = "Auto-play"
@@ -106,10 +117,13 @@ class SongTrack:
 
         self.requester = requester
         self.request_message = request_message
+        self.source = None
 
         for key,value in info.items():
             if key in RequiredAttr:
                 setattr(self,key,value)
+
+        self.seekable = self.duration < 600
       
     @property
     def time_position(self):
@@ -120,7 +134,6 @@ class SongTrack:
     def time_position(self,sec : float):
         self.source.frame_counter = int(max(sec * 50,0))
 
-
     @property
     def volume(self):
         return self.source.volume
@@ -130,7 +143,7 @@ class SongTrack:
         self.source.volume = new_vol
 
     @classmethod
-    def create_track(cls,query:str,requester:discord.Member,request_message : discord.Message = None)->object:
+    def create_track(cls,query:str,requester:discord.Member,request_message : discord.Message = None) -> Self:
         
         #Some options for extracting the audio from YT
         YDL_OPTION =  {
@@ -151,12 +164,11 @@ class SongTrack:
 
         with YoutubeDL(YDL_OPTION) as ydl:
             info = ydl.extract_info(query,download=False)
-        import youtube_dl
-        youtube_dl.extractor.YoutubeRecommendedIE
+
         if 'entries' in info: 
             info = info["entries"][0]  
     
-
+        logging.info("YT-dl extraction successful.")
         return cls(requester,request_message,**info)
     
     def play(self,
@@ -190,20 +202,9 @@ class SongTrack:
             "options": f'-vn -af asetrate={self.audio_asr * pitch},aresample={self.audio_asr},atempo={max(round(tempo/pitch,8),0.5)}' # -f:a atempo={speed} atempo={speed * 1/pitch}
         }
         
-        try:
-            ffmpeg_src = discord.FFmpegPCMAudio(source=self.src_url, **FFMPEG_OPTION)
-        except discord.ClientException as e:
-            logging.info(f"{e}, looking for the ffmpeg locally")
-            ffmpeg_src = discord.FFmpegPCMAudio(executable="./ffmpeg",source=self.src_url, **FFMPEG_OPTION)
-        
-        vol_src = SeekableAudioSource(original = ffmpeg_src,
-                                      volume = volume)
+        ffmpeg_src = discord.FFmpegPCMAudio(source=self.src_url, **FFMPEG_OPTION)
 
-        logging.info("Successfully Transformed into PCM")
-        self.source = vol_src
-        #import io
-        # _stdout:io.BufferedReader = self.source.original._stdout
-        # _stdout.read(int(round(discord.opus._OpusStruct.FRAME_SIZE * 50 * position)))
-        #['__class__', '__del__', '__delattr__', '__dict__', '__dir__', '__doc__', '__enter__', '__eq__', '__exit__', '__format__', '__ge__', '__getattribute__', '__gt__', '__hash__', '__init__', '__init_subclass__', '__iter__', '__le__', '__lt__', '__ne__', '__new__', '__next__', '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__sizeof__', '__str__', '__subclasshook__', '_checkClosed', '_checkReadable', '_checkSeekable', '_checkWritable', '_dealloc_warn', '_finalizing', 'close', 'closed', 'detach', 'fileno', 'flush', 'isatty', 'mode', 'name', 'peek', 'raw', 'read', 'read1', 'readable', 'readinto', 'readinto1', 'readline', 'readlines', 'seek', 'seekable', 'tell', 'truncate', 'writable', 'write', 'writelines']
-        
-        voice_client.play(vol_src,after=after)
+        src = SeekableAudioSource(seeking =self.seekable, original = ffmpeg_src, volume = volume)
+
+        self.source = src
+        voice_client.play(src,after=after)

@@ -17,3 +17,6 @@ errors.QueueEmpty = QueueEmpty
 class QueueDisabled(errors.CommandError): pass
 errors.QueueDisabled = QueueDisabled
 
+class AudioNotSeekable(errors.CommandError): pass
+errors.AudioNotSeekable = AudioNotSeekable
+
