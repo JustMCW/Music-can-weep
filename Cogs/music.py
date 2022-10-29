@@ -471,7 +471,7 @@ class MusicCommands(commands.Cog):
             
             #Get the track url from the number index in the user's favourite.
             try:
-                _,link = favourites.get_track_by_index(author, index-1)
+                _,link = Favourites.get_track_by_index(author, index-1)
             except IndexError:
                 return await ctx.replywm(f"Unable to get **#{index}** from your favourite track list.")
 
@@ -1290,7 +1290,7 @@ class MusicCommands(commands.Cog):
         import Favourites
         #Grouping the list in string
         try:
-            favs_list = favourites.get_data(ctx.author)
+            favs_list = Favourites.get_data(ctx.author)
         except FileNotFoundError:
             return await ctx.replywm(MessageString.fav_empty_msg)
 
