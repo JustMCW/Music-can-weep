@@ -16,4 +16,4 @@ A discord music bot made by MCW
   - lyrics syncing
   - seeking
   
-  
+**[Inivte the bot](https://discord.com/api/oauth2/authorize?client_id=919597280523345961&permissions=137442397248&scope=bot)**
