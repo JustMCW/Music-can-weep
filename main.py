@@ -1,10 +1,3 @@
-"""
-A discord music bot :
-  - play music from YOUTUBE URL as well keyword searching
-  - pause, resume, looping, restart command
-  - Favourites system allowing user to save songs and play them again
-  - Most of the action can be done with buttons and commands
-"""
 import asyncio
 import re
 import traceback
