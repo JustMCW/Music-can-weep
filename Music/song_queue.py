@@ -96,7 +96,7 @@ class SongQueue(deque):
 
         if new_tp > self.time_position:
             #Fast forwarding, loading unloaded aufdio
-            wf = self[0].source.original.write_frame if self[0].seekable else self[0].source.original.read
+            wf = self[0].source.write_frame if self[0].seekable else self[0].source.original.read
             #2 time speed, 1/2 duration
             for _ in range(round((new_tp - self.time_position) / self.tempo * 50 )):
                 try: 
