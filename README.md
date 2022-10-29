@@ -3,6 +3,7 @@
 A discord music bot made by MCW
 
 ## Main features : 
+  - communicate with the bot with text command and buttons
   - play music from youtube, soundcloud url
   - play music from search keyword
   - pausing, resuming
