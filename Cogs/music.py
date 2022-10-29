@@ -17,8 +17,8 @@ from discord.ui       import View,Select,Button
 
 
 #My own modules
-import convert
-import favourites
+import Convert
+import Favourites
 
 from subtitles        import Subtitles
 
@@ -1282,7 +1282,7 @@ class MusicCommands(commands.Cog):
                         usage="{}myfav")
     async def display_favourites(self, ctx:commands.Context):
     
-        import favourites
+        import Favourites
         #Grouping the list in string
         try:
             favs_list = favourites.get_data(ctx.author)

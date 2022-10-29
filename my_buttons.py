@@ -7,7 +7,7 @@ from string_literals import MessageString,MyEmojis
 from Music           import voice_state
 from Music.song_queue import VOLUME_PERCENTAGE_LIMIT,SongQueue
 
-import convert
+import Convert
 
 async def inform_changes(interaction : Interaction,message:str):
     if len(voice_state.get_non_bot_vc_members(interaction.guild)) > 1:

@@ -7,7 +7,7 @@ from .song_queue import SongQueue,SongTrack
 
 from my_buttons       import MusicButtons
 from string_literals  import MyEmojis
-import convert
+import Convert
 
 def AudioPlayingEmbed(queue : SongQueue) -> discord.Embed:
     """the discord embed for displaying the audio that is playing"""

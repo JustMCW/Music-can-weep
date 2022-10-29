@@ -73,7 +73,7 @@ def timestr_to_sec(string:str)->int:
                 return None
 
 def timestr_to_sec_ms(time_string:str) -> int:
-    """timestr to sec but includes ms in the time string"""
+    """timestr to sec but includes ms in the time stringi"""
     try:
         #Hour min and millisec are optional
         time_group:list = re.match(

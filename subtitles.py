@@ -4,7 +4,7 @@ import requests
 import re
 from Music.song_queue import SongQueue
 
-import convert
+import Convert
 
 from difflib import SequenceMatcher
 from googletrans import Translator
