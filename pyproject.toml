@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "repl_nix_Music-can-weep-1"
+version = "0.1.0"
+description = ""
+authors = ["Replit user <<>>"]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+requests = "^2.28.1"
+youtube_dl = "^2021.12.17"
+bs4 = "^0.0.1"
+convert = "^0.1.2"
+langcodes = "^3.3.0"
+Flask = "^2.2.2"
+discord = "^2.0.0"
+googletrans = "^3.0.0"
+aiohttp = "^3.8.3"
+typing-extensions = "^4.4.0"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
