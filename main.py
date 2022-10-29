@@ -152,7 +152,6 @@ def main():
         kwargs["mention_author"] = False
         return await self.reply(*args,**kwargs)
     commands.Context.replywm = reply_without_mention
-
     Bot.run(BOT_TOKEN)
     logging.info("Program exited")
       

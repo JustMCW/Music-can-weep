@@ -30,7 +30,7 @@ class SongQueue(deque):
 
         self.looping              :bool            = False
         self.queue_looping        :bool            = False
-        self.auto_play            :bool            = False
+        self.auto_play            :bool            = True
 
         self.audio_message        :discord.Message = None
 
@@ -326,7 +326,7 @@ class SongQueue(deque):
                 .add_field(name=f"{MyEmojis.YOUTUBE_ICON} YT channel" if YT_creator else "💡 Creator",
                             value=Creator)\
                 .add_field(name="↔️ Length",
-                            value=f'`{Convertlength_format(getattr(current_track,"duration"))}`')\
+                            value=f'`{Convert.length_format(getattr(current_track,"duration"))}`')\
                 .add_field(name="📝 Lyrics",
                             value=f"*Available in {len(current_track.subtitles)} languages*" if getattr(current_track,"subtitles",None) else "*Unavailable*")\
                 \
@@ -340,9 +340,9 @@ class SongQueue(deque):
                 .add_field(name="🔊 Voice Channel",
                             value=f"{self.guild.voice_client.channel.mention}")\
                 .add_field(name="🔂 Looping",
-                            value=f'**{Convertbool_to_str(self.looping)}**')\
+                            value=f'**{Convert.bool_to_str(self.looping)}**')\
                 .add_field(name="🔁 Queue looping",
-                            value=f'**{Convertbool_to_str(self.queue_looping)}**')
+                            value=f'**{Convert.bool_to_str(self.queue_looping)}**')
         if self.get(1):
             rembed.set_footer(text=f"Next track : {self[1].title}",icon_url=self[1].thumbnail)
         elif self.auto_play and not self.queue_looping:
