@@ -28,7 +28,7 @@ def search_from_youtube(query:str, ResultLengthLimit:int=5,DurationLimit:int=3*3
 
     #Send the request and grab the html text
     r = requests.get(f"https://www.youtube.com/results?search_query={'+'.join(word for word in query.split())}")
-    htmlSoup = BeautifulSoup(r.text, "lxml")
+    htmlSoup = BeautifulSoup(r.text)
 
     #Fliter the html soup ( get rid of other elements such as the search bar and side bar )
     scripts = [s for s in htmlSoup.find_all("script") if "videoRenderer" in str(s)][0]
@@ -65,7 +65,7 @@ def search_from_youtube(query:str, ResultLengthLimit:int=5,DurationLimit:int=3*3
 
 def get_recommendation(url) -> List[YoutubeVideo]:
     r = requests.get(url)
-    soup = BeautifulSoup(r.text, "lxml")
+    soup = BeautifulSoup(r.text)
 
     script =[s for s in soup.findAll("script") if "var ytInitialData = " in str(s)][0]
     json_data = json.loads(re.search('var ytInitialData = (.+)[,;]{1}',str(script)).group(1))
@@ -90,7 +90,7 @@ def test(q):
     print(url)
     #ytInitialPlayerResponse
     r = requests.get(url)
-    soup = BeautifulSoup(r.text, "lxml")
+    soup = BeautifulSoup(r.text)
 
     script =[s for s in soup.findAll("script") if "var ytInitialPlayerResponse = " in str(s)][0]
     json_data = json.loads(re.search('var ytInitialPlayerResponse = (.+)[,;]{1}',str(script)).group(1))
