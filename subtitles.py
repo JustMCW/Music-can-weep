@@ -184,14 +184,14 @@ class Subtitles:
                     like_percentage = SequenceMatcher(None,text,pron).quick_ratio()
                     if like_percentage < 0.3:
                         
-                        sent.append(f"> {convert.length_format(queue.time_position)} - {convert.length_format(queue.time_position+duration)}\n{text}\n{pron}")
+                        sent.append(f"> {Convertlength_format(queue.time_position)} - {Convertlength_format(queue.time_position+duration)}\n{text}\n{pron}")
                         return await display.edit(
                         embed=discord.Embed( title="Lyrics ~",
                                                 description="\n".join(sent))
                         )
                         # return sent.append(await channel.send(embed=discord.Embed(title=f"{text}\n{pron}")))
                         
-                sent.append(f"> {convert.length_format(queue.time_position)} - {convert.length_format(queue.time_position+duration)}\n{text}")
+                sent.append(f"> {Convertlength_format(queue.time_position)} - {Convertlength_format(queue.time_position+duration)}\n{text}")
                 return await display.edit(embed=discord.Embed( title="Lyrics ~",
                                                 description="\n".join(sent)))
             except discord.errors.NotFound:

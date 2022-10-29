@@ -32,7 +32,7 @@ def AudioPlayingEmbed(queue : SongQueue) -> discord.Embed:
             .add_field(name=f"{MyEmojis.YOUTUBE_ICON} YT channel" if YT_creator else "💡 Creator",
                         value=Creator)\
             .add_field(name="↔️ Length",
-                        value=f'`{convert.length_format(getattr(current_track,"duration"))}`')\
+                        value=f'`{Convertlength_format(getattr(current_track,"duration"))}`')\
             .add_field(name="📝 Lyrics",
                         value=f"*Available in {len(current_track.subtitles)} languages*" if getattr(current_track,"subtitles",None) else "*Unavailable*")\
             \
@@ -46,9 +46,9 @@ def AudioPlayingEmbed(queue : SongQueue) -> discord.Embed:
             .add_field(name="🔊 Voice Channel",
                         value=f"{queue.guild.voice_client.channel.mention}")\
             .add_field(name="🔂 Looping",
-                        value=f'**{convert.bool_to_str(queue.looping)}**')\
+                        value=f'**{Convertbool_to_str(queue.looping)}**')\
             .add_field(name="🔁 Queue looping",
-                        value=f'**{convert.bool_to_str(queue.queue_looping)}**')
+                        value=f'**{Convertbool_to_str(queue.queue_looping)}**')
     if queue.get(1):
         rembed.set_footer(text=f"Next track : {queue[1].title}",icon_url=queue[1].thumbnail)
     elif queue.auto_play and not queue.queue_looping:

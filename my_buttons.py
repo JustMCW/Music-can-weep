@@ -128,9 +128,9 @@ class MusicButtons:
             queue = interaction.guild.song_queue
             emo = "▶︎" if not voice_state.is_paused(interaction.guild) else "\\⏸"
             await interaction.response.send_message(ephemeral=True,
-                embed=discord.Embed(title = f"🎧 Queue | Track Count : {len(queue)} | Full Length : {convert.length_format(queue.total_length)} | Repeat queue : {convert.bool_to_str(queue.queue_looping)}",
+                embed=discord.Embed(title = f"🎧 Queue | Track Count : {len(queue)} | Full Length : {Convertlength_format(queue.total_length)} | Repeat queue : {Convertbool_to_str(queue.queue_looping)}",
                                             #                           **   [Index] if is 1st track [Playing Sign]**    title   (newline)             `Length`               |         @Requester         Do this for every track in the queue
-                                            description = "\n".join([f"**{f'[ {i} ]' if i > 0 else f'[{emo}]'}** {track.title}\n> `{convert.length_format(track.duration)}` | {track.requester.display_name}" for i,track in enumerate(list(queue))]),
+                                            description = "\n".join([f"**{f'[ {i} ]' if i > 0 else f'[{emo}]'}** {track.title}\n> `{Convertlength_format(track.duration)}` | {track.requester.display_name}" for i,track in enumerate(list(queue))]),
                                             color=discord.Color.from_rgb(255, 255, 255),
                                             timestamp=datetime.datetime.now()),
                 view=MusicButtons.QueueButtons()
@@ -141,7 +141,7 @@ class MusicButtons:
             queue = interaction.guild.song_queue
             queue.looping = not queue.looping
             await queue.update_audio_message()
-            await inform_changes(interaction,MessageString.loop_audio_msg.format(convert.bool_to_str(queue.looping)))
+            await inform_changes(interaction,MessageString.loop_audio_msg.format(Convertbool_to_str(queue.looping)))
         
         @button(style=ButtonStyle.grey,emoji=MyEmojis.config,row=1)
         async def on_config(self, interaction:Interaction, btn : Button):
@@ -164,7 +164,7 @@ class MusicButtons:
                     #The anoyying part, jusst ignore it.
                     if volume_to_set:
 
-                        try: volume_percentage = convert.extract_int_from_str(volume_to_set)
+                        try: volume_percentage = Convertextract_int_from_str(volume_to_set)
                         except ValueError: ...
                         else:
                             #Volume higher than the limit
