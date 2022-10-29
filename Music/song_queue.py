@@ -6,9 +6,8 @@ from discord.ext import commands
 
 from collections import deque
 from typing_extensions import Self
-from typing            import Coroutine, Callable, Deque, Dict, List, Any, Optional, Union
+from typing            import Coroutine, Callable, Dict, List, Any, Optional, Union
 
-from youtube_utils    import YoutubeVideo,get_recommendation
 from .song_track  import SongTrack,AutoPlayUser
 import Convert
 from string_literals import MyEmojis
@@ -30,13 +29,12 @@ class SongQueue(deque):
 
         self.looping              :bool            = False
         self.queue_looping        :bool            = False
-        self.auto_play            :bool            = False
+        self.auto_play            :bool            = True
 
         self.audio_message        :discord.Message = None
 
         self.history              :List[SongTrack] = []
-        self._recommendations     :Deque[YoutubeVideo] = deque()
-        self.call_after           : Callable[[],Union[None,Coroutine]] = None
+        self.call_after           :Callable[[],Union[None,Coroutine]] = None
 
         super().__init__()
 
@@ -57,16 +55,14 @@ class SongQueue(deque):
     
     @property
     def current_track(self):
-        try:
+        # try:
             return self[0]
-        except IndexError:
-            if self.auto_play:
-                rec_track = SongTrack.create_track(query=self.recommend.url,requester=AutoPlayUser)
-                self.append(rec_track)
-                self._recommendations.clear()
-                return rec_track
-            else:
-                return None
+        # except IndexError:
+        #     if self.auto_play:
+        #         rec_track = SongTrack.create_track(self.history[-1].recommend.url,requester=AutoPlayUser)
+        #         self.append(rec_track)
+        #         return rec_track
+        #     return
 
     #Just typed it here
     def __getitem__(self, __index) -> SongTrack:
@@ -114,25 +110,9 @@ class SongQueue(deque):
     @volume_percentage.setter
     def volume_percentage(self, perc : Union[int,float]):
         self.volume = perc/100 * VOLUME_WHEN_HUNDRED
-        if self.guild.voice_client.source:
+        if self.guild.voice_client and self.guild.voice_client.source:
             self.guild.voice_client.source.volume = self.volume
             
-
-    def _generate_rec(self):
-        rec = None
-        while not rec:
-            rec = get_recommendation(self[0].webpage_url)
-        self._recommendations = deque(rec)
-
-    @property
-    def recommend(self) -> YoutubeVideo:
-        if self.auto_play:
-            try:
-                return self._recommendations[0]
-            except IndexError:
-                self._generate_rec()
-                return self._recommendations[0]
-        raise AttributeError("Auto-play must be true in order to access recommendation")
 
 ### Modifying the queue itself
 
@@ -174,6 +154,8 @@ class SongQueue(deque):
     def poplefttohistory(self) -> SongTrack:
         """Extension of popleft, the track popped is added to the history list."""
         track = self.popleft()
+        if len(self) == 0 and self.auto_play:
+            self.append(SongTrack.create_track(track.recommend.url,requester=AutoPlayUser))
         self.history.append(track)
         return track
 
@@ -240,6 +222,7 @@ class SongQueue(deque):
         #Call after function
         afterfunc = self.call_after
         if afterfunc: 
+
             afterfunc = afterfunc()
             self.call_after = None # Remove it
             if isinstance(afterfunc,Coroutine):
@@ -272,7 +255,6 @@ class SongQueue(deque):
                 return logging.info("Queue disabled")
             #The rest of the situation, lol.
             else:
-
                 self[0].request_message = None
                 
                 #Shifting the tracks
@@ -326,7 +308,7 @@ class SongQueue(deque):
                 .add_field(name=f"{MyEmojis.YOUTUBE_ICON} YT channel" if YT_creator else "💡 Creator",
                             value=Creator)\
                 .add_field(name="↔️ Length",
-                            value=f'`{Convertlength_format(getattr(current_track,"duration"))}`')\
+                            value=f'`{Convert.length_format(getattr(current_track,"duration"))}`')\
                 .add_field(name="📝 Lyrics",
                             value=f"*Available in {len(current_track.subtitles)} languages*" if getattr(current_track,"subtitles",None) else "*Unavailable*")\
                 \
@@ -340,13 +322,13 @@ class SongQueue(deque):
                 .add_field(name="🔊 Voice Channel",
                             value=f"{self.guild.voice_client.channel.mention}")\
                 .add_field(name="🔂 Looping",
-                            value=f'**{Convertbool_to_str(self.looping)}**')\
+                            value=f'**{Convert.bool_to_str(self.looping)}**')\
                 .add_field(name="🔁 Queue looping",
-                            value=f'**{Convertbool_to_str(self.queue_looping)}**')
+                            value=f'**{Convert.bool_to_str(self.queue_looping)}**')
         if self.get(1):
             rembed.set_footer(text=f"Next track : {self[1].title}",icon_url=self[1].thumbnail)
         elif self.auto_play and not self.queue_looping:
-            rembed.set_footer(text=f"Auto-play : {self.recommend.title}",icon_url=self.recommend.thumbnail)
+            rembed.set_footer(text=f"Auto-play : {current_track.recommend.title}",icon_url=current_track.recommend.thumbnail)
         return rembed
 
     async def make_next_audio_message(self):
@@ -402,3 +384,10 @@ class SongQueue(deque):
 
         elif isinstance(target,discord.TextChannel):
             self.audio_message = await target.send(**message_info)
+        # loop = asyncio.get_running_loop()
+        # import threading,time
+        # def run():
+        #     while True:
+        #         time.sleep(5)
+        #         print(round((self.time_position / self[0].duration) * 10))
+        # threading.Thread(target=run).start()

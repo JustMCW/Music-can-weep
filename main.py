@@ -14,7 +14,7 @@ from Database import Management
 
 
 #Logging
-logging.basicConfig(level=logging.INFO,format="%(levelname)s from %(module)s:%(lineno)d (%(funcName)s) : %(message)s")
+logging.basicConfig(level=logging.WARNING,format="%(levelname)s from %(module)s:%(lineno)d (%(funcName)s) : %(message)s")
 logging.addLevelName(22, "COMMAND_INFO")
 logging.addLevelName(27, "BOT_EVENT")
 
@@ -152,7 +152,6 @@ def main():
         kwargs["mention_author"] = False
         return await self.reply(*args,**kwargs)
     commands.Context.replywm = reply_without_mention
-
     Bot.run(BOT_TOKEN)
     logging.info("Program exited")
       

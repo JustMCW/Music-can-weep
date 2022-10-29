@@ -1,15 +1,17 @@
 import logging
 from io import BytesIO,FileIO
-from typing import Callable
+from typing import Callable,Deque
 from typing_extensions import Self
 
 import discord
 from discord.utils import MISSING
 from discord.opus  import Encoder
 
+from collections import deque
 from youtube_dl import YoutubeDL
+from youtube_utils    import YoutubeVideo,get_recommendation
+
 import audioop
-import time
 
 FRAME_SIZE = Encoder.FRAME_SIZE
 
@@ -85,7 +87,7 @@ class SeekableAudioSource(discord.PCMVolumeTransformer):
             data = self.original.read()
         self.frame_counter += 1
 
-        return audioop.mul(data, 2, self.volume)
+        return audioop.mul(data or b"", 2, self.volume)
 
     def write_frame(self) -> bytes:
         """Write a frame to attribute `audio_bytes`"""
@@ -112,12 +114,28 @@ class SongTrack:
 
     request_message : discord.Message
     source          : SeekableAudioSource
+    recommendations : Deque[YoutubeVideo]
+
+    def _generate_rec(self):
+        rec = None
+        while not rec:
+            rec = get_recommendation(self.webpage_url)
+        self.recommendations = deque(rec)
+
+    @property
+    def recommend(self) -> YoutubeVideo:
+        try:
+            return self.recommendations[0]
+        except IndexError:
+            self._generate_rec()
+            return self.recommendations[0]
 
     def __init__(self,requester:discord.Member,request_message : discord.Message = None,**info:dict):
 
         self.requester = requester
         self.request_message = request_message
         self.source = None
+        self.recommendations = deque([])
 
         for key,value in info.items():
             if key in RequiredAttr:

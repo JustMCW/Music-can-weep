@@ -231,7 +231,7 @@ class MusicButtons:
             elif queue.queue_looping:
                 return await interaction.response.send_message(ephemeral=True,content="This button changes the next track played by auto-play, however auto-play can never be reached when queue looping is on, turn it off with \"queue loop off\"")
             await interaction.response.defer()
-            queue._recommendations.rotate(-1)
+            queue[0].recommendations.rotate(-1)
             await queue.update_audio_message()
 
 

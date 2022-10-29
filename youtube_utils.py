@@ -20,6 +20,19 @@ class YoutubeVideo:
         self.length = length
         self.thumbnail = thumbnail
 
+def extract_yt_url_from(string : str) -> str:
+    matches = re.findall(r"(https|HTTP)://(youtu\.be|www.youtube.com)(/shorts)?/(watch\?v=)?([A-Za-z0-9\-_]{11})",string)
+    if matches:
+        return "https://www.youtube.com/watch?v="+matches[0][4]
+    return None
+
+example_link = "https://www.youtube.com/watch?v=9NNy39vj-Wo"
+assert extract_yt_url_from("ez")==None
+assert extract_yt_url_from(f"pro{example_link}")== example_link
+assert extract_yt_url_from(f"<{example_link}>")==example_link
+assert extract_yt_url_from("https://www.youtube.com/watch?v=x8VYWazR5mE&ab_channel=Ayase%2FYOASOBI")=="https://www.youtube.com/watch?v=x8VYWazR5mE"
+
+
 def search_from_youtube(query:str, ResultLengthLimit:int=5,DurationLimit:int=3*3600) -> List[YoutubeVideo]:
     """
     Search youtube videos with a given string.
@@ -28,7 +41,7 @@ def search_from_youtube(query:str, ResultLengthLimit:int=5,DurationLimit:int=3*3
 
     #Send the request and grab the html text
     r = requests.get(f"https://www.youtube.com/results?search_query={'+'.join(word for word in query.split())}")
-    htmlSoup = BeautifulSoup(r.text)
+    htmlSoup = BeautifulSoup(r.text, features="lxml")
 
     #Fliter the html soup ( get rid of other elements such as the search bar and side bar )
     scripts = [s for s in htmlSoup.find_all("script") if "videoRenderer" in str(s)][0]
@@ -65,7 +78,7 @@ def search_from_youtube(query:str, ResultLengthLimit:int=5,DurationLimit:int=3*3
 
 def get_recommendation(url) -> List[YoutubeVideo]:
     r = requests.get(url)
-    soup = BeautifulSoup(r.text)
+    soup = BeautifulSoup(r.text, features="lxml")
 
     script =[s for s in soup.findAll("script") if "var ytInitialData = " in str(s)][0]
     json_data = json.loads(re.search('var ytInitialData = (.+)[,;]{1}',str(script)).group(1))
@@ -90,7 +103,7 @@ def test(q):
     print(url)
     #ytInitialPlayerResponse
     r = requests.get(url)
-    soup = BeautifulSoup(r.text)
+    soup = BeautifulSoup(r.text, features="lxml")
 
     script =[s for s in soup.findAll("script") if "var ytInitialPlayerResponse = " in str(s)][0]
     json_data = json.loads(re.search('var ytInitialPlayerResponse = (.+)[,;]{1}',str(script)).group(1))
@@ -107,5 +120,6 @@ def test(q):
     return good_fmts[-1]["url"]
 
 if __name__ == "__main__":
-    print(test("neko hacker home sweet home"))
+    pass
+    # print(test("neko hacker home sweet home"))
     # print(get_recommendation("https://www.youtube.com/watch?v=BnkhBwzBqlQ")[1].title)

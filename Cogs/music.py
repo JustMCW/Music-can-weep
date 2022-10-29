@@ -174,7 +174,7 @@ class MusicCommands(commands.Cog):
                     raise resume_error
 
             #Play the track
-            await voice_state.create_audio_message(current_track, await ctx.send("▶️ Continue to play tracks in the queue"))
+            await queue.create_audio_message(current_track, await ctx.send("▶️ Continue to play tracks in the queue"))
 
             queue.play_first()
         
@@ -199,7 +199,7 @@ class MusicCommands(commands.Cog):
         
         guild   :discord.Guild = ctx.guild
         queue   :SongQueue     = guild.song_queue
-        fwd_sec :float         = Converttimestr_to_sec(time)
+        fwd_sec :float         = Convert.timestr_to_sec(time)
 
         if queue[0].duration < (fwd_sec + queue.time_position):
             await ctx.replywm("Ended the current track")
@@ -209,7 +209,7 @@ class MusicCommands(commands.Cog):
         queue.time_position += fwd_sec
         voicec.resume()
 
-        await ctx.replywm(f"*⏭ Fast-fowarded for * `{Convertlength_format(fwd_sec)}`")
+        await ctx.replywm(f"*⏭ Fast-fowarded for * `{Convert.length_format(fwd_sec)}`")
 
     @commands.guild_only()
     @commands.command(aliases=["rwd"],
@@ -226,11 +226,11 @@ class MusicCommands(commands.Cog):
         
         guild   :discord.Guild = ctx.guild
         queue   :SongQueue     = guild.song_queue
-        rwd_sec :float         = Converttimestr_to_sec(time)
+        rwd_sec :float         = Convert.timestr_to_sec(time)
 
         queue[0].time_position -= rwd_sec / queue.tempo
 
-        await ctx.replywm(f"*⏮ Rewinded for * `{Convertlength_format(rwd_sec)}`")
+        await ctx.replywm(f"*⏮ Rewinded for * `{Convert.length_format(rwd_sec)}`")
 
     @commands.guild_only()
     @commands.command(aliases=["jump"],
@@ -239,7 +239,7 @@ class MusicCommands(commands.Cog):
     async def seek(self,ctx:commands.Context,*,time_position):
         queue = ctx.guild.song_queue
         try:
-            position_sec:float = Converttimestr_to_sec(time_position)
+            position_sec:float = Convert.timestr_to_sec(time_position)
             if position_sec >= queue[0].duration:
                 ctx.voice_client.stop()
             # await voice_state.restart_track(ctx.guild,position=position_sec/queue.tempo)
@@ -251,7 +251,7 @@ class MusicCommands(commands.Cog):
             voice_state.pause_audio(ctx.guild)
             queue.time_position = position_sec
             voice_state.resume_audio(ctx.guild)
-            await ctx.replywm(f"*⏏️ Moved the time position to * `{Convertlength_format(position_sec)}`")
+            await ctx.replywm(f"*⏏️ Moved the time position to * `{Convert.length_format(position_sec)}`")
 
 
     @commands.guild_only()
@@ -315,7 +315,7 @@ class MusicCommands(commands.Cog):
 
         #Try getting the volume_percentage from the message
         try:
-             volume_percentage = Convertextract_int_from_str(volume_to_set)
+             volume_percentage = Convert.extract_int_from_str(volume_to_set)
         except ValueError: 
             return await ctx.replywm("🎧 Please enter a vaild volume percentage 🔊")
         
@@ -387,11 +387,11 @@ class MusicCommands(commands.Cog):
                       usage="{}loop on")
     async def loop(self, ctx:commands.Context, mode=None):
         guild   : discord.Guild = ctx.guild
-        new_loop: bool          = commands.converter._convert_to_bool(mode) if mode else not guild.song_guild.song_queue.looping
+        new_loop: bool          = commands.Converter._Convert_to_bool(mode) if mode else not guild.song_guild.song_queue.looping
 
         guild.song_queue.looping = new_loop
         if not guild.song_queue.audio_message:
-            await ctx.replywm(MessageString.loop_audio_msg.format(Convertbool_to_str(new_loop)))
+            await ctx.replywm(MessageString.loop_audio_msg.format(Convert.bool_to_str(new_loop)))
         await guild.song_queue.update_audio_message()
 
     #----------------------------------------------------------------#
@@ -443,13 +443,14 @@ class MusicCommands(commands.Cog):
         #URL
         elif "https://" in query or "HTTP://" in query:
             #Match the link in the query
-            yt_vid_link_matches = re.findall(r"(https|HTTP)://(youtu\.be|www.youtube.com)(/shorts)?/(watch\?v=)?([A-Za-z0-9\-_]{11})",query)
+            from youtube_utils import extract_yt_url_from
+            yt_vid_link_matches = extract_yt_url_from(query)
             # yt_pl_link_matches = re.findall(r"(https|HTTP)://(youtu\.be|www.youtube.com)(/shorts)?/(watch\?v=)?([A-Za-z0-9\-_]{11})",query)
             #https://www.youtube.com/playlist?list=PLVl73jKWzwn-20H8azDxpg8Ewop5DlZzT
             
             #Matched
             if yt_vid_link_matches: 
-                query = "https://www.youtube.com/watch?v="+yt_vid_link_matches[0][4]
+                query = yt_vid_link_matches
                 reply_msg = await ctx.send(f"{MyEmojis.YOUTUBE_ICON} A Youtube link is selected")
 
             #Sound cloud link
@@ -464,7 +465,7 @@ class MusicCommands(commands.Cog):
         elif 'fav' in query.lower():
             #Get the number
             try:
-                index = Convertextract_int_from_str(query)
+                index = Convert.extract_int_from_str(query)
             except ValueError:
                 return await ctx.replywm("Invalid favourite index !")
             
@@ -534,7 +535,7 @@ class MusicCommands(commands.Cog):
                                         utils.DownloadError: str(yt_dl_error).replace("ERROR: ",""),
                                         }.items():
                 if isinstance(yt_dl_error,error):
-                    return await reply_msg.replywm(f"An error occurred : {error_message}")
+                    return await reply_msg.reply(f"An error occurred : {error_message}")
 
             #Raise the error if it was not in the above dictionary
             logging.error(yt_dl_error)
@@ -559,7 +560,7 @@ class MusicCommands(commands.Cog):
                 await reply_msg.edit(embed=discord.Embed(title = f"\"{NewTrack.title}\" has been added to the queue",
                                                          color=discord.Color.from_rgb(255, 255, 255))
                                               .add_field(name="Length ↔️",
-                                                         value=f"`{Convertlength_format(NewTrack.duration)}`")
+                                                         value=f"`{Convert.length_format(NewTrack.duration)}`")
                                               .add_field(name = "Position in queue 🔢",
                                                          value=len(queue))
                                           .set_thumbnail(url = NewTrack.thumbnail)
@@ -576,7 +577,7 @@ class MusicCommands(commands.Cog):
 
             queue.append(NewTrack)
             # #Make our audio message
-            await voice_state.create_audio_message(NewTrack,reply_msg or ctx.channel)
+            await queue.create_audio_message(reply_msg or ctx.channel)
 
             #Play the audio, we are not actually playing the audio we just extracted, but the first track in queue
             try:
@@ -587,7 +588,7 @@ class MusicCommands(commands.Cog):
                         return await reply_msg.edit(embed=discord.Embed(title = f"\"{NewTrack.title}\" has been added to the queue",
                                                 color=discord.Color.from_rgb(255, 255, 255))
                                     .add_field(name="Length ↔️",
-                                                value=f"`{Convertlength_format(NewTrack.duration)}`")
+                                                value=f"`{Convert.length_format(NewTrack.duration)}`")
                                     .add_field(name = "Position in queue 🔢",
                                                 value=len(queue)-1)
                                 .set_thumbnail(url = NewTrack.thumbnail))
@@ -631,9 +632,9 @@ class MusicCommands(commands.Cog):
             raise commands.errors.QueueEmpty("No tracks in the queue for display.")
         
         symbol = "▶︎" if not voice_state.is_paused(ctx.guild) else "\\⏸"
-        await ctx.send(embed = discord.Embed(title = f"🎧 Queue | Track Count : {len(queue)} | Full Length : {Convertlength_format(queue.total_length)} | Repeat queue : {Convertbool_to_str(queue.queue_looping)}",
+        await ctx.send(embed = discord.Embed(title = f"🎧 Queue | Track Count : {len(queue)} | Full Length : {Convert.length_format(queue.total_length)} | Repeat queue : {Convert.bool_to_str(queue.queue_looping)}",
                                             #                           **   [Index] if is 1st track [Playing Sign]**    title   (newline)             `Length`               |         @Requester         Do this for every track in the queue
-                                            description = "\n".join([f"**{f'[ {i} ]' if i > 0 else f'[{symbol}]'}** {track.title}\n> `{Convertlength_format(track.duration)}` | {track.requester.mention}" for i,track in enumerate(list(queue))]),
+                                            description = "\n".join([f"**{f'[ {i} ]' if i > 0 else f'[{symbol}]'}** {track.title}\n> `{Convert.length_format(track.duration)}` | {track.requester.mention}" for i,track in enumerate(list(queue))]),
                                             color=discord.Color.from_rgb(255, 255, 255),
                                             timestamp=datetime.datetime.now()))
     @commands.guild_only()
@@ -644,7 +645,7 @@ class MusicCommands(commands.Cog):
         if not history:
             return await ctx.replywm("History is empty.")
         await ctx.send(embed = discord.Embed(title = f"🎧 Queue history | Track Count : {len(history)}",
-                                            description = "\n".join([f"**[-{i} ]** {track.title}\n> `{Convertlength_format(track.duration)}` | {track.requester.display_name}" for i,track in enumerate(history[::-1],1)]),
+                                            description = "\n".join([f"**[-{i} ]** {track.title}\n> `{Convert.length_format(track.duration)}` | {track.requester.display_name}" for i,track in enumerate(history[::-1],1)]),
                                             color=discord.Color.from_rgb(255, 255, 255),
                                             timestamp=datetime.datetime.now()))
         
@@ -670,7 +671,7 @@ class MusicCommands(commands.Cog):
                 raise commands.errors.MissingRequiredArgument("position")
 
             try:
-                position:int = Convertextract_int_from_str(position)
+                position:int = Convert.extract_int_from_str(position)
 
             except ValueError:
 
@@ -796,11 +797,11 @@ class MusicCommands(commands.Cog):
                     select_mode:str=None):
         guild     :discord.Guild = ctx.guild
         queue     :SongQueue     = guild.song_queue
-        new_qloop :bool          = commands.converter._convert_to_bool(select_mode) if select_mode else not queue.queue_looping
+        new_qloop :bool          = commands.Converter._Convert_to_bool(select_mode) if select_mode else not queue.queue_looping
 
         queue.queue_looping = new_qloop
         if not guild.song_queue.audio_message:
-            await ctx.replywm(MessageString.queue_loop_audio_msg.format(Convertbool_to_str(new_qloop)))
+            await ctx.replywm(MessageString.queue_loop_audio_msg.format(Convert.bool_to_str(new_qloop)))
         await queue.update_audio_message()
 
 
@@ -809,10 +810,10 @@ class MusicCommands(commands.Cog):
     async def autoplay(self,ctx:commands.Context,mode:str=None):
         guild     :discord.Guild = ctx.guild
         queue     :SongQueue     = guild.song_queue
-        new_qloop :bool          = commands.converter._convert_to_bool(mode) if mode else not queue.auto_play
+        new_qloop :bool          = commands.Converter._Convert_to_bool(mode) if mode else not queue.auto_play
 
         queue.auto_play = new_qloop
-        await ctx.replywm(f"Auto-playing is switched to {Convertbool_to_str(new_qloop)}")
+        await ctx.replywm(f"Auto-playing is switched to {Convert.bool_to_str(new_qloop)}")
         await queue.update_audio_message()
 
 
@@ -997,23 +998,27 @@ class MusicCommands(commands.Cog):
 
         #if same text channel
         if audio_message.channel == ctx.channel:
-            return await audio_message.reply("*🎧 This is the audio playing right now ~* [{}/{}]".format(Convertlength_format(queue.time_position),
-                                                                                                         Convertlength_format(queue[0].duration)))
+            try:
+                await audio_message.reply("*🎧 This is the audio playing right now ~* [{}/{}]".format(Convert.length_format(queue.time_position),
+                                                                                                         Convert.length_format(queue[0].duration)))
+            except AttributeError:
+                await audio_message.reply("🎧 This is track just finshed !")
         #Or not
-        await ctx.send(f"🎶 Now playing in {voice_state.get_current_vc(ctx.guild).mention} - **{queue[0].title}**")
+        else:
+            await ctx.send(f"🎶 Now playing in {voice_state.get_current_vc(ctx.guild).mention} - **{queue[0].title}**")
 
     @commands.guild_only()
     @commands.command(aliases=["nxtrec"])
     async def nextrecommend(self,ctx:commands.Context):
         queue : SongQueue = ctx.guild.song_queue
-        queue._recommendations.rotate(-1)
+        queue[0].recommendations.rotate(-1)
         await queue.update_audio_message()
 
     @commands.guild_only()
     @commands.command(aliases=["prevrec"])
     async def previousrecommend(self,ctx:commands.Context):
         queue : SongQueue = ctx.guild.song_queue
-        queue._recommendations.rotate(1)
+        queue[0].recommendations.rotate(1)
         await queue.update_audio_message()
 
     @commands.guild_only()
@@ -1027,7 +1032,7 @@ class MusicCommands(commands.Cog):
             return await ctx.replywm("No audio message present at the moment.")
         
         await voice_state.clear_audio_message(ctx.guild)
-        await voice_state.create_audio_message(queue[0],ctx.channel)
+        await queue.create_audio_message(queue[0],ctx.channel)
 
     @commands.guild_only()
     @commands.command(description="Send the current audio as a file which is available for downloading.")
@@ -1194,15 +1199,15 @@ class MusicCommands(commands.Cog):
         
         subr = list(map( #Format the time in floating points
             lambda sub:(
-                Converttimestr_to_sec_ms(sub[0]),
-                Converttimestr_to_sec_ms(sub[1]),
+                Convert.timestr_to_sec_ms(sub[0]),
+                Convert.timestr_to_sec_ms(sub[1]),
                 sub[2]
             )
             ,subr
         )) 
 
         ### Streaming the lyrics into discord
-        from convert import length_format
+        from Convert import length_format
         from Music import voice_state
 
         prev_text = ""

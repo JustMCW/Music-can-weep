@@ -32,7 +32,7 @@ def AudioPlayingEmbed(queue : SongQueue) -> discord.Embed:
             .add_field(name=f"{MyEmojis.YOUTUBE_ICON} YT channel" if YT_creator else "💡 Creator",
                         value=Creator)\
             .add_field(name="↔️ Length",
-                        value=f'`{Convertlength_format(getattr(current_track,"duration"))}`')\
+                        value=f'`{Convert.length_format(getattr(current_track,"duration"))}`')\
             .add_field(name="📝 Lyrics",
                         value=f"*Available in {len(current_track.subtitles)} languages*" if getattr(current_track,"subtitles",None) else "*Unavailable*")\
             \
@@ -46,13 +46,13 @@ def AudioPlayingEmbed(queue : SongQueue) -> discord.Embed:
             .add_field(name="🔊 Voice Channel",
                         value=f"{queue.guild.voice_client.channel.mention}")\
             .add_field(name="🔂 Looping",
-                        value=f'**{Convertbool_to_str(queue.looping)}**')\
+                        value=f'**{Convert.bool_to_str(queue.looping)}**')\
             .add_field(name="🔁 Queue looping",
-                        value=f'**{Convertbool_to_str(queue.queue_looping)}**')
+                        value=f'**{Convert.bool_to_str(queue.queue_looping)}**')
     if queue.get(1):
         rembed.set_footer(text=f"Next track : {queue[1].title}",icon_url=queue[1].thumbnail)
     elif queue.auto_play and not queue.queue_looping:
-        rembed.set_footer(text=f"Auto-play : {queue.recommend.title}",icon_url=queue.recommend.thumbnail)
+        rembed.set_footer(text=f"Auto-play : {current_track.recommend.title}",icon_url=current_track.recommend.thumbnail)
     return rembed
 
 
@@ -162,37 +162,6 @@ def replay_track(guild:discord.Guild):
     queue : SongQueue = guild.song_queue 
     queue.call_after = lambda: queue.play_first()
     guild.voice_client.stop()
-
-async def create_audio_message(Track:SongTrack,Target:Union[discord.TextChannel,discord.Message]):
-    
-    """
-    Create the discord message for displaying audio playing, including buttons and embed
-    accecpt a text channel or a message to be edited
-    """
-
-    #Getting the subtitle
-    guild       :discord.Guild = Target.guild
-    queue       :SongQueue     = guild.song_queue
-
-    message_info = {
-        "embed": AudioPlayingEmbed(queue),
-        "view": MusicButtons.AudioControllerButtons(queue)
-    }
-
-    if isinstance(Target,discord.Message):
-        await Target.edit(**message_info)
-        queue.audio_message = await Target.channel.fetch_message(Target.id)
-
-    elif isinstance(Target,discord.TextChannel):
-
-        try:
-            if Track.request_message.channel.id == Target.id:
-                queue.audio_message = await Track.request_message.reply(**message_info)
-            else:
-                raise AttributeError("Not the same channel.")
-        except (AttributeError):
-            queue.audio_message = await Target.send(**message_info)
-    
 
 async def clear_audio_message(guild:discord.Guild=None,specific_message:discord.Message = None):
 
