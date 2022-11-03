@@ -1,12 +1,13 @@
 import asyncio
 import logging
 
-import discord
-from discord.ext import commands
-
+from math import floor
 from collections import deque
 from typing_extensions import Self
 from typing            import Coroutine, Callable, Dict, List, Any, Optional, Union
+
+import discord
+from discord.ext import commands
 
 from .song_track  import SongTrack,AutoPlayUser
 import Convert
@@ -14,11 +15,12 @@ from string_literals import MyEmojis
 
 VOLUME_WHEN_HUNDRED = 0.5
 VOLUME_PERCENTAGE_LIMIT = 400
+UPDATE_FREQUENCY = 25
 
 hash_maps : Dict[int,Any] = {} #Multi-instances
 
 class SongQueue(deque):
-    """A sub-class of `collections.deque`, containing `SongTrack`s and different attributes to work with."""
+    """A sub-class of `collections.deque`, containing `SongTrack`s with different attributes and methods to work with."""
     def __init__(self,guild):
         self.guild                :discord.Guild   = guild 
         self._event_loop          :asyncio.AbstractEventLoop = asyncio.get_running_loop()
@@ -29,7 +31,7 @@ class SongQueue(deque):
 
         self.looping              :bool            = False
         self.queue_looping        :bool            = False
-        self.auto_play            :bool            = True
+        self.auto_play            :bool            = False
 
         self.audio_message        :discord.Message = None
 
@@ -38,13 +40,14 @@ class SongQueue(deque):
 
         super().__init__()
 
-### Getting stuff
+### Getting song track from the queue
     @classmethod
     def get_song_queue_for(cls,guild:discord.Guild) -> Self:
         search = hash_maps.get(guild.id)
 
         if search is not None:
             return search
+
         #Create one if not found
         hash_maps[guild.id] = cls(guild)
         return hash_maps[guild.id]
@@ -54,15 +57,8 @@ class SongQueue(deque):
         except IndexError: return None
     
     @property
-    def current_track(self):
-        # try:
-            return self[0]
-        # except IndexError:
-        #     if self.auto_play:
-        #         rec_track = SongTrack.create_track(self.history[-1].recommend.url,requester=AutoPlayUser)
-        #         self.append(rec_track)
-        #         return rec_track
-        #     return
+    def current_track(self) -> SongTrack:
+        return self[0]
 
     #Just typed it here
     def __getitem__(self, __index) -> SongTrack:
@@ -80,13 +76,12 @@ class SongQueue(deque):
 
     @property
     def time_position(self) -> int:
-        """The time position, relative to it's tempo"""
+        """The time position, relative to the queue's tempo"""
         try:
             return self[0].time_position * self.tempo
-        except IndexError:
+        except IndexError: 
             return None
             
-    #[0].timeposition is frame count / 50, bascially real-time
     @time_position.setter
     def time_position(self,new_tp):
 
@@ -114,7 +109,7 @@ class SongQueue(deque):
             self.guild.voice_client.source.volume = self.volume
             
 
-### Modifying the queue itself
+### Modifying the queue
 
     def swap(self,pos1:int,pos2:int) -> None:
         
@@ -152,7 +147,8 @@ class SongQueue(deque):
             self.appendleft(playing)
 
     def poplefttohistory(self) -> SongTrack:
-        """Extension of popleft, the track popped is added to the history list."""
+        """Extension of popleft, the track popped is added to the history list, 
+        also adds recommended track if no track is left fot some reason"""
         track = self.popleft()
         if len(self) == 0 and self.auto_play:
             self.append(SongTrack.create_track(track.recommend.url,requester=AutoPlayUser))
@@ -192,7 +188,8 @@ class SongQueue(deque):
 
     def after_playing(self,voice_error :str = None):
         """Handles most thing that happenes after an audio track has ended"""
-        #Warning : You are about to enter the most chaotic code in my whole project, but also one of the most important bit.
+        #Warning : You are about to enter the most chaotic code of my project, but also one of the most important bit.
+
         from .voice_state import clear_audio_message
     ### Stuff that must be done after an audio ended no matter what : cleaning up the process and handling error(s)
         
@@ -203,12 +200,13 @@ class SongQueue(deque):
         FinshedTrack = self.get(0)
         logging.info(f"Track finshed : {FinshedTrack.title}")
 
-        FinshedTrack.source.original.cleanup() #Moved here to access returncode
+        #Moved here in order to access returncode of the ffmepg process.
+        FinshedTrack.source.original.cleanup()
         returncode = FinshedTrack.source.original.returncode
 
-        #403 forbidden error (most likely to be it when 1 is returned), get a new piece of info and replay it.
+        #403 forbidden error (most likely to be it when 1 is returned)
         if returncode == 1:
-            logging.warning("FFmpeg process returned 1, regenerating song track format.") 
+            logging.warning("FFmpeg process returned 1, recreating song track format.") 
             #Get a new piece of info
             NextTrack = SongTrack.create_track(query = FinshedTrack.webpage_url,
                                                 requester=FinshedTrack.requester,
@@ -216,22 +214,26 @@ class SongQueue(deque):
             #Replace the old info
             self[0].formats = NextTrack.formats
             return self.play_first()
+
         elif FinshedTrack is None:
-            return logging.warning("Queue is already empty before after is run.")
+            return logging.error("Queue is already empty before after is run.")
 
         #Call after function
         afterfunc = self.call_after
         if afterfunc: 
 
             afterfunc = afterfunc()
-            self.call_after = None # Remove it
+            self.call_after = None
             if isinstance(afterfunc,Coroutine):
                 self._event_loop.create_task(afterfunc)
-            return logging.info("After function called and returning")
+            return logging.info("Called after function.")
 
-        async def inner(): #I must wrap this here because create_task has huge delay and the code above needs to run ASAP after 
+        #Wrapped here for coroutine functions to run.   
+        #Didn't wrap the code above because create_task has a delay but cleanup actions has to be done ASAP
+        async def inner():
             guild = self.guild
             voice_client : discord.VoiceClient = guild.voice_client
+            
             #Not in voice channel
             if not voice_client or not voice_client.is_connected():
                 await clear_audio_message(guild)
@@ -243,7 +245,7 @@ class SongQueue(deque):
                 return logging.info("Client is not in voice after playing.")
              
 
-        ### Time to decide what the next track would be played
+        ### Time to decide what the next track would be
             NextTrack     : SongTrack           = None
             #Single song looping is on
             if self.looping:
@@ -290,12 +292,18 @@ class SongQueue(deque):
         current_track = self.current_track
 
         if not current_track:
-            return print("No track is in the queue, thus unable to create an embed for it.")
-
-        YT_creator = getattr(current_track,"channel",None) 
+            return logging.warning("No track is in the queue, thus unable to create an embed for it.")
+        
+        YT_creator = getattr(current_track,"channel",None)
         Creator = YT_creator or getattr(current_track,"uploader")
         Creator_url = getattr(current_track,"channel_url",getattr(current_track,"uploader_url",None))
         Creator = "[{}]({})".format(Creator,Creator_url) if Creator_url else Creator
+        
+        try:
+            progress = max(floor((self.time_position / current_track.duration) * UPDATE_FREQUENCY),1)
+        except AttributeError:
+            progress = 1
+        progress_bar ='🟥' * (progress) + '⬜️' * (UPDATE_FREQUENCY-progress) #🟦
 
         rembed = discord.Embed(title= current_track.title,
                             url= current_track.webpage_url,
@@ -324,11 +332,15 @@ class SongQueue(deque):
                 .add_field(name="🔂 Looping",
                             value=f'**{Convert.bool_to_str(self.looping)}**')\
                 .add_field(name="🔁 Queue looping",
-                            value=f'**{Convert.bool_to_str(self.queue_looping)}**')
+                            value=f'**{Convert.bool_to_str(self.queue_looping)}**')\
+                \
+                .set_footer(text=f"Progress : [ {progress_bar} ]")
+
         if self.get(1):
-            rembed.set_footer(text=f"Next track : {self[1].title}",icon_url=self[1].thumbnail)
+            rembed.add_field(name="🎶 Upcoming track",value=self[1].title)
         elif self.auto_play and not self.queue_looping:
-            rembed.set_footer(text=f"Auto-play : {current_track.recommend.title}",icon_url=current_track.recommend.thumbnail)
+            rembed.add_field(name="🎶 Upcoming track (Auto play)",value= current_track.recommend.title)
+
         return rembed
 
     async def make_next_audio_message(self):
@@ -384,10 +396,25 @@ class SongQueue(deque):
 
         elif isinstance(target,discord.TextChannel):
             self.audio_message = await target.send(**message_info)
-        # loop = asyncio.get_running_loop()
-        # import threading,time
-        # def run():
-        #     while True:
-        #         time.sleep(5)
-        #         print(round((self.time_position / self[0].duration) * 10))
-        # threading.Thread(target=run).start()
+
+        #A thread that updates the audio progress bar
+        import threading,time
+
+        loop = asyncio.get_running_loop()
+        t = self[0]
+        def run():
+            last_tp = 1
+            while self.get(0) == t: 
+                if not self[0].source:
+                    time.sleep(2)
+                    continue
+
+                tp = max(floor((self.time_position / self[0].duration) * UPDATE_FREQUENCY),1)
+   
+                if last_tp != tp:
+                    last_tp = tp
+                    loop.create_task(self.update_audio_message())
+
+                time.sleep(self[0].duration/UPDATE_FREQUENCY)
+
+        threading.Thread(target=run).start()

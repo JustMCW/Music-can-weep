@@ -387,7 +387,7 @@ class MusicCommands(commands.Cog):
                       usage="{}loop on")
     async def loop(self, ctx:commands.Context, mode=None):
         guild   : discord.Guild = ctx.guild
-        new_loop: bool          = commands.Converter._Convert_to_bool(mode) if mode else not guild.song_guild.song_queue.looping
+        new_loop: bool          = commands.converter._convert_to_bool(mode) if mode else not guild.song_guild.song_queue.looping
 
         guild.song_queue.looping = new_loop
         if not guild.song_queue.audio_message:
@@ -792,12 +792,10 @@ class MusicCommands(commands.Cog):
     @queue.command(description='🔂 Enable / Disable queue looping.\nWhen enabled, tracks will be moved to the last at the queue after finsh playing',
                    aliases=["loop","looping","repeat_queue",'setloop','setlooping',"toggleloop","toggle_looping",'changelooping','lop'],
                    usage="{}queue repeat on")
-    async def repeat(self,
-                    ctx:commands.Context,
-                    select_mode:str=None):
+    async def repeat(self,ctx:commands.Context,select_mode:str=None):
         guild     :discord.Guild = ctx.guild
         queue     :SongQueue     = guild.song_queue
-        new_qloop :bool          = commands.Converter._Convert_to_bool(select_mode) if select_mode else not queue.queue_looping
+        new_qloop :bool          = commands.converter._convert_to_bool(select_mode) if select_mode else not queue.queue_looping
 
         queue.queue_looping = new_qloop
         if not guild.song_queue.audio_message:
@@ -810,10 +808,10 @@ class MusicCommands(commands.Cog):
     async def autoplay(self,ctx:commands.Context,mode:str=None):
         guild     :discord.Guild = ctx.guild
         queue     :SongQueue     = guild.song_queue
-        new_qloop :bool          = commands.Converter._Convert_to_bool(mode) if mode else not queue.auto_play
+        new_ap    :bool          = commands.converter._convert_to_bool(mode) if mode else not queue.auto_play
 
-        queue.auto_play = new_qloop
-        await ctx.replywm(f"Auto-playing is switched to {Convert.bool_to_str(new_qloop)}")
+        queue.auto_play = new_ap
+        await ctx.replywm(f"Auto-playing is switched to {Convert.bool_to_str(new_ap)}")
         await queue.update_audio_message()
 
 

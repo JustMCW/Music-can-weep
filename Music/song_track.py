@@ -1,5 +1,5 @@
 import logging
-from io import BytesIO,FileIO
+from io import BytesIO
 from typing import Callable,Deque
 from typing_extensions import Self
 
@@ -34,24 +34,11 @@ class FFmpegPCMAudio(discord.FFmpegPCMAudio):
 
 discord.FFmpegPCMAudio = FFmpegPCMAudio
 
-class FileAudioSource(discord.AudioSource):
-    frame_counter  : int
-    def __init__(self,file):
-        self.frame_counter = 0
-        self.file = FileIO(file)
-
-    def read(self) -> bytes:
-        self.file.seek(FRAME_SIZE * self.frame_counter)
-        self.frame_counter += 1
-        ret = self.file.read(FRAME_SIZE)
-        return ret
-
-    def cleanup(self) -> None:
-        self.file.close()
-
 class SeekableAudioSource(discord.PCMVolumeTransformer):
     """PCMVolumeTransformer added with seeking control on top.
     Inhertits every attributes from PCMVolumeTransformer with more attributes for control to audio time position.
+
+    Seeking is achieved by storing bytes read from the ffmpeg stream, and reading from the stored bytes, which is seekable.
 
     Attributes
     ------------
@@ -59,11 +46,15 @@ class SeekableAudioSource(discord.PCMVolumeTransformer):
         Manipulate this to seek through the audio.
         One frame is equivalent to 20ms
     audio_bytes: :class:`BytesIO`
-        the audio is stored in this attribute to achieve seeking (backward).
+        The audio read from the ffmepg is stored in this attribute.
+
+    audio_filter: :class:`Callable[[bytes],bytes]`
+        The audio read will be passed to this function then returning it
+        
     """
-    original       : discord.FFmpegPCMAudio #It's not like we're gonna use any other audio source
-    audio_filter   : Callable[[bytes],bytes] = None #You 
-    frame_counter  : int # Runs every 20ms and determines the position of our audio
+    original       : discord.FFmpegPCMAudio #We're gonna use this on other audio source
+    audio_filter   : Callable[[bytes],bytes] = None # I suppose I can do crazy stuff with this in the future, for now tho, it's only for volume controlling
+    frame_counter  : int
     audio_bytes    : BytesIO
 
     def __init__(self,seeking : bool,*args,**kwargs):
@@ -71,9 +62,6 @@ class SeekableAudioSource(discord.PCMVolumeTransformer):
         self.seekable = seeking
         self.audio_bytes = BytesIO()
         super().__init__(*args,**kwargs)
-
-    def audio_filter(self,data:bytes) -> bytes:
-        return audioop.mul(data, 2, self.volume)
 
     def read_from_loaded_audio(self) -> bytes:
         self.audio_bytes.seek(FRAME_SIZE * self.frame_counter)
@@ -86,11 +74,15 @@ class SeekableAudioSource(discord.PCMVolumeTransformer):
         else:
             data = self.original.read()
         self.frame_counter += 1
+        
+        data = audioop.mul(data or b"", 2, self.volume)
 
-        return audioop.mul(data or b"", 2, self.volume)
+        if self.audio_filter:
+            data = self.audio_filter(data)
+        return data
 
     def write_frame(self) -> bytes:
-        """Write a frame to attribute `audio_bytes`"""
+        """Write a frame of ffmpeg stream bytes to `audio_bytes`"""
         data_read = self.original.read()
         if data_read and self.seekable:
             self.audio_bytes.write(data_read)
@@ -100,7 +92,7 @@ class SeekableAudioSource(discord.PCMVolumeTransformer):
     def cleanup(self) -> None:
         logging.info("Audio thread exited.")
         self.audio_bytes.close()
-
+    
     def __del__(self) -> None:
         if not self.audio_bytes.closed:
             self.audio_bytes.close()
@@ -114,21 +106,9 @@ class SongTrack:
 
     request_message : discord.Message
     source          : SeekableAudioSource
+
     recommendations : Deque[YoutubeVideo]
 
-    def _generate_rec(self):
-        rec = None
-        while not rec:
-            rec = get_recommendation(self.webpage_url)
-        self.recommendations = deque(rec)
-
-    @property
-    def recommend(self) -> YoutubeVideo:
-        try:
-            return self.recommendations[0]
-        except IndexError:
-            self._generate_rec()
-            return self.recommendations[0]
 
     def __init__(self,requester:discord.Member,request_message : discord.Message = None,**info:dict):
 
@@ -141,6 +121,8 @@ class SongTrack:
             if key in RequiredAttr:
                 setattr(self,key,value)
 
+        # In fact, every audio can be seekable using my implementation.
+        # However i just don't want audio with duarion taking tons of RAM away.
         self.seekable = self.duration < 600
       
     @property
@@ -193,16 +175,9 @@ class SongTrack:
             voice_client:discord.VoiceClient,
             after:callable(str)=None,
             volume:float=1,
-            pitch:float = 1, #slowed
+            pitch:float = 1,
             tempo:float = 1,
         ):
-        """
-        pitch 1   , speed 1
-        pitch 0.5 , speed 2
-        higher pitch, higher speed.
-        speed = set_speed / set_pitch
-        """
-        
 
         selected_format : dict = None
         
@@ -214,10 +189,10 @@ class SongTrack:
         
         self.src_url   = selected_format["url"]
         self.audio_asr = selected_format["asr"]
-        #offset = 1.086378737541528 #1.105 #  0.187 # 0.089 Stupid stuff i have done b4
+
         FFMPEG_OPTION = {
             "before_options":"-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-            "options": f'-vn -af asetrate={self.audio_asr * pitch},aresample={self.audio_asr},atempo={max(round(tempo/pitch,8),0.5)}' # -f:a atempo={speed} atempo={speed * 1/pitch}
+            "options": f'-vn -af asetrate={self.audio_asr * pitch},aresample={self.audio_asr},atempo={max(round(tempo/pitch,8),0.5)}'
         }
         
         ffmpeg_src = discord.FFmpegPCMAudio(source=self.src_url, **FFMPEG_OPTION)
@@ -226,3 +201,18 @@ class SongTrack:
 
         self.source = src
         voice_client.play(src,after=after)
+
+    def _generate_rec(self):
+        """generates the recommendation of this track"""
+        rec = None
+        while not rec:
+            rec = get_recommendation(self.webpage_url)
+        self.recommendations = deque(rec)
+
+    @property
+    def recommend(self) -> YoutubeVideo:
+        try:
+            return self.recommendations[0]
+        except IndexError:
+            self._generate_rec()
+            return self.recommendations[0]

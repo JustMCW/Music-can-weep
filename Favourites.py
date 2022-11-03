@@ -1,4 +1,4 @@
-#fav is given up
+#FAVOURITE SYSTEM IS SUSPENDED
 
 import os
 import json
@@ -6,14 +6,15 @@ FavouritesDir = "Database/Favourites/"
 Indentation = 3
 
 """
-Structure :
+Data structure :
 
-In json file : Database/Favourites/UserID.json 
+In json file : 
+Database/Favourites/UserID.json 
     |
     V
 {
-  "Songname_1":"YoutubeURL_1",
-  "Songname_2":"YoutubeURL_2",
+  "track_name_1":"YoutubeURL_1",
+  "track_name_2":"YoutubeURL_2",
 }
 """
 
@@ -57,7 +58,7 @@ def add_track(user, title: str, url: str) -> int:
 
 def remove_track(user, index: int):
 
-    # If it is the last song in the track, remove the json file
+    # If it is the last song in the track, just remove the json file
     FavouritesList = get_data(user)
     if len(FavouritesList) <= 1:
         os.remove(FavouritesDir+str(user.id)+".json")

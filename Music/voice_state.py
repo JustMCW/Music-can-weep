@@ -164,7 +164,6 @@ def replay_track(guild:discord.Guild):
     guild.voice_client.stop()
 
 async def clear_audio_message(guild:discord.Guild=None,specific_message:discord.Message = None):
-
     """
     Edit the audio message to give it play again button and make the embed smaller
     """
@@ -174,7 +173,7 @@ async def clear_audio_message(guild:discord.Guild=None,specific_message:discord.
         return logging.warning("Audio message is none")
 
     newEmbed : discord.Embed = audio_message.embeds[0].remove_footer()
-
+    newEmbed.description = ''
     for _ in range(7):
         newEmbed.remove_field(2)
 

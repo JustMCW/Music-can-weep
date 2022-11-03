@@ -43,7 +43,7 @@ def search_from_youtube(query:str, ResultLengthLimit:int=5,DurationLimit:int=3*3
     r = requests.get(f"https://www.youtube.com/results?search_query={'+'.join(word for word in query.split())}")
     htmlSoup = BeautifulSoup(r.text, features="lxml")
 
-    #Fliter the html soup ( get rid of other elements such as the search bar and side bar )
+    #Fliter the html soup ( getting rid of other elements such as the search bar and side bar )
     scripts = [s for s in htmlSoup.find_all("script") if "videoRenderer" in str(s)][0]
 
     #Find the data we need among the scripts, and load it into json 
@@ -68,8 +68,6 @@ def search_from_youtube(query:str, ResultLengthLimit:int=5,DurationLimit:int=3*3
                                             videoId = video["videoId"],
                                             length  = video["lengthText"]["simpleText"],
                                             ))
-            #title = video["title"]["runs"][0]["text"]
-            #length = video["lengthText"]["simpleText"]
             #Result length
             if len(final_list) >= ResultLengthLimit: 
                 break
