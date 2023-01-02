@@ -1,61 +1,10 @@
-from typing import Union
 import discord
 import logging
 
 from discord.ext      import commands
-from .song_queue import SongQueue,SongTrack
+from .song_queue import SongQueue
 
 from my_buttons       import MusicButtons
-from string_literals  import MyEmojis
-import Convert
-
-def AudioPlayingEmbed(queue : SongQueue) -> discord.Embed:
-    """the discord embed for displaying the audio that is playing"""
-    current_track = queue.current_track
-
-    if not current_track:
-        return print("No track is in the queue, thus unable to create an embed for it.")
-
-    YT_creator = getattr(current_track,"channel",None) 
-    Creator = YT_creator or getattr(current_track,"uploader")
-    Creator_url = getattr(current_track,"channel_url",getattr(current_track,"uploader_url",None))
-    Creator = "[{}]({})".format(Creator,Creator_url) if Creator_url else Creator
-
-    rembed = discord.Embed(title= current_track.title,
-                        url= current_track.webpage_url,
-                        color=discord.Color.from_rgb(255, 255, 255))\
-            \
-            .set_author(name=f"Requested by {current_track.requester.display_name}",
-                        icon_url=current_track.requester.display_avatar)\
-            .set_image(url = current_track.thumbnail)\
-            \
-            .add_field(name=f"{MyEmojis.YOUTUBE_ICON} YT channel" if YT_creator else "💡 Creator",
-                        value=Creator)\
-            .add_field(name="↔️ Length",
-                        value=f'`{Convert.length_format(getattr(current_track,"duration"))}`')\
-            .add_field(name="📝 Lyrics",
-                        value=f"*Available in {len(current_track.subtitles)} languages*" if getattr(current_track,"subtitles",None) else "*Unavailable*")\
-            \
-            .add_field(name="📶 Volume ",
-                        value=f"`{queue.volume_percentage}%`")\
-            .add_field(name="⏩ Tempo",
-                        value=f"`{queue.tempo:.2f}`")\
-            .add_field(name="ℹ️ Pitch",
-                        value=f'`{queue.pitch:.2f}`')\
-            \
-            .add_field(name="🔊 Voice Channel",
-                        value=f"{queue.guild.voice_client.channel.mention}")\
-            .add_field(name="🔂 Looping",
-                        value=f'**{Convert.bool_to_str(queue.looping)}**')\
-            .add_field(name="🔁 Queue looping",
-                        value=f'**{Convert.bool_to_str(queue.queue_looping)}**')
-    if queue.get(1):
-        rembed.set_footer(text=f"Next track : {queue[1].title}",icon_url=queue[1].thumbnail)
-    elif queue.auto_play and not queue.queue_looping:
-        rembed.set_footer(text=f"Auto-play : {current_track.recommend.title}",icon_url=current_track.recommend.thumbnail)
-    return rembed
-
-
 
 def is_playing(guild:discord.Guild)-> bool:
     if not guild.voice_client: 
@@ -174,7 +123,8 @@ async def clear_audio_message(guild:discord.Guild=None,specific_message:discord.
 
     newEmbed : discord.Embed = audio_message.embeds[0].remove_footer()
     newEmbed.description = ''
-    for _ in range(7):
+
+    for _ in range(8):
         newEmbed.remove_field(2)
 
     if newEmbed.image:

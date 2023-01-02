@@ -30,14 +30,16 @@ class MusicButtons:
         """Contains all the buttons needed for the audio control message"""
         
         def __init__(self, queue : SongQueue):
-            super().__init__(timeout=None) #Disables timeout
+            super().__init__(timeout=None) 
+            #Disabling buttons
             self.on_displayqueue.disabled = not queue.enabled
             self.on_previous.disabled = not bool(queue.history) and not queue.queue_looping
             self.on_rewind.disabled = not queue[0].seekable
+            self.on_forword.disabled = self.on_download.disabled = self.on_singleloop.disabled = self.on_config.disabled = queue[0].is_livestream
             self.on_nextrec.disabled = not queue.auto_play or queue.get(1)
 
         ### Row 0
-        @button(style=ButtonStyle.grey,emoji=MyEmojis.previous,row=0)
+        @button(style=ButtonStyle.grey,emoji=MyEmojis.previous,row=0,custom_id="previous")
         async def on_previous(self, interaction:Interaction, btn : Button):
             
             guild = interaction.guild
@@ -51,12 +53,12 @@ class MusicButtons:
         
             await inform_changes(interaction,MessageString.rewind_audio_msg)
 
-        @button(style=ButtonStyle.grey,emoji=MyEmojis.rewind,row=0)
+        @button(style=ButtonStyle.grey,emoji=MyEmojis.rewind,row=0,custom_id="rewind")
         async def on_rewind(self, interaction:Interaction, btn : Button):
             interaction.guild.song_queue.time_position -= 5
             await inform_changes(interaction,"Rewinded for 5 seconds")
 
-        @button(style=ButtonStyle.grey,emoji=MyEmojis.pause,row=0)
+        @button(style=ButtonStyle.grey,emoji=MyEmojis.pause,row=0,custom_id="playpause")
         async def on_playpause(self, interaction:Interaction, btn : Button):
             is_paused = voice_state.is_paused(interaction.guild)
             if is_paused:
@@ -69,12 +71,12 @@ class MusicButtons:
             btn.emoji = MyEmojis.pause if is_paused else MyEmojis.resume
             await interaction.message.edit(view=self)
 
-        @button(style=ButtonStyle.grey,emoji=MyEmojis.fastforward,row=0)
+        @button(style=ButtonStyle.grey,emoji=MyEmojis.fastforward,row=0,custom_id="forward")
         async def on_forword(self, interaction:Interaction, btn : Button):
             interaction.guild.song_queue.time_position += 5
             await inform_changes(interaction,"Fast-forwarded for 5 seconds")
     
-        @button(style=ButtonStyle.grey,emoji=MyEmojis.skip,row=0)
+        @button(style=ButtonStyle.grey,emoji=MyEmojis.skip,row=0,custom_id="skip")
         async def on_skip(self, interaction:Interaction, btn : Button):
             guild = interaction.guild
             queue = guild.song_queue
@@ -86,7 +88,7 @@ class MusicButtons:
 
 
         ###Row 1
-        @button(style=ButtonStyle.grey,emoji=MyEmojis.download,row=1)
+        @button(style=ButtonStyle.grey,emoji=MyEmojis.download,row=1,custom_id="download")
         async def on_download(self, interaction:Interaction, btn : Button):
             import subprocess,io,asyncio,threading,time
             event_loop = asyncio.get_running_loop()
@@ -97,7 +99,7 @@ class MusicButtons:
             
             def inter():
                 process = subprocess.Popen(
-                    args=["ffmpeg","-i",f"{track.src_url}",
+                    args=["ffmpeg","-i",f"{track.source_url}",
                     '-f', 'mp3', '-ar', '48000', '-ac', '2', '-loglevel', 'warning', '-vn', '-af', f'asetrate={asr},aresample={asr},atempo=1.0', 'pipe:1'],
                                         stdin=-3,
                                         stdout=subprocess.PIPE,#{'stdout': -1, 'stdin': -3, 'stderr': None}
@@ -111,7 +113,7 @@ class MusicButtons:
                 track_bytes.seek(0)
                 file = discord.File(track_bytes)
                 file.filename = "music.mp3"
-                event_loop.create_task(interaction.followup.send(file=file))
+                event_loop.create_task(interaction.channel.send(file=file))
                 track_bytes.close()
             t = threading.Thread(target=inter)
             t.start()
@@ -122,13 +124,13 @@ class MusicButtons:
             """
             
 
-        @button(style=ButtonStyle.grey,emoji=MyEmojis.queue,row=1)
+        @button(style=ButtonStyle.grey,emoji=MyEmojis.queue,row=1, custom_id="queue")
         async def on_displayqueue(self, interaction:Interaction, btn : Button):
             import datetime
             queue = interaction.guild.song_queue
             emo = "▶︎" if not voice_state.is_paused(interaction.guild) else "\\⏸"
             await interaction.response.send_message(ephemeral=True,
-                embed=discord.Embed(title = f"🎧 Queue | Track Count : {len(queue)} | Full Length : {Convert.length_format(queue.total_length)} | Repeat queue : {Convertbool_to_str(queue.queue_looping)}",
+                embed=discord.Embed(title = f"🎧 Queue | Track Count : {len(queue)} | Full Length : {Convert.length_format(queue.total_length)} | Repeat queue : {Convert.bool_to_str(queue.queue_looping)}",
                                             #                           **   [Index] if is 1st track [Playing Sign]**    title   (newline)             `Length`               |         @Requester         Do this for every track in the queue
                                             description = "\n".join([f"**{f'[ {i} ]' if i > 0 else f'[{emo}]'}** {track.title}\n> `{Convert.length_format(track.duration)}` | {track.requester.display_name}" for i,track in enumerate(list(queue))]),
                                             color=discord.Color.from_rgb(255, 255, 255),
@@ -136,14 +138,14 @@ class MusicButtons:
                 view=MusicButtons.QueueButtons()
             )
 
-        @button(style=ButtonStyle.grey,emoji=MyEmojis.singleloop,row=1)
+        @button(style=ButtonStyle.grey,emoji=MyEmojis.singleloop,row=1,custom_id="loop")
         async def on_singleloop(self, interaction:Interaction, btn : Button):
             queue = interaction.guild.song_queue
             queue.looping = not queue.looping
-            await queue.update_audio_message()
             await inform_changes(interaction,MessageString.loop_audio_msg.format(Convert.bool_to_str(queue.looping)))
+            await queue.update_audio_message()
         
-        @button(style=ButtonStyle.grey,emoji=MyEmojis.config,row=1)
+        @button(style=ButtonStyle.grey,emoji=MyEmojis.config,row=1,custom_id="config")
         async def on_config(self, interaction:Interaction, btn : Button):
 
             class ConfigModal(Modal,title = "Configuration of the audio"):
@@ -236,15 +238,32 @@ class MusicButtons:
 
 
     @staticmethod
-    async def on_play_again_btn_press(btn,bot):
+    async def on_play_again_btn_press(btn : discord.Interaction,bot):
         ctx = await bot.get_context(btn.message)
 
         URL = btn.message.embeds[0].url
 
         #Play the music
-        await ctx.invoke(bot.get_command('play'),
-                         query=URL,
-                         _btn=btn)
+        if "discord" in URL:
+            if not ctx.voice_client:
+                if btn.user.voice is None:
+                    return await btn.response.send_message("Be in voice pls :)")
+                await btn.user.voice.channel.connect()
+
+
+            from Music.song_track import SongTrack
+            t = SongTrack(btn.user,seekable=False)
+            t.title = btn.message.embeds[0].title
+            t.source_url = t.webpage_url = URL
+
+            q : SongQueue = btn.guild.song_queue
+            q.append(t)
+            q.play_first()
+            await q.create_audio_message(ctx.channel)
+        else:
+            await ctx.invoke(bot.get_command('play'),
+                            query=URL,
+                            _btn=btn)
 
 
     PlayAgainButton = View().add_item(

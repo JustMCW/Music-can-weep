@@ -2,7 +2,6 @@
 import asyncio
 import logging
 
-import re
 import os
 import datetime
 from typing           import List
@@ -35,7 +34,6 @@ TIMEOUT_SECONDS         = 60 * 2
 
 #----------------------------------------------------------------#
 #random functions that i don't know where to place
-
 
 #Take the search result from the function above and make them into buttons and embed
 def generate_search_result_attachments(search_result : List[YoutubeVideo]) -> dict:
@@ -84,10 +82,10 @@ class MusicCommands(commands.Cog):
                    ctx:commands.Context,*,
                    voice_channel:commands.converter.VoiceChannelConverter=None):
         
-        try: voice_channel = voice_channel or ctx.author.voice.channel
+        try: voice_channel : discord.VoiceChannel = voice_channel or ctx.author.voice.channel
         except AttributeError: raise commands.errors.UserNotInVoiceChannel("Join a voice channel or specify a voice channel to be joined.")
-        initial_vc = ctx.guild.voice_client
-
+        if len(voice_channel.members) == 0:
+            return await ctx.replywm("Cannot join vc that has no one in it")
         await voice_state.join_voice_channel(ctx.guild, voice_channel)
         await ctx.replywm(MessageString.join_msg.format(voice_channel.mention))
         queue : SongQueue = ctx.guild.song_queue
@@ -96,7 +94,7 @@ class MusicCommands(commands.Cog):
         #Ask the user to resume the queue, if there is.
         if queue:
             message = await ctx.send(
-                f"There are {len(queue)} tracks in the queue, resume ?",
+                f"```There are {len(queue)} tracks in the queue, resume ? (Ignore this if no)```",
                 view=View().add_item(Button(label="Yes",style=ButtonStyle.green,custom_id="resume_queue"))
             )
 
@@ -174,7 +172,7 @@ class MusicCommands(commands.Cog):
                     raise resume_error
 
             #Play the track
-            await queue.create_audio_message(current_track, await ctx.send("▶️ Continue to play tracks in the queue"))
+            await queue.create_audio_message(await ctx.send("▶️ Continue to play tracks in the queue"))
 
             queue.play_first()
         
@@ -387,11 +385,11 @@ class MusicCommands(commands.Cog):
                       usage="{}loop on")
     async def loop(self, ctx:commands.Context, mode=None):
         guild   : discord.Guild = ctx.guild
-        new_loop: bool          = commands.converter._convert_to_bool(mode) if mode else not guild.song_guild.song_queue.looping
+        new_loop: bool          = commands.converter._convert_to_bool(mode) if mode else not guild.song_queue.looping
 
         guild.song_queue.looping = new_loop
-        if not guild.song_queue.audio_message:
-            await ctx.replywm(MessageString.loop_audio_msg.format(Convert.bool_to_str(new_loop)))
+
+        await ctx.replywm(MessageString.loop_audio_msg.format(Convert.bool_to_str(new_loop)))
         await guild.song_queue.update_audio_message()
 
     #----------------------------------------------------------------#
@@ -406,7 +404,7 @@ class MusicCommands(commands.Cog):
                    ctx:commands.Context,
                    *,
                    query:str, #URL / Favourite track index / Keyword
-                   _btn:Interaction=None #This will be present if this command was invoked from a play_again button
+                   _btn:Interaction=None # This will be present if this command was invoked from a play_again button
     ):
         """
         0.Check for voice channel
@@ -424,36 +422,37 @@ class MusicCommands(commands.Cog):
 
         guild       : discord.Guild       = ctx.guild
         author      : discord.Member      = getattr(_btn,"user",ctx.author)
-        voice_client: discord.VoiceClient = ctx.voice_client or author.voice #It can be either our bots vc or the user's vc
+        voice_client: discord.VoiceClient = ctx.voice_client or author.voice #It can be either the bot's vc or the user's vc
         reply_msg   : discord.Message     = None  #This will be the message for the audio message
 
-        #Check for voice channel
+        # Check for voice channel
         if voice_client is None:
+            # Send a interaction respond instead
             if _btn:
-                #Give a button respond instead so it doesn't tell everyone else
                 return await _btn.response.send_message(content=MessageString.user_not_in_vc_msg,ephemeral=True)
             raise commands.errors.UserNotInVoiceChannel("You need to be in a voice channel.")
 
-        #Triggered by play_again button (so it must be a valid URL because it was played successfully before)            
+    # TODO
+    ### Validating the query 
+
+        # Triggered by play_again button (so it must already be a valid URL because it was played successfully before )            
         if _btn:
             #Suppress the interaction failed message and response 
             await _btn.response.edit_message(content=_btn.message.content)
             reply_msg = await ctx.replywm(content=f"🎻 {author.display_name} requests to play this song again")
 
-        #URL
+        # From a URL
         elif "https://" in query or "HTTP://" in query:
             #Match the link in the query
             from youtube_utils import extract_yt_url_from
-            yt_vid_link_matches = extract_yt_url_from(query)
-            # yt_pl_link_matches = re.findall(r"(https|HTTP)://(youtu\.be|www.youtube.com)(/shorts)?/(watch\?v=)?([A-Za-z0-9\-_]{11})",query)
-            #https://www.youtube.com/playlist?list=PLVl73jKWzwn-20H8azDxpg8Ewop5DlZzT
-            
+            yt_link_match = extract_yt_url_from(query)
+
             #Matched
-            if yt_vid_link_matches: 
-                query = yt_vid_link_matches
+            if yt_link_match: 
+                query = yt_link_match
                 reply_msg = await ctx.send(f"{MyEmojis.YOUTUBE_ICON} A Youtube link is selected")
 
-            #Sound cloud link
+            #Soundcloud link
             elif "soundcloud.com" in query:
                 reply_msg = await ctx.send(f"☁️ A Soundcloud link is selected")
 
@@ -461,9 +460,9 @@ class MusicCommands(commands.Cog):
             else:
                 return await ctx.send("Oops ! Only Youtube and Soundcloud links are supported ! ")
 
-        #Favourite Index
+        # Favourite Index
         elif 'fav' in query.lower():
-            #Get the number
+            #Extract the number
             try:
                 index = Convert.extract_int_from_str(query)
             except ValueError:
@@ -479,109 +478,142 @@ class MusicCommands(commands.Cog):
             query = link
             reply_msg = await ctx.send(f"🎧 Track **#{index}** in {author.display_name}'s favourites has been selected")
                     
-        #Keyword
+        # From keyword
         else:
-            #Get the search result
+            # Get the search result
             try:
-                search_result:list = search_from_youtube(query,ResultLengthLimit=5)
+                search_result = search_from_youtube(query,ResultLengthLimit=5)
             except IndexError:
                 return await ctx.replywm(f"No search result was found for `{query}` ...")
 
-            #Send the message for asking the user
-            option_message : discord.Message = await ctx.send(**generate_search_result_attachments(search_result))
+            choice_message = await ctx.send(**generate_search_result_attachments(search_result))
             
-            #Get which button user pressed, and make sure that it is the user who press the buttons
+            # Get which video the user wish to play
+
             try:
-                choice_interaction: discord.Interaction = await self.bot.wait_for("interaction",
-                                                            timeout=TIMEOUT_SECONDS,
-                                                            check=lambda interaction: interaction.data["component_type"] == 2 and "custom_id" in interaction.data.keys() and interaction.message.id == option_message.id
-                                                            # check=lambda btn: btn.author == author and btn.message.id == option_message.id
-                                                            )
-            #Not selected
+                choice_interaction: discord.Interaction = await self.bot.wait_for(
+                    event   = "interaction",
+                    timeout = TIMEOUT_SECONDS,
+                    # Make sure that it is the user we want who presses the button
+                    check   = lambda interaction: 
+                        interaction.data["component_type"] == 2 and
+                        "custom_id" in interaction.data.keys()  and
+                        interaction.message.id == choice_message.id
+                )
+            
+            # Timeouted
             except asyncio.TimeoutError:
-                return await option_message.edit(embed=discord.Embed(title=f"{MyEmojis.cute_panda} No track was selected !",
-                                                                    description=f"You thought for too long ( {2} minutes ), use the command again !",
-                                                                    color=discord.Color.from_rgb(255, 255, 255)),
-                                            view=None)
-            #Received option
-            else:
-                selected_index = int(choice_interaction.data["custom_id"])
+                return await choice_message.edit(
+                    view = None, # Remove the buttons
+                    embed = discord.Embed(
+                        title       = f"{MyEmojis.cute_panda} No track was selected !",
+                        description = f"You thought for too long ( {int(TIMEOUT_SECONDS/60)} minutes ), use the command again !",
+                        color       = discord.Color.from_rgb(255, 255, 255)
+                    )
+                )
 
-                await choice_interaction.response.edit_message(content=f"{MyEmojis.YOUTUBE_ICON} Song **#{selected_index+1}** in the youtube search result has been selected",view = None)
-                reply_msg = await ctx.fetch_message(option_message.id)
-                query = f'https://www.youtube.com/watch?v={search_result[selected_index].videoId}'
+            # Received option
+            selected_index = int(choice_interaction.data["custom_id"])
+
+            await choice_interaction.response.edit_message(content=f"{MyEmojis.YOUTUBE_ICON} Song **#{selected_index+1}** in the youtube search result has been selected",view = None)
+            reply_msg = await ctx.fetch_message(choice_message.id)
+            query = f'https://www.youtube.com/watch?v={search_result[selected_index].videoId}'
 
 
 
-    ### We now have the exact url that lead us to the audio regardless of what the user've typed, let's extract the info and play it.
+    ### We now have the exact url that lead us to the audio regardless of what the user've typed, 
+    ### Let's extract the audio and play it.
         
-
         queue : SongQueue = guild.song_queue
-        #Create the track
+
+        # Extract & create the song track
         try:
             NewTrack:SongTrack = await self.bot.loop.run_in_executor(None,
-              lambda: SongTrack.create_track(query=query,
-                                             requester=author,
-                                             request_message=reply_msg
-                                             ))
-        #Extraction Failed
+                lambda: SongTrack.create_track(
+                    query=query,
+                    requester=author,
+                    request_message=reply_msg
+                )
+            )
+
+        # Extraction Failed
         except youtube_dl.utils.YoutubeDLError as yt_dl_error:
             logging.warning(yt_dl_error.__class__.__name__)
 
             utils = youtube_dl.utils
 
-            for error,error_message in {utils.UnsupportedError:"Sorry, this url is not supported !",
-                                        utils.UnavailableVideoError:"Video was unavailable",
-                                        utils.DownloadError: str(yt_dl_error).replace("ERROR: ",""),
-                                        }.items():
+            for error,error_message in {
+                utils.UnsupportedError      : "Sorry, this url is not supported !",
+                utils.UnavailableVideoError : "Video was unavailable",
+                utils.DownloadError         : str(yt_dl_error).replace("ERROR: ",""),
+            }.items():
                 if isinstance(yt_dl_error,error):
                     return await reply_msg.reply(f"An error occurred : {error_message}")
 
-            #Raise the error if it was not in the above dictionary
+            # Raise the error if it wasn't in the above dictionary
+            # since I'm not too sure what else could cause the error
             logging.error(yt_dl_error)
             raise yt_dl_error
 
-        #Extraction Successful
+        # Extraction was Successful
         else:
-            #Stop current audio (if queuing is disabled)
+
+            # Stop current audio if queuing is disabled
             if guild.voice_client: 
                 if not queue.enabled:
                     guild.voice_client.stop()
+                    # Idk, wait for the track to be popped ?
                     while queue.current_track:
                         await asyncio.sleep(1)
-            else: #Join Voice channel
-                if author.voice:
-                    await voice_state.join_voice_channel(guild,author.voice.channel)
-                else: #User left during the loading was taking place
-                    await reply_msg.edit(content = "User left the voice channel, the track was cancled.")
 
-            
-            if queue.get(0) and queue.enabled:
-                await reply_msg.edit(embed=discord.Embed(title = f"\"{NewTrack.title}\" has been added to the queue",
-                                                         color=discord.Color.from_rgb(255, 255, 255))
-                                              .add_field(name="Length ↔️",
-                                                         value=f"`{Convert.length_format(NewTrack.duration)}`")
-                                              .add_field(name = "Position in queue 🔢",
-                                                         value=len(queue))
-                                          .set_thumbnail(url = NewTrack.thumbnail)
-                                    )
+            # Joining the voice channel
+            else: 
+                #User left during the loading was taking place
+                if not author.voice:
+                    return await reply_msg.edit(content = "User left the voice channel, the track was cancled.")
+
+                await voice_state.join_voice_channel(guild,author.voice.channel)
+                
+            queue.append(NewTrack)
+
+            # There is a track playing already
+            if queue.get(1) and queue.enabled:
+
+                await reply_msg.edit(
+                    embed=discord.Embed(
+                        title = NewTrack.title,
+                        url=NewTrack.webpage_url,
+                        description="Has been added to the queue.",
+                        color=discord.Color.from_rgb(255, 255, 255),
+                    ).add_field(
+                        name="Length ↔️",
+                        value=f"`{Convert.length_format(NewTrack.duration)}`",
+                    ).add_field(
+                        name = "Position in queue 🔢",
+                        value=len(queue)-1,
+                    ).set_thumbnail(
+                        url = NewTrack.thumbnail,
+                    )
+                )
+
+                # Since there is a field in the audio message indcating the next track
+                await queue.update_audio_message() 
+                
+                # we still want to play the first track
                 if voice_state.is_playing(guild):
-                    
-                    queue.append(NewTrack)
-                    if len(queue) == 2:
-                        await queue.update_audio_message()
                     return
 
                 reply_msg = ctx.channel
                 NewTrack = queue[0]
 
-            queue.append(NewTrack)
             # #Make our audio message
             await queue.create_audio_message(reply_msg or ctx.channel)
 
-            #Play the audio, we are not actually playing the audio we just extracted, but the first track in queue
+            # Playing the first track in queue 
             try:
                 queue.play_first()
+            
+            # Happens when 2 user try to play tracks at the same time, or something else idk
             except discord.errors.ClientException as cl_exce:
                 if cl_exce.args[0] == 'Already playing audio.':
                     if queue.enabled:
@@ -596,8 +628,22 @@ class MusicCommands(commands.Cog):
                     return await ctx.replywm("Unable to play this track because another tracks was requested at the same time")
                 raise cl_exce
 
-           
-            
+    @commands.guild_only()
+    @commands.command(aliases=["pf"],
+                      description="Play your attachement file")
+    async def play_file(self,ctx:commands.Context):
+        attach = ctx.message.attachments[0]
+        if "audio" not in attach.content_type:
+            return await ctx.reply(f"File attachement must be an audio file, not {attach.content_type} file.")
+
+        t = SongTrack.from_attachment(attach,ctx.author)
+        q = ctx.guild.song_queue
+        q.append(t)
+        if not ctx.voice_client:
+            await ctx.author.voice.channel.connect()
+        q.play_first()
+        await q.create_audio_message(ctx.channel)
+
     #----------------------------------------------------------------#
     #QUEUE
     @commands.guild_only()
@@ -705,7 +751,7 @@ class MusicCommands(commands.Cog):
             return appeared
         
         reduce(is_dup,queue,[])
-        removed_index:int = len(queue) - len(not_rep)
+        removed_index : int = len(queue) - len(not_rep)
 
         if removed_index == 0: return await ctx.replywm("None of the track is repeated, therefore no track was removed")
 
@@ -737,13 +783,14 @@ class MusicCommands(commands.Cog):
     @queue.command(description="🧹 Removes every track in the queue or an index onward",
                    aliases=["empty","clr"],
                    usage="{}queue clear")
-    async def clear(self,ctx,index = None):
+    async def clear(self,ctx,index = -1):
         try:
             index = int(index)
-        except ValueError:
-            index = None
+        except (ValueError):
+            return
         queue : SongQueue = ctx.guild.song_queue
-        if index is not None:
+
+        if index >= 0:
             remainings = [t for i,t in enumerate(queue) if i <= index]
             queue.clear()
             queue.extend(remainings)
@@ -922,7 +969,8 @@ class MusicCommands(commands.Cog):
         guild = interaction.guild
         custom_id = interaction.data["custom_id"]
 
-        if logging.root.isEnabledFor(logging.getLevelName("COMMAND_INFO")) and guild.id != 915104477521014834:
+        if logging.root.isEnabledFor(logging.getLevelName("COMMAND_INFO")):
+            
             asyncio.create_task(logging.webhook_log(embed= discord.Embed(title = f"{guild.name+' | ' if guild else ''}{interaction.channel}",
                                                                         description = f"**Pressed the {interaction} button**",
                                                                         color=discord.Color.from_rgb(255,255,255),
@@ -934,17 +982,17 @@ class MusicCommands(commands.Cog):
         
         
         queue : SongQueue = interaction.guild.song_queue
-
+        message = interaction.message
         #Tons of Buttons
         if custom_id == "delete":
-            return await interaction.message.delete()
+            return await message.delete()
 
         elif custom_id == "play_again":
             return await MusicButtons.on_play_again_btn_press(interaction,self.bot)
 
         elif custom_id == "import":
             await interaction.response.defer(thinking=True)
-            data : List[str] = (await interaction.message.attachments[0].read()).decode("utf-8").split("+")
+            data : List[str] = (await message.attachments[0].read()).decode("utf-8").split("+")
 
             for url in data:
                 if not url: 
@@ -964,17 +1012,15 @@ class MusicCommands(commands.Cog):
         if interaction.response.is_done() or guild is None:  
             return print("Responsed")
         # Clearing glitched messages
-        elif queue.get(0) is None or queue.audio_message is None or queue.audio_message.id != interaction.message.id or not voice_state.is_playing(guild):
-            if not custom_id.isnumeric() and interaction.message.embeds:
-                    new_embed:discord.Embed = interaction.message.embeds[0]
-                    
-                    if len(new_embed.fields) == 9:
-                        try:
-                            await interaction.response.defer()
-                        except (discord.errors.HTTPException,discord.errors.InteractionResponded):
-                            pass
-                        else:
-                            await voice_state.clear_audio_message(specific_message=interaction.message)
+        elif message.author.id == self.bot.user.id and message.id != getattr(queue.audio_message,"id",None):
+            if message.embeds:
+                if "YT channel" in message.embeds[0].fields[0].name:
+                    try:
+                        await interaction.response.defer()
+                    except (discord.errors.HTTPException,discord.errors.InteractionResponded):
+                        pass
+                    else:
+                        await voice_state.clear_audio_message(specific_message=message)
 
     #----------------------------------------------------------------#
     #Utility music commands
@@ -1030,7 +1076,7 @@ class MusicCommands(commands.Cog):
             return await ctx.replywm("No audio message present at the moment.")
         
         await voice_state.clear_audio_message(ctx.guild)
-        await queue.create_audio_message(queue[0],ctx.channel)
+        await queue.create_audio_message(ctx.channel)
 
     @commands.guild_only()
     @commands.command(description="Send the current audio as a file which is available for downloading.")
@@ -1041,14 +1087,14 @@ class MusicCommands(commands.Cog):
         except IndexError:
             raise discord.errors.NoAudioPlaying
 
-        src_url:str = playing_track.src_url
+        source_url:str = playing_track.source_url
         file_name:str = playing_track.title.replace("/","|") + ".mp3"
         
         import subprocess
 
         proc_mes = await ctx.replywm("Processing ...")
         process = subprocess.Popen(args=["ffmpeg",
-                    "-i",f"{src_url}",
+                    "-i",f"{source_url}",
                     '-loglevel','warning',
                     # '-ac', '2',
                     f"./{file_name}"
@@ -1130,10 +1176,13 @@ class MusicCommands(commands.Cog):
         modern_lang_name = Language.get(selected_language).display_name()
 
         url,subtitle_text = Subtitles.extract_subtitles(subtitle_dict,selected_language)
-        await ctx.send(
-            embed=discord.Embed(title=f"{current_track.title} [{modern_lang_name}]",description=subtitle_text),
-            view=UtilityButtons()
-        )
+        try:
+            await ctx.send(
+                embed=discord.Embed(title=f"{current_track.title} [{modern_lang_name}]",description=subtitle_text),
+                view=UtilityButtons()
+            )
+        except discord.HTTPException as httpe:
+            await ctx.send(f"Unable to send subtitle, [{httpe.code}], sourcelink : {url}")
 
     @commands.guild_only()
     @commands.command(aliases=["streamsubtitles"])

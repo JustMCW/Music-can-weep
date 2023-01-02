@@ -19,6 +19,7 @@ logging.addLevelName(22, "COMMAND_INFO")
 logging.addLevelName(27, "BOT_EVENT")
 
 async def webhook_log(self:logging.RootLogger,message=None,**options):
+
     async with aiohttp.ClientSession() as session:
         webhook = discord.Webhook.from_url('https://discord.com/api/webhooks/954928052767457350/BVexILQ8JmXeUKrR2WdWPkW6TSZVxTRsMYSqBsrbbkzdO6kc2uMnRB_UfpsH5rsMT0w-', 
                                             session=session)
@@ -76,23 +77,8 @@ async def on_message(self,message:discord.Message):
     if message.author.bot:
         return
         
-    guild = message.guild
-    ctx:commands.Context = await self.get_context(message)
-    
-    async with aiohttp.ClientSession() as session:
-        chat = discord.Webhook.from_url("https://discord.com/api/webhooks/969015910742519928/2Ks2ADioKYyEQSuS_K9-uH726-JcbWr5YVC2WrTRfmcwkujZ1KwNRTv35XQ9jcqle10z",session=session)
-        
-        attachs = "\n".join(map(lambda a:a.url,message.attachments)) if message.attachments else ''
+    ctx : commands.Context = await self.get_context(message)
 
-        if guild:
-            if guild.id != 915104477521014834:
-                await chat.send(content = f"{message.content} {attachs}\n> #{message.channel} | {message.guild}",
-                        username= message.author.name,
-                        avatar_url=message.author.display_avatar)
-        else:
-            await chat.send(content = f"{message.content} {attachs}\n> #{message.channel}",
-                            username= message.author.name,
-                            avatar_url=message.author.display_avatar)
     if ctx.valid:
         await ctx.typing()
         await self.process_commands(message)
