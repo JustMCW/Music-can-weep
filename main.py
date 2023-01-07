@@ -77,7 +77,7 @@ def main():
     #     print("Successfully loaded token from token file ")
         
 
-    BOT.run("OTE5NTk3MjgwNTIzMzQ1OTYx.YbYHtA.loRdonvp56WuLDo5vJbdqaC7zGE")
+    BOT.run("TOKEN")
     print("Program exited")
       
 
