@@ -13,7 +13,7 @@ with open("TOKEN.txt","r") as tkf:
   BOT_TOKEN = tkf.readlines()[0].strip()
 
 class BOT_INFO:
-  #OTE5NTk3MjgwNTIzMzQ1OTYx.YbYHtA.loRdonvp56WuLDo5vJbdqaC7zGE
+
     DefaultPrefix = ">>"
   
     InitialVolume = 0.5
