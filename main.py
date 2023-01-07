@@ -4,20 +4,19 @@ import logging
 import discord
 from discord.ext import commands
 
-from key import *
-from key import _extract_bot_token
+from keys import *
 import database.server as serverdb
 
 #Logging
 LOG_LEVEL = logging.INFO
-FORMATTER = discord.utils._ColourFormatter()
+formatter = discord.utils._ColourFormatter()
 
 root_logger = logging.getLogger()
 root_logger.setLevel(logging.DEBUG)
 
 # Ouputing to the terminal
 io_handler = logging.StreamHandler()
-io_handler.setFormatter(FORMATTER)
+io_handler.setFormatter(formatter)
 io_handler.setLevel(LOG_LEVEL)
 root_logger.addHandler(io_handler)
 
@@ -80,9 +79,6 @@ async def on_ready():
 def main():
     root_logger.debug("Program started")
 
-
-    TOKEN = _extract_bot_token()
-
     if not discord.opus.is_loaded():
         discord.opus.load_opus(OPUS_LIB)
         root_logger.info(f"Loaded opus from {OPUS_LIB}")
@@ -96,8 +92,7 @@ def main():
     commands.Context.replywm = reply_without_mention
     
     bot.run(
-        TOKEN,
-        # log_level=logging.INFO,
+        BOT_TOKEN,
         log_handler=None,
         root_logger=False
     )

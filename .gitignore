@@ -5,3 +5,5 @@
 *.zsh
 test.py
 libopus.0.dylib
+_local_entry.py
+_config/Procfile

@@ -1,7 +1,7 @@
 import discord
 import json
 
-from key import *
+from keys import *
 
 defaultdb = { 
     "prefix"        : DEFAULT_PREFIX,

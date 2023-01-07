@@ -2,15 +2,15 @@
 import json
 import discord
 
-from typing import Callable
-from key import USERPLAYLIST_DATABASE,_extract_bot_token
+from typing import Callable,Dict
+from keys import USERPLAYLIST_DATABASE
 
 from music.song_track import SongTrack
 
 Indentation = 4
 
 
-class UserDatabase(dict[str,dict]):
+class UserDatabase(Dict[str,dict]):
     """The place where a user's playlist and tracks are stored"""
     pass
 
@@ -54,7 +54,7 @@ def encode_usr_id(id : int):
     return hex(id * first_digit)
 
 
-def get_all_data() -> dict[int,UserDatabase]:
+def get_all_data() -> Dict[int,UserDatabase]:
     with open(USERPLAYLIST_DATABASE) as jsonf:
         return json.load(jsonf)
 

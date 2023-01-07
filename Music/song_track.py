@@ -1,6 +1,6 @@
 import logging
 from io import BytesIO
-from typing import Callable,Deque,List,TypedDict,Any,Union  
+from typing import Callable,Tuple,Deque,List,TypedDict,Any,Union  
 from typing_extensions import Self
 
 import discord
@@ -265,7 +265,7 @@ class LiveStreamAudioSource(discord.PCMVolumeTransformer):
         return audioop.mul(data, 2, min(self.volume, 2.0))
 
     def next_fragment(self):
-        print("Thank you, next")
+        logger.info("Next fragment")
         self.cleanup()
         self.audio_index = 0
         self.collect_audio_fragments() 
@@ -314,6 +314,7 @@ class SongTrack:
         self.requester = requester
         self.request_message = request_message
 
+        self.sample_rate = None
         self.source = None
 
         # In fact, every audio can be seekable using my implementation.
@@ -353,7 +354,7 @@ class SongTrack:
             volume :float=1,
             pitch  :float = 1,
             tempo  :float = 1,
-            force_apply = False # if true, the sample rate will be set to 48000 if it's unkwown
+            force_apply = True # if true, the sample rate will be set to 48000 if it's unkwown
         ):
         if not self.source_url:
             return logger.error("Source url not defined")
@@ -362,16 +363,16 @@ class SongTrack:
             
         # Modifying pitch & tempo, by applying ffmpeg options
 
-        sample_rate = self.sample_rate
-        
-        if not sample_rate and force_apply:
-            logger.info("Forcing the sample rate to be 48000")
-            sample_rate = DEFAULT_SAMPLE_RATE
+        if pitch != 1 or tempo != 1:
+            sample_rate = self.sample_rate
+            if not sample_rate and force_apply:
+                logger.info("Forcing the sample rate to be 48000")
+                sample_rate = DEFAULT_SAMPLE_RATE
 
-        if sample_rate:
-            ffmpeg_option["options"] += f' -af asetrate={self.sample_rate * pitch},aresample={self.sample_rate},atempo={max(round(tempo/pitch,8),0.5)}'
-        else:
-            logger.info("Audio sample rate is undefined.")
+            if sample_rate is not None:
+                ffmpeg_option["options"] += f' -af asetrate={sample_rate * pitch},aresample={sample_rate},atempo={max(round(tempo/pitch,8),0.5)}'
+            else:
+                logger.info("Audio sample rate is undefined.")
 
         logger.info(f"FFMPEG option : {ffmpeg_option}")
         self.source = self.get_source(volume,ffmpeg_option)
@@ -385,8 +386,7 @@ class SongTrack:
 class WebsiteSongTrack(SongTrack):
     info : youtube_dl_info
     webpage_url  : str
-    uploader     : tuple[str,str]
-    sample_rate  : int
+    uploader     : Tuple[str,str]
 
     def __init__(self, url, *args, **kwargs):
         
@@ -397,11 +397,11 @@ class WebsiteSongTrack(SongTrack):
         self.info = info
         audio_format = info["formats"][0]
         
-
-        for fm in info["formats"]:
-            if fm["asr"] == DEFAULT_SAMPLE_RATE or fm["asr"] == 44100:
-                audio_format = info["formats"] = fm
-                break
+        if not info["is_live"]:
+            for fm in info["formats"]:
+                if fm["asr"] == DEFAULT_SAMPLE_RATE or fm["asr"] == 44100:
+                    audio_format = info["formats"] = fm
+                    break
 
             # r = requests.get(audio_format["url"])
             # data = r.text.replace("</BaseURL>","\n").replace("<BaseURL>","\n")
@@ -413,7 +413,7 @@ class WebsiteSongTrack(SongTrack):
             info["duration"], 
             info.get("thumbnail",info["thumbnails"][-1]["url"]), 
             info["webpage_url"],
-            audio_format["url"] if not audio_format["url"].startswith("https://manifest") else  audio_format["fragment_base_url"], 
+            audio_format["url"] if (not audio_format["url"].startswith("https://manifest") or info["is_live"]) else  audio_format["fragment_base_url"], 
             *args, **kwargs
         )
         self.webpage_url = info["webpage_url"]
@@ -432,7 +432,7 @@ class WebsiteSongTrack(SongTrack):
 
 class YoutubeTrack(WebsiteSongTrack):
     recommendations : Deque[YoutubeVideo]
-    channel : tuple[str,str]
+    channel : Tuple[str,str]
     is_live : bool
 
     def __init__(
@@ -494,7 +494,6 @@ class WebFileTrack(SongTrack):
     file_format : str
     file_size   : int # in bytes
     
-
     def __init__(
         self, 
         title: str, 
@@ -573,7 +572,6 @@ DOMAIN_TRACK_TYPE = {
     TrackDomain.YOUTUBE:YoutubeTrack,
     TrackDomain.SOUNDCLOUD:SoundcloudTrack,
     TrackDomain.SPOTIFY:SpotifyTrack,
-
     TrackDomain.DISCORD_ATTACHMENT:DiscordFileTrack,
 }
 

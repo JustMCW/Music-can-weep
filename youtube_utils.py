@@ -3,7 +3,7 @@ import re
 import json
 import requests
 
-from typing import List,TypedDict
+from typing import List,TypedDict,Tuple
 from bs4    import BeautifulSoup,element
 
 class URLMatch(TypedDict):
@@ -94,19 +94,28 @@ def search_from_youtube(query:str, ResultLengthLimit:int=5,DurationLimit:int=3*3
     final_list = []
     for item in query_list:
         video : dict = item.get("videoRenderer")
-        if video and video.get("lengthText"): #Remove channels / playlist / live stream (live has no time length)
+    
+        if not video:
+            continue
+
+        
+        if video.get("lengthText"): #Remove channels / playlist / live stream (live has no time length)
             longText = video["lengthText"]["accessibility"]["accessibilityData"]["label"]
             if "hours" in longText:
                 #Remove video with 3+ hours duration
                 if int(re.search(r"(.*) hours", longText).group(1)) > DurationLimit: 
                     continue
-            final_list.append(YoutubeVideo( title   = video["title"]["runs"][0]["text"],
-                                            videoId = video["videoId"],
-                                            length  = video["lengthText"]["simpleText"],
-                                            ))
-            #Result length
-            if len(final_list) >= ResultLengthLimit: 
-                break
+
+        final_list.append(
+            YoutubeVideo( 
+                title   = video["title"]["runs"][0]["text"],                        
+                videoId = video["videoId"],
+                length  = video["lengthText"]["simpleText"] if video.get("lengthText") else "Livestream",
+            )
+        )
+        #Result length
+        if len(final_list) >= ResultLengthLimit: 
+            break
 
     return final_list 
 
@@ -116,7 +125,7 @@ def get_spotify_track_title(url : str) -> str:
     title_tag : element.Tag = htmlSoup.find_all("title")[0]
     return title_tag.text.replace(" | Spotify","")
 
-def get_playlist_data(playlist_url) -> tuple[str,dict]:
+def get_playlist_data(playlist_url) -> Tuple[str,dict]:
     r = requests.get(playlist_url)
     soup = BeautifulSoup(r.text,features="lxml")
 

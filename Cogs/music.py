@@ -4,7 +4,7 @@ import logging
 
 import os
 import datetime
-from typing    import List
+from typing    import List,Tuple
 
 #Third party libaries
 import youtube_dl
@@ -553,7 +553,8 @@ class MusicCommands(commands.Cog):
             await queue.create_audio_message(reply_msg or ctx.channel)
 
             # Let ffmpeg initialize itself
-            await asyncio.sleep(1.5)
+            # await asyncio.sleep(1.5)
+            
             # Playing the first track in queue 
             try:
                 queue.play_first()

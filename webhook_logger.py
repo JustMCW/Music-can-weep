@@ -7,7 +7,7 @@ import asyncio
 import traceback
 import datetime
 
-from key import *
+from keys import *
 from discord.ext import commands
 
 DISABLE_LOGGING = True

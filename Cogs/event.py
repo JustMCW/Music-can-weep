@@ -9,7 +9,7 @@ from literals    import ReplyStrings
 import database.server as serverdb
 import custom_errors
 
-import key
+import keys
 import webhook_logger
 
 from guildext import GuildExt
