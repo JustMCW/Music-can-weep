@@ -1,15 +1,18 @@
+# Messy area : 
+
 import discord
 import logging
 import requests
 import re
-from Music.song_queue import SongQueue
-
-import Convert
+from music.song_queue import SongQueue
 
 from difflib import SequenceMatcher
 from googletrans import Translator
 
 translator = Translator()
+
+logger = logging.getLogger(__name__)
+
 
 def sec_in_time_string(time_string:str) -> int:
     try:
@@ -151,7 +154,7 @@ class Subtitles:
         lang = sub_options.get("ja") or sub_options.get("zh-TW") or sub_options.get("zh-HK") or sub_options.get("zh-CN") or sub_options.get("en") or list(sub_options.values())[0]
         subtitle:str = requests.get(lang[4]["url"]).content.decode("utf-8")
 
-        logging.info(lang[4]["url"])
+        logger.info(lang[4]["url"])
 
         subtitle_list = re.findall(r"^(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})\n((^.+\n)+)\n",subtitle,re.MULTILINE)
 
@@ -250,6 +253,6 @@ class Subtitles:
         # await asyncio.sleep(10)
         # await display.delete()
 
-        return logging.info("Finshed syncing")
+        return logger.info("Finshed syncing")
     
     

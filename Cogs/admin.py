@@ -1,17 +1,140 @@
-#These commands are for me to test stuff
-
+#These commands are for me to test stuff, or have fun uuith
+# so these aren't really factored or clean code
 
 import os
+import audioop
 from discord.ext import commands
 import discord
 import logging
+import subprocess,io,nacl,struct
+from typing import Dict,Callable,List,Any
 
-from Music.song_track import SongTrack
+from music.song_track import SongTrack,create_track_from_url,YoutubeTrack
+import threading
+
+logger = logging.getLogger(__name__)
+
+
+FFMPEG_OPTION = {
+    "before_options" : "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+    "options"        : "-vn"
+}
+
+# I stole this part of code from pycord, another python discord libary
+def strip_header_ext(data):
+    if data[0] == 0xBE and data[1] == 0xDE and len(data) > 4:
+        _, length = struct.unpack_from(">HH", data)
+        offset = 4 + length * 4
+        data = data[offset:]
+    return data
+
+def _decrypt_xsalsa20_poly1305_lite(self, header, data):
+    box = nacl.secret.SecretBox(bytes(self.secret_key))
+
+    nonce = bytearray(24)
+    nonce[:4] = data[-4:]
+    data = data[:-4]
+
+    return strip_header_ext(box.decrypt(bytes(data), bytes(nonce)))
+
+discord.VoiceClient._decrypt_xsalsa20_poly1305_lite = _decrypt_xsalsa20_poly1305_lite
+
+class RawData:
+    """Handles raw data from Discord so that it can be decrypted and decoded to be used.
+
+    .. versionadded:: 2.0
+    """
+
+    def __init__(self, data, client):
+        self.data = bytearray(data)
+        self.client = client
+
+        self.header = data[:12]
+        self.data = self.data[12:]
+        import struct
+        unpacker = struct.Struct(">xxHII")
+        self.sequence, self.timestamp, self.ssrc = unpacker.unpack_from(self.header)
+        self.decrypted_data = getattr(self.client, f"_decrypt_{self.client.mode}")(
+            self.header, self.data
+        )
+        self.decoded_data = None
+
+        self.user_id = None
+
+def unpack_audio(vc, data):
+    """Takes an audio packet received from Discord and decodes it into pcm audio data.
+    If there are no users talking in the channel, `None` will be returned.
+
+    You must be connected to receive audio.
+
+    .. versionadded:: 2.0
+
+    Parameters
+    ----------
+    data: :class:`bytes`
+        Bytes received by Discord via the UDP connection used for sending and receiving voice data.
+    """
+    if 200 <= data[1] <= 204:
+        # RTCP received.
+        # RTCP provides information about the connection
+        # as opposed to actual audio data, so it's not
+        # important at the moment.
+        return
+
+    data = RawData(data, vc)
+
+    if data.decrypted_data == b"\xf8\xff\xfe":  # Frame of silence
+        return
+    return data.decrypted_data
+
+def format_audio(audio : io.BytesIO): 
+    args = [
+        "ffmpeg",
+        "-f",
+        "s16le",
+        "-ar",
+        "48000",
+        "-ac",
+        "2",
+        "-i",
+        "-",
+        "-f",
+        "mp3",
+        "pipe:1",
+    ]
+
+    process = subprocess.Popen(
+        args,
+        creationflags=0,
+        stdout=subprocess.PIPE,
+        stdin=subprocess.PIPE,
+    )
+
+    out = process.communicate(audio.read())[0]
+    out = io.BytesIO(out)
+    out.seek(0)
+    return out
+
+# the end of stolen code
 
 class AdminCommands(commands.Cog,command_attrs=dict(hidden=True)):
     def __init__(self,bot):
-        logging.info("ADMIN commands is ready")
         self.bot:commands.Bot = bot
+        self.global_voice_group : Dict[int,discord.VoiceClient] = {}
+        self.local_voice_group : Dict[str,List[discord.VoiceClient]] = {}
+
+    @commands.command()
+    async def track_info(self,ctx : commands.Context):
+        import json
+        track : YoutubeTrack =  ctx.guild.song_queue[0]
+        with open("info.json","w") as f:
+            json.dump(
+                track.info,
+                f,
+                indent=4
+            )
+        
+        
 
     @commands.is_owner() 
     @commands.group()
@@ -19,10 +142,182 @@ class AdminCommands(commands.Cog,command_attrs=dict(hidden=True)):
         if ctx.invoked_subcommand is None:
             await ctx.reply(f"Haha you idk the subcommands : {','.join([f'{command.name},{str(command.clean_params)}' for command in ctx.command.walk_commands()])}")
     
-    @commands.is_owner() 
+    def audio_recv_thread(
+        self,
+        local_vc : discord.VoiceClient, 
+        data_handler : Callable[[bytes],Any],
+        stop_condition : Callable[[discord.VoiceClient],bool] = None,
+        on_finished : Callable[[discord.VoiceClient],Any] = None
+    ):
+        """Recieves audio from the voice channel, raise exception if not connected.
+
+        Then starts a thread that runs recieve audio as bytes and run `data_handler` on it.
+
+        Exits when not connected or `stop_condition` returns `True`. Finally call the `on_finished`"""
+        import select
+        import time
+
+        if not local_vc.is_connected():
+            raise discord.ClientException("Not connected to input voice channel")
+
+        while local_vc.is_connected():
+            # Manually stoping
+            if stop_condition and stop_condition(local_vc):
+                break
+
+            # wait for data to be ready
+            try:
+                ready, _, err = select.select([local_vc.socket],[], [local_vc.socket], 0.01)
+            except (OSError,ValueError):
+                print("wait error")
+                time.sleep(1)
+                continue
+                
+            if not ready:
+                if err:
+                    print(err)
+                continue
+            
+            # Collect the data
+            try:
+                data = local_vc.socket.recv(4096)
+            except (OSError):
+                continue
+
+            # Decryption & Handling
+            data = unpack_audio(local_vc,data)
+            data_handler(data)
+
+        if on_finished:
+            on_finished(local_vc)
+        logger.info("Exited")
+
     @admin.command()
-    async def test(self,ctx:commands.Context):
-        ...
+    async def sendembed(self,ctx: commands.Context):
+        await ctx.send(
+            embeds=[
+                discord.Embed(title=f"Ez{i}").set_thumbnail(url="https://i.ytimg.com/vi_webp/Dy2LZ-A3vVw/maxresdefault.webp")
+                for i in range(10)
+            ]
+        )
+
+    def join_global_voice_group(self,vc : discord.VoiceClient):
+        
+        def data_handler(data : bytes):
+            if not data or len(self.global_voice_group.keys()) <= 1:
+                return
+
+            for voice in self.global_voice_group.values():
+                if voice.channel.id != vc.channel.id:
+                    voice.send_audio_packet(data,encode=False)
+
+        not_in_list = lambda vc: self.global_voice_group.get(vc.channel.id) == None
+
+        def remove(vc):
+            if not_in_list(vc):
+                return
+            del self.global_voice_group[vc.channel.id]
+
+
+        self.global_voice_group[vc.channel.id] = vc
+        vc_thread = threading.Thread(
+            target=self.audio_recv_thread,
+            args=[
+                vc, 
+                data_handler,
+                not_in_list,
+                remove
+            ]
+        )
+        vc_thread.start()
+ 
+    def create_private_voice_group(self, *vcs : discord.VoiceClient) -> str:
+        if len(vcs) <= 1:
+            return print("only 1 vc")
+
+        from string import ascii_uppercase, digits
+        from random import choices
+
+        code = ''.join(choices(list(ascii_uppercase+digits),k=4))
+        self.local_voice_group[code] = list(vcs)
+        local_voice_group = self.local_voice_group[code]
+
+        for vc in vcs:
+            def data_handler(data : bytes):
+                if not data:
+                    return
+                for voice in local_voice_group:
+                    if voice.channel.id != vc.channel.id:
+                        try:
+                            voice.send_audio_packet(data,encode=False)
+                        except OSError:
+                            print("error sending packets")
+
+            def on_disconnect(vc):
+                local_voice_group.remove(vc)
+
+            vc_thread = threading.Thread(
+                target=self.audio_recv_thread,
+                args=[
+                    vc, 
+                    data_handler,
+                    lambda _: len(local_voice_group) <= 1,
+                    on_disconnect
+                ]
+            )
+            vc_thread.start()
+
+        return code
+
+    @admin.command()
+    async def join_global(self,ctx:commands.Context):   
+        local_vc : discord.VoiceClient = ctx.voice_client 
+        
+        if not local_vc:
+            await ctx.author.voice.channel.connect()
+            local_vc = ctx.voice_client
+
+        self.join_global_voice_group(local_vc)
+        await ctx.reply(f"Connected with `{len(self.global_voice_group) - 1}` voice channels.")
+
+    @admin.command()
+    async def connect_to(self, ctx :commands.Context, voice_id):
+        # Fetch them
+        local_vc : discord.VoiceClient = ctx.voice_client 
+        target_vc = await self.bot.fetch_channel(voice_id)
+
+        #Connect to them
+        if not target_vc:
+            return await ctx.reply("Channel not found")
+        if not local_vc:
+            await ctx.author.voice.channel.connect()
+            local_vc = ctx.voice_client
+        if target_vc.guild.voice_client:
+            target_vc.guild.voice_client.disconnect()
+        target_vc = await target_vc.connect()
+
+        print(self.create_private_voice_group(local_vc,target_vc))
+        await ctx.send(f"Connecting **{local_vc.channel.name}** with **{target_vc.channel.name}**")
+
+    @admin.command()
+    async def exit(self,ctx:commands.Context):
+        if not ctx.voice_client:
+            return
+        try:
+            del self.global_voice_group[ctx.voice_client.channel.id]
+            await ctx.reply("Exited")
+        except KeyError:
+            await ctx.reply("Not connected anyway")
+
+    @admin.command()
+    async def exit_all(self, ctx):
+        for voice in self.global_voice_group.values():
+            await voice.disconnect()
+        self.global_voice_group.clear()
+
+    @admin.command()
+    async def sendme(self,ctx):
+        print(self.global_voice_group)
 
     @commands.is_owner() 
     @admin.command()
@@ -31,28 +326,63 @@ class AdminCommands(commands.Cog,command_attrs=dict(hidden=True)):
             return await ctx.send(f"Pick a file")
         await ctx.send(file=discord.File(f"./{file_name}"))
 
-    
     @admin.command()
     async def earrape(self,ctx:commands.Context):
         queue = ctx.guild.song_queue
-        import audioop
 
         def f(frag): return audioop.reverse(audioop.mul(frag,2,15),2)
 
         queue[0].source.filter = f
 
     @admin.command()
-    async def filter_test(self,ctx:commands.Context):
-        queue = ctx.guild.song_queue
-        import audioop
+    async def bias(self,ctx:commands.Context,bia):
+        track : SongTrack= ctx.guild.song_queue.current_track 
+
+        def f(b : bytes):
+            return audioop.bias(b,2,int(bia))
+        track.source.audio_filter = f
+
+    @admin.command()
+    async def gpitch(self,ctx:commands.Context,fr):
+        track : SongTrack= ctx.guild.song_queue.current_track 
+        def f(b : bytes):
+            return audioop.ratecv(b,2,2,50,int(fr),None)[0]
+        track.source.audio_filter = f
+   
+    @admin.command()
+    async def syncplay(self,ctx,*,q):
+
+        import youtube_dl
+
+        with youtube_dl.YoutubeDL({"default_search":"ytsearch"}) as ydl:
+            info = ydl.extract_info(q,download=False)
+            if 'entries' in info: 
+                info = info["entries"][0]  
+
+        track : SongTrack= ctx.guild.song_queue.current_track 
+        audio = discord.FFmpegPCMAudio(source=info["formats"][0]["url"])
+
+        def f(data : bytes) -> bytes:
+            ret = audio.read()
+            if not data: 
+                return ret
+            elif len(data) != len(ret):
+                return ret
+            return audioop.add(data,ret,2)
+
+        track.source.audio_filter = f
+
+    @admin.command()
+    async def source_url(self,ctx:commands.Context):
+        import re
+        time_laspe : re.Match = re.findall(r"\?expire=(\d+)", ctx.guild.song_queue[0].source_url)[0]
+        await ctx.reply(content=f"<t:{time_laspe}>")
 
     @admin.command()
     async def normal(self,ctx:commands.Context):
         queue = ctx.guild.song_queue
 
-        def f(frag): return frag
-
-        queue[0].source.filter = f  
+        queue[0].source.audio_filter = None
 
     @commands.is_owner() 
     @admin.command()
@@ -66,28 +396,17 @@ class AdminCommands(commands.Cog,command_attrs=dict(hidden=True)):
         import subprocess
         subprocess.Popen(args=[
             "./save.zsh",
-            playing_track.src_url,
+            playing_track.source_url,
             playing_track.thumbnail,
             playing_track.title.replace("/","|") + ".mp3"
         ])
         await ctx.reply("ok")
 
-    @admin.command()
-    async def cleanup(self,ctx):
-        try:
-            ctx.guild.voice_client.source.cleanup()
-        except AttributeError:
-            await ctx.reply("Not playing")
-        else:
-            await ctx.reply("Success")
-
-
-
     @commands.is_owner() 
     @admin.command()
     async def say(self,ctx,*,message):
         await ctx.send(message)
-        logging.warning(message)
+        logger.warning(message)
 
     @admin.command()
     async def process_command_at(self,ctx,channel:commands.converter.TextChannelConverter,command_str,*,args):
@@ -117,10 +436,10 @@ class AdminCommands(commands.Cog,command_attrs=dict(hidden=True)):
         if not voice_chan:
             return await ctx.send(f"{vc_name} is not found at {guild.name}")
 
-        from Music import voice_state
+        from music import voice_state
         await voice_state.join_voice_channel(guild,voice_chan)
 
-        from Music.song_track import SongTrack
+        from music.song_track import SongTrack
         try:
             Track:SongTrack = SongTrack.create_track(query,requester=None)
         except BaseException as e:
@@ -128,7 +447,7 @@ class AdminCommands(commands.Cog,command_attrs=dict(hidden=True)):
         else:
             def replay(voice_error):
                 if voice_error:
-                    return logging.error(voice_error)
+                    return logger.error(voice_error)
                 try:
                     Track.play(guild.voice_client,replay)
                 except AttributeError:
@@ -140,6 +459,21 @@ class AdminCommands(commands.Cog,command_attrs=dict(hidden=True)):
             Track.play(guild.voice_client,after=replay)
             await ctx.reply(f"Succesfully started playing `{Track.title}` at {voice_chan.name} of {guild.name}")
 
+    @admin.command()
+    async def playpl(self,ctx : commands.Context,url : str):
+        from youtube_utils import get_playlist_data
+        title,playlist = get_playlist_data(url)
+        await ctx.reply(f"This is {title}.")
+
+        vc = await ctx.author.voice.channel.connect()
+
+        for i,t in enumerate(playlist):
+            if i == 1:
+                ctx.guild.song_queue.play_first()
+                ctx.guild
+            song_track = create_track_from_url(t["url"],ctx.author,ctx.message)
+            ctx.guild.song_queue.append(song_track)
+        # await ctx.invoke(self.bot.get_command("resume"))
 
     @commands.is_owner()
     @admin.command()
@@ -205,6 +539,60 @@ class AdminCommands(commands.Cog,command_attrs=dict(hidden=True)):
         else: 
             await ctx.reply("Failed to get guild")
 
+    @admin.command()
+    async def playlive(self,ctx : commands.Context):
+        import requests
+        import re
+        import youtube_dl
+        import threading
+
+        url = "https://www.youtube.com/watch?v=jfKfPfyJRdk"
+
+        vc = ctx.voice_client
+        if not vc:
+            vc = await ctx.author.voice.channel.connect()
+        
+        
+        with youtube_dl.YoutubeDL({"format": "bestaudio",}) as YDL:
+            info = YDL.extract_info(url,download=False,process=False)
+        source_url = info["formats"][0]["url"]
+
+        ready = threading.Event()
+        
+        asr = 48000
+        tempo = 1
+        pitch = 1.5
+        FFMPEG_OPTION["options"] += f' -af asetrate={asr* pitch},aresample={asr},atempo={max(round(tempo/pitch,8),0.5)}'
+        def stream() -> None:
+
+            response = requests.get(source_url)
+            content = response.content.decode("utf-8")
+            
+            # Extract the urls
+            urls = re.findall(r"https://.+seg\.ts",content)
+            audios = [discord.FFmpegPCMAudio(source=url, **FFMPEG_OPTION) for url in urls]
+            
+            def playnext(index):
+                if index >= len(urls):
+                    ready.set()
+                    return 
+
+                # audio_src_url = urls[index]
+                # audio = discord.FFmpegPCMAudio(source=audio_src_url, **FFMPEG_OPTION)
+                audio = audios[index]
+                vc.play(
+                    audio,
+                    after = lambda _: playnext(index+1)
+                )
+            
+            playnext(0)
+            ready.wait(60)
+            ready.clear()
+            stream()
+        
+        threading.Thread(target=stream).start()
+
+            
 
 async def setup(BOT):
     await BOT.add_cog(AdminCommands(BOT))

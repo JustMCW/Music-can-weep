@@ -2,21 +2,21 @@
 
 from discord.ext.commands import errors
 
-class NotInVoiceChannel(errors.CommandError): pass
-errors.NotInVoiceChannel = NotInVoiceChannel
+class NotInVoiceChannel(errors.CommandError): 
+    pass
 
-class NoAudioPlaying(errors.CommandError): pass
-errors.NoAudioPlaying = NoAudioPlaying
+class NoAudioPlaying(errors.CommandError): 
+    pass
 
-class UserNotInVoiceChannel(errors.CommandError): pass
-errors.UserNotInVoiceChannel = UserNotInVoiceChannel
+class UserNotInVoiceChannel(errors.CommandError): 
+    pass
 
-class QueueEmpty(errors.CommandError): pass
-errors.QueueEmpty = QueueEmpty
+class QueueEmpty(errors.CommandError): 
+    pass
 
-class QueueDisabled(errors.CommandError): pass
-errors.QueueDisabled = QueueDisabled
+class QueueDisabled(errors.CommandError): 
+    pass
 
-class AudioNotSeekable(errors.CommandError): pass
-errors.AudioNotSeekable = AudioNotSeekable
+class AudioNotSeekable(errors.CommandError): 
+    pass
 

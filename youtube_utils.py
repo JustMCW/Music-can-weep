@@ -1,8 +1,43 @@
 
-import re,json,requests
-from typing import List
-from bs4 import BeautifulSoup
-url = "https://www.youtube.com/watch?v=LtrB_8CejUA"
+import re
+import json
+import requests
+
+from typing import List,TypedDict
+from bs4    import BeautifulSoup,element
+
+class URLMatch(TypedDict):
+    protocol : str
+    subdomain : str
+    domain : str
+    top_level_domain : str
+    directory : str
+    page : str
+
+
+def url_matcher(url) -> URLMatch:
+    """return a match for a url, None for no matches"""
+    matches = re.search(r"(https/|HTTP)?://(\w+\.)?(.+)\.(\w+)/([^/]+)?/?(.+)?", url)
+
+    if not matches:
+        return None
+
+    protocol, subdomain, domain, top_level_domain, directory, page = matches.groups()
+
+    if not page:
+        page = directory
+        directory = None
+
+    return  {
+        "protocol" : protocol,
+        "subdomain" : subdomain,
+        "domain" : domain,
+        "top_level_domain" : top_level_domain,
+        "directory" : directory,
+        "page" : page,
+    }
+
+
 
 class YoutubeVideo:
     """Provide most attributes a song track.
@@ -26,11 +61,12 @@ def extract_yt_url_from(string : str) -> str:
         return "https://www.youtube.com/watch?v="+matches[0][4]
     return None
 
-example_link = "https://www.youtube.com/watch?v=9NNy39vj-Wo"
-assert extract_yt_url_from("ez")==None
-assert extract_yt_url_from(f"pro{example_link}")== example_link
-assert extract_yt_url_from(f"<{example_link}>")==example_link
-assert extract_yt_url_from("https://www.youtube.com/watch?v=x8VYWazR5mE&ab_channel=Ayase%2FYOASOBI")=="https://www.youtube.com/watch?v=x8VYWazR5mE"
+def run_test():
+    example_link = "https://www.youtube.com/watch?v=9NNy39vj-Wo"
+    assert extract_yt_url_from("ez")==None
+    assert extract_yt_url_from(f"pro{example_link}")== example_link
+    assert extract_yt_url_from(f"<{example_link}>")==example_link
+    assert extract_yt_url_from("https://www.youtube.com/watch?v=x8VYWazR5mE&ab_channel=Ayase%2FYOASOBI")=="https://www.youtube.com/watch?v=x8VYWazR5mE"
 
 
 def search_from_youtube(query:str, ResultLengthLimit:int=5,DurationLimit:int=3*3600) -> List[YoutubeVideo]:
@@ -73,6 +109,56 @@ def search_from_youtube(query:str, ResultLengthLimit:int=5,DurationLimit:int=3*3
                 break
 
     return final_list 
+
+def get_spotify_track_title(url : str) -> str:
+    r = requests.get(url)
+    htmlSoup = BeautifulSoup(r.text, features="lxml")
+    title_tag : element.Tag = htmlSoup.find_all("title")[0]
+    return title_tag.text.replace(" | Spotify","")
+
+def get_playlist_data(playlist_url) -> tuple[str,dict]:
+    r = requests.get(playlist_url)
+    soup = BeautifulSoup(r.text,features="lxml")
+
+    title = soup.find("title").contents[0]
+
+    found : list[element.Tag] = soup.find_all("div",attrs={'data-testid':"track-row"})
+
+    playlist = []
+
+    # print(soup)
+    for f in found:
+        span = f.find_all(
+            "span",
+            attrs={
+                "data-encore-id":"type",
+                "dir":"auto"
+            }
+        )
+        data1 : element.Tag = span[0].contents[0]
+        track_title = data1.contents[0]
+        track_url   = data1.get("href")
+
+        artist : element.Tag = [
+            (item.contents[0],'https://open.spotify.com'+item.get("href")) 
+            for item in span[1].contents if isinstance(item,element.Tag)
+        ]
+        
+        playlist.append(
+            {
+                "title" : track_title,
+                "url" : track_url,
+                "artist" : dict(artist),
+            }
+        )
+    import json
+
+    # with open("myplaylist.json","w") as pljson:
+    #     json.dump(playlist,pljson,indent=4)
+    # print(f"This is {title}.")
+
+    return title,playlist
+    
 
 def get_recommendation(url) -> List[YoutubeVideo]:
     r = requests.get(url)
@@ -118,6 +204,10 @@ def test(q):
     return good_fmts[-1]["url"]
 
 if __name__ == "__main__":
-    pass
+    print(
+        url_matcher(
+            "https://www.youtube.com/watch?v=jfKfPfyJRdk"
+        )
+    )
     # print(test("neko hacker home sweet home"))
     # print(get_recommendation("https://www.youtube.com/watch?v=BnkhBwzBqlQ")[1].title)

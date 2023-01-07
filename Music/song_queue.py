@@ -1,43 +1,63 @@
 import asyncio
 import logging
 
-from math import floor
 from collections import deque
+
+from typing import (
+    Coroutine, 
+    Callable, 
+    Dict, 
+    List, 
+    Any, 
+    Optional, 
+    Union,
+    TYPE_CHECKING
+)
 from typing_extensions import Self
-from typing            import Coroutine, Callable, Dict, List, Any, Optional, Union
 
 import discord
-from discord.ext import commands
 
-from .song_track  import SongTrack,AutoPlayUser
-import Convert
-from string_literals import MyEmojis
 
-VOLUME_WHEN_HUNDRED = 0.5
-VOLUME_PERCENTAGE_LIMIT = 400
-CLEAR_AFTER = 600
-UPDATE_FREQUENCY = 25
-UPDATE_DELAY = 3
+from literals import ReplyEmbeds
+
+from .song_track      import SongTrack,LiveStreamAudioSource,create_track_from_url
+from .voice_utils     import clear_audio_message
+from .voice_constants import *
+
+import custom_errors
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+if TYPE_CHECKING:
+    from guildext import GuildExt
+
+#TODO : guild.song_queue.audio_message != self.audio_message
 
 hash_maps : Dict[int,Any] = {} #Multi-instances
 
-class SongQueue(deque):
-    """A sub-class of `collections.deque`, containing `SongTrack`s with different attributes and methods to work with."""
-    def __init__(self,guild :discord.Guild ):
-        self.guild       = guild 
-        self._event_loop = asyncio.get_running_loop()
+class SongQueue(deque[SongTrack]):
+    """
+    A sub-class of `collections.deque`, for managing a list of `SongTracks`
+    containing `SongTrack`s with different attributes and methods to work with.
+    """
+    def __init__(self, guild : 'GuildExt' ):
+        self.guild = guild 
     
-        self.volume               :float  = VOLUME_WHEN_HUNDRED
-        self.pitch                :float  = 1
-        self.tempo                :float  = 1
+        self.volume  :float  = VOLUME_SCALE_FACTOR
+        self.pitch   :float  = 1
+        self.tempo   :float  = 1
 
-        self.looping              :bool   = False
-        self.queue_looping        :bool   = False
-        self.auto_play            :bool   = False
+        self.looping       :bool   = False
+        self.queue_looping :bool   = False
+        self.auto_play     :bool   = False
 
-        self.audio_message        :discord.Message = None
-        self.history              :List[SongTrack] = []
-        self.call_after           :Callable        = None
+        self.audio_message :discord.Message = None
+
+        self.history :list[SongTrack] = []
+
+        self._event_loop = asyncio.get_running_loop()
+        self._call_after :Callable = None
 
         super().__init__()
 
@@ -62,10 +82,6 @@ class SongQueue(deque):
     @property
     def current_track(self) -> SongTrack:
         return self.get(0)
-
-    #Typing for items
-    def __getitem__(self, __index) -> SongTrack:
-        return super().__getitem__(__index)
 
 ### Properties of the queue
 
@@ -99,19 +115,18 @@ class SongQueue(deque):
                     break
         # We only want to disable rewinding
         elif not self[0].seekable:
-            raise commands.errors.AudioNotSeekable("Audio is not seekable.")
+            raise custom_errors.AudioNotSeekable("Audio is not seekable.")
         
         self[0].time_position = new_tp/self.tempo
         asyncio.get_running_loop().create_task(self.update_audio_message())
 
-
     @property
     def volume_percentage(self):
-        return self.volume*100 / VOLUME_WHEN_HUNDRED
+        return self.volume*100 / VOLUME_SCALE_FACTOR
 
     @volume_percentage.setter
     def volume_percentage(self, perc : Union[int,float]):
-        self.volume = perc/100 * VOLUME_WHEN_HUNDRED
+        self.volume = perc/100 * VOLUME_SCALE_FACTOR
         if self.guild.voice_client and self.guild.voice_client.source:
             self.guild.voice_client.source.volume = self.volume
             
@@ -121,7 +136,7 @@ class SongQueue(deque):
     def swap(self,pos1:int,pos2:int) -> None:
         
         if not self: 
-            raise commands.errors.QueueEmpty("No tracks in the queue to be swapped")
+            raise custom_errors.QueueEmpty("No tracks in the queue to be swapped")
 
         if pos1 == pos2:
             raise IndexError("Why try to swap the same item")
@@ -137,7 +152,7 @@ class SongQueue(deque):
     def shuffle(self) -> None:
 
         if not self: 
-            raise commands.errors.QueueEmpty("No tracks in the queue to be shuffled")
+            raise custom_errors.QueueEmpty("No tracks in the queue to be shuffled")
 
         is_playing = self.guild.voice_client is not None and self.guild.voice_client.is_playing()
         
@@ -157,17 +172,68 @@ class SongQueue(deque):
         also adds recommended track if no track is left fot some reason"""
         track = self.popleft()
         if len(self) == 0 and self.auto_play:
-            self.append(SongTrack.create_track(track.recommend.url,requester=AutoPlayUser))
+            self.append(
+                create_track_from_url(track.recommend.url)
+            )
         self.history.append(track)
         return track
+
+    def shift_track(self, count=1):
+        """Shifts track around, but does not remove any track.
+        [1,2,3,4] => [2,3,4,1]
+        
+        Could also take negative input to shift in opposite direction"""
+        def rotate_queue():
+            self.rotate(count * -1)
+            self.play_first()
+
+        self._call_after = rotate_queue
+        self.guild.voice_client.stop()
+
+    def rewind_track(self, count=1):
+        """Add the latest history track to the front of the queue for an ammount, 
+        does not raise any error when paramater `count` is greater than the length of the queue history"""
+
+        if self.queue_looping and self[-1].source:
+            return self.shift_track(count * -1)
+
+        def rewind_after():
+            for _ in range(count):
+                try: self.appendleft(self.history.pop(-1))
+                except IndexError: break
+            self.play_first()
+
+        self._call_after = rewind_after
+        self.guild.voice_client.stop()
+
+    def skip_track(self, count=1):
+        if self.queue_looping:
+            return self.shift_track(count)
+
+        def skip_after():
+            for _ in range(count):
+                try: 
+                    self.poplefttohistory()
+                except IndexError: 
+                    break 
+            
+            if self.current_track:
+                self.play_first()
+
+        self._call_after = skip_after 
+        self.guild.voice_client.stop()
+
+    def replay_track(self):
+        self._call_after = lambda: self.play_first()
+        self.guild.voice_client.stop()
 
     async def cleanup(self) -> None:
         """Removes every track from the queue after some time, including the first one and disconnects from the voice."""
         guild = self.guild
         
         if self and self.guild.database.get("auto_clear_queue"):
-            logging.info(f"Wait for {CLEAR_AFTER} sec then clear queue")
-            await asyncio.sleep(CLEAR_AFTER)
+            logger.info(f"Clearing queue after {CLEAR_QUEUE_AFTER}.")
+            await asyncio.sleep(CLEAR_QUEUE_AFTER)
             
             self.clear()
         elif guild.voice_client:
@@ -181,7 +247,6 @@ class SongQueue(deque):
         while also appling the volume, pitch and tempo from the queue to the track, as well as the after function.
         """
         track = self.current_track
-        logging.info(f"Play first track : {track.title}")
         track.play(
             self.guild.voice_client,
             after  = self.after_playing,
@@ -190,70 +255,85 @@ class SongQueue(deque):
             pitch  = self.pitch ,
             tempo  = self.tempo ,
         )
+        logger.info(f"Playing \"{track.title}\".")
 
-    #Warning : You are about to enter the most chaotic code in my project, but also one of the most important bit.
+
     def after_playing(self,voice_error :str = None):
         """Handles everything that happenes after an audio track has ended"""
 
-        from .voice_state import clear_audio_message
     ### Stuff that must be done after an audio ended : cleaning up the process and handling error(s)
         
         #AudioPlayer thread error, no trackback tho.
         if voice_error: 
-            logging.exception("Voice error :",voice_error)
+            logger.exception("Voice error :",voice_error)
 
-        FinshedTrack = self.get(0)
-        logging.info(f"Track finshed : {FinshedTrack.title}")
+        finshed_track = self.current_track
+        logger.info(f"Track finshed : {finshed_track.title}")
 
-        #Moved here in order to access returncode of the ffmepg process.
-        FinshedTrack.source.original.cleanup()
-        returncode = FinshedTrack.source.original.returncode
+        #Moved cleanup here in order to access returncode of the ffmepg process.
+        if not isinstance(finshed_track.source,LiveStreamAudioSource):
+            finshed_track.source.original.cleanup()
+            returncode = finshed_track.source.original.returncode
 
-        # Recreate the source and process if ffmpeg returned 1
-        if returncode == 1:
-            logging.warning("FFmpeg process returned 1, recreating song_track.") 
-            FinshedTrack.recreate_source_url()
-            return self.play_first()
+            # Recreate the source and process if ffmpeg returned 1
+            if returncode == 1:
+                logger.warning("FFmpeg process returned 1, retrying...") 
+                self[0] = create_track_from_url(
+                    finshed_track.webpage_url, 
+                    finshed_track.requester, 
+                    finshed_track.request_message
+                )
+                return self.play_first()
 
         #Calling the after function
-        afterfunc = self.call_after
-        if afterfunc: 
+        if self._call_after: 
 
-            afterfunc = afterfunc()
-            self.call_after = None
-            if isinstance(afterfunc,Coroutine):
-                self._event_loop.create_task(afterfunc)
-            return logging.info("Called after function.")
+            logger.info(f"Calling after function : \"{self._call_after.__name__}\".")
+            self._call_after()
+            self._call_after = None
+
+            async def finish():
+                await self.make_next_audio_message()
+
+                if not self.current_track:
+                    await self.guild.voice_client.disconnect()
+                
+
+
+            return self._event_loop.create_task(finish())
 
         #Wrapped here for coroutine functions to run.   
         #Didn't wrap the code above because create_task has a great delay but cleanup actions has to be done ASAP
         async def inner():
+            logging.debug("Entered inner function.")
+            finshed_track = self.current_track
             guild = self.guild
             voice_client : discord.VoiceClient = guild.voice_client
             
             #Not in voice channel
             if not voice_client or not voice_client.is_connected():
-                await clear_audio_message(guild)
+                await clear_audio_message(self)
 
                 if not self.enabled:
                     self.poplefttohistory()
 
                 await self.cleanup()
-                return logging.info("Client is not in voice after playing.")
+                return logger.info("Client is not in voice after playing.")
              
 
         ### Time to decide what the next track would be
-            NextTrack : SongTrack = None
+            next_track : SongTrack = None
 
             #Single track looping is on
             if self.looping:
-                NextTrack = FinshedTrack
+                next_track = finshed_track
 
             #Queuing disabled, don't even try to play anything.
             elif not self.enabled:
                 self.poplefttohistory()
-                await clear_audio_message(guild)
-                return logging.info("Queue disabled")
+                await voice_client.disconnect()
+                await clear_audio_message(self)
+                return logger.info("Queue disabled")
 
             #The rest of the situation, lol.
             else:
@@ -266,16 +346,18 @@ class SongQueue(deque):
                     self.poplefttohistory()
             
                 #Get the next track ( first track in the queue )
-                NextTrack = self.current_track
+                next_track = self.current_track
 
                 #No track left in the queue
-                if NextTrack is None:
+                if next_track is None:
                     # await text_channel.send("\\☑️ All tracks in the queue has been played (if you want to repeat the queue, run \" >>queue repeat on \")",delete_after=30)
-                    await clear_audio_message(guild)
-                    return logging.info("Queue is empty")
+                    await clear_audio_message(self)
+                    await voice_client.disconnect()
+
+                    return logger.info("Queue is empty")
 
                 #To prevent sending the same audio message again
-                if NextTrack != FinshedTrack:
+                if next_track != finshed_track:
                     await self.make_next_audio_message()
                 
 
@@ -286,149 +368,101 @@ class SongQueue(deque):
 
 
 ### Audio messages
-    @property
-    def audio_message_embed(self) -> discord.Embed:
-        """the discord embed for displaying the audio that is playing"""
-        current_track = self.current_track
-
-        if not current_track:
-            return logging.warning("No track is in the queue, thus unable to create an embed for it.")
-
-        #Init embed + requester header + thumbnail
-        rembed = discord.Embed( title= current_track.title,
-                                url= current_track.webpage_url,
-                                color=discord.Color.from_rgb(255, 255, 255) ) \
-                .set_author(name=f"Requested by {current_track.requester.display_name}" ,
-                            icon_url=current_track.requester.display_avatar ) \
-                .set_image( url=current_track.thumbnail )
-
-        #Author field
-        YT_creator = getattr(current_track,"channel",None)
-        Creator = YT_creator or getattr(current_track,"uploader",None)
-        if YT_creator or Creator:
-            Creator_url = getattr(current_track,"channel_url",getattr(current_track,"uploader_url",None))
-            Creator = "[{}]({})".format(Creator,Creator_url) if Creator_url else Creator
-
-            rembed.add_field(name=f"{MyEmojis.YOUTUBE_ICON} YT channel" if YT_creator else "💡 Creator",
-                             value=Creator)
-        
-        emoji_before = "━" or '🟥' 
-        emoji_mid = "●"
-        emoji_after = "━" or '⬜️'
-        #Durartion field + Progress bar
-        if current_track.duration:
-            try:
-                progress = max(floor((self.time_position / current_track.duration) * UPDATE_FREQUENCY),1)
-            except AttributeError:
-                progress = 1
-            progress_bar = (emoji_before * (progress-1)) + emoji_mid + emoji_after * (UPDATE_FREQUENCY-progress)
-            duration_formmated = Convert.length_format(current_track.duration)
-            rembed.add_field(name="↔️ Length",
-                             value=f'`{duration_formmated}`')
-            rembed.set_footer(text=f"{Convert.length_format(self.time_position)} [ {progress_bar} ] {duration_formmated}")
-
-            rembed.add_field(name="📝 Lyrics",
-                             value=f"*Available in {len(current_track.subtitles)} languages*" if getattr(current_track,"subtitles",None) else "*Unavailable*")
-        elif current_track.is_livestream:
-            rembed.add_field(name="↔️ Time-lapse",
-                             value=f'`{current_track.time_lapse_frame // 50}`')
-
-        # these are always added
-        rembed.add_field(name="📶 Volume ",
-                            value=f"`{self.volume_percentage}%`")\
-                .add_field(name="⏩ Tempo",
-                            value=f"`{self.tempo:.2f}`")\
-                .add_field(name="ℹ️ Pitch",
-                            value=f'`{self.pitch:.2f}`')\
-                \
-                .add_field(name="🔊 Voice Channel",
-                            value=f"{self.guild.voice_client.channel.mention}")\
-                .add_field(name="🔂 Looping",
-                            value=f'**{Convert.bool_to_str(self.looping)}**' if not current_track.is_livestream else "Livestream" ) \
-                .add_field(name="🔁 Queue looping",
-                            value=f'**{Convert.bool_to_str(self.queue_looping)}**')\
-                
-        if self.get(1):
-            rembed.add_field(name="🎶 Upcoming track",value=self[1].title)
-        elif self.auto_play and not self.queue_looping:
-            rembed.add_field(name="🎶 Upcoming track (Auto play)",value= current_track.recommend.title)
-
-        return rembed
 
     async def make_next_audio_message(self):
         """Remove the current audio message and make a new one, can be editing or sending a new one."""
-        from .voice_state import clear_audio_message
 
-        target : Union[discord.Message,discord.TextChannel] = self.audio_message.channel
-        next_track = self[0]
-        async for msg in target.history(limit = 3):
+        next_track = self.current_track
 
-            if msg.id == self.audio_message.id:
-                
-                #if within 3 message, found the now playing message then use that as the target for editing
-                if self.audio_message.reference is None:
-                    target = await target.fetch_message(msg.id)
+        is_reply = self.audio_message.reference
 
-        if next_track.request_message:
-            await next_track.request_message.delete()
-            next_track.request_message = None
+        if next_track:
 
-        if isinstance(target,discord.TextChannel): #
-            await clear_audio_message(self.guild)
-                
-        await self.create_audio_message(target)
+            if self.audio_message.embeds[0].url == next_track.webpage_url:
+                return logger.debug("Track is the same, not updating")
+            
+            if (self.looping or self.queue_looping):
+
+                if not is_reply:
+                    if next_track.request_message:
+                        await clear_audio_message(specific_message= next_track.request_message)
+                        next_track.request_message = None
+                    return await self.create_audio_message(self.audio_message)
+            
+        await clear_audio_message(self)
+        
+        if next_track:
+            
+            if next_track.request_message:
+                await self.create_audio_message(next_track.request_message)   
+                next_track.request_message = None
+            elif is_reply:
+                await self.create_audio_message(self.audio_message.channel)
+            else:
+                await self.create_audio_message(self.audio_message)
+
+        else:
+            self.audio_message = None
 
     async def update_audio_message(self):
         audio_msg = self.audio_message
 
         if not audio_msg: 
-            return logging.warning("Audio message adsent when trying to update it.")
+            return logger.warning("Audio message adsent when trying to update it.")
 
         from my_buttons import MusicButtons
         await audio_msg.edit(
-            embed = self.audio_message_embed,
+            embed = ReplyEmbeds.audio_displayer(self),
             view = MusicButtons.AudioControllerButtons(self)
         )
-
 
     async def create_audio_message(self,target:Union[discord.TextChannel,discord.Message] = None):
         """
         Create the discord message for displaying audio playing, including buttons and embed
         accecpt a text channel or a message to be edited
         """
+        if not self.current_track:
+            return 
+        
         from my_buttons import MusicButtons
+        from literals   import ReplyEmbeds
 
         message_info = {
-            "embed": self.audio_message_embed,
-            "view": MusicButtons.AudioControllerButtons(self)
+            "embed": ReplyEmbeds.audio_displayer(self),
+            "view" : MusicButtons.AudioControllerButtons(self)
         }
+
+        self.audio_view = message_info["view"]
 
         if isinstance(target,discord.Message):
             await target.edit(**message_info)
             self.audio_message = await target.channel.fetch_message(target.id)
 
         if isinstance(target,discord.TextChannel):
+            self.current_track.request_message
             self.audio_message = await target.send(**message_info)
 
         #A thread that keeps updating the audio progress bar until the audio finishs
         t = self[0]
 
-        if t.is_livestream or not t.duration: 
+        if  not t.duration: 
             return 
 
         async def run():
-            last_tp = 1
             while self.get(0) == t: 
+
                 if not self[0].source:
-                    # time.sleep(UPDATE_DELAY)
                     await asyncio.sleep(UPDATE_DELAY)
                     continue
-                
+
+                if not self.guild.voice_client:
+                    break
 
                 if not self.guild.voice_client.is_paused():
                     await self.update_audio_message()
-                await asyncio.sleep(UPDATE_DELAY)
-                # time.sleep(max(self[0].duration/UPDATE_FREQUENCY,2))
 
+                await asyncio.sleep(UPDATE_DELAY)
+
+            logger.info("Exited update loop")
 
         self._event_loop.create_task(run())

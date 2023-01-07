@@ -1,6 +1,5 @@
-from string_literals import MyEmojis
 import re
-#I stored some useful function here :)
+# I stored some useful function here :)
 def extract_int_from_str(string:str)->int:
     """
     Find the first number in a string, raises `ValueError` if not found
@@ -21,14 +20,10 @@ def str_to_bool(string:str)->bool:
     elif _true or _false: 
         return _true or not _false
     return None
-
-
-def bool_to_str(value:bool) -> str:
-    if value == True: return f"On {MyEmojis.discord_on}"
-    if value == False: return f"Off {MyEmojis.discord_off}"
-    return "Unknown"
     
 def length_format(totalSeconds:int) -> str:
+    if totalSeconds is None:
+        return "Unknown"
     if totalSeconds < 3600:
         Min = int(totalSeconds // 60)
         Sec = int(totalSeconds % 60)

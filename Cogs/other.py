@@ -5,11 +5,12 @@ import discord
 from discord.ext import commands
 import logging
 
-from Database import Management
+import database.server as serverdb
+
+logger = logging.getLogger(__name__)
 
 class OtherCommands(commands.Cog):
     def __init__(self,bot):
-        logging.info("HELP commands is ready")
         self.bot = bot
 
         from time import time as epochTime
@@ -70,7 +71,7 @@ class OtherCommands(commands.Cog):
         if len(new_prefix) > 5: 
             return await ctx.replywm("🚫 Prefix cannot be longer than 5 characters")
         
-        Management.overwrite_server_database(ctx.guild,
+        serverdb.overwrite_server_database(ctx.guild,
                                             key="prefix",
                                             value=new_prefix)
 
@@ -85,7 +86,7 @@ class OtherCommands(commands.Cog):
         if mode == False and ctx.guild.song_queue:
             return await ctx.replywm(f"There are still tracks remaining in the queue, it must be empty to perform this command. ( `{ctx.prefix}queue clear` will clear it for you )")
 
-        Management.overwrite_server_database(ctx.guild,
+        serverdb.overwrite_server_database(ctx.guild,
                                             key="queuing",
                                             value=mode)
         await ctx.replywm("Song tracks will now queue up when being requested" if mode else "Song tracks will now be instantly played when requested")
@@ -96,7 +97,7 @@ class OtherCommands(commands.Cog):
     async def auto_clear_queue(self,ctx,mode):
         mode:bool = commands.converter._convert_to_bool(mode)
         
-        Management.overwrite_server_database(ctx.guild,
+        serverdb.overwrite_server_database(ctx.guild,
                                             key="autoclearing",
                                             value=mode)
 

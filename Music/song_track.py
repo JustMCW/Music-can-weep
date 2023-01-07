@@ -1,6 +1,6 @@
 import logging
 from io import BytesIO
-from typing import Callable,Deque
+from typing import Callable,Deque,List,TypedDict,Any,Union  
 from typing_extensions import Self
 
 import discord
@@ -9,8 +9,15 @@ from discord.opus  import Encoder
 
 from collections import deque
 from youtube_dl import YoutubeDL
-from youtube_utils    import YoutubeVideo,get_recommendation
+from youtube_utils import ( 
+    YoutubeVideo,
+    get_recommendation,
+    url_matcher,
+    search_from_youtube,
+    get_spotify_track_title,
+)
 
+import json
 import audioop
 
 # for live streaming
@@ -18,26 +25,88 @@ import threading
 import re
 import requests
 
+logger = logging.getLogger(__name__)
+
 FRAME_SIZE = Encoder.FRAME_SIZE
+DEFAULT_SAMPLE_RATE = 48000
+
+from enum import Enum
+
+class TrackDomain(Enum):
+    YOUTUBE    = "youtube"
+    SOUNDCLOUD = "soundcloud"
+    SPOTIFY    = "spotify"
+    DISCORD_ATTACHMENT = "discordapp"
+
+class youtube_dl_info(TypedDict):
+    id: str
+    title: str
+    formats: list
+    thumbnails: list
+    description: str
+    upload_date: str
+    uploader: str
+    uploader_id: str
+    uploader_url: str
+    channel_id: str
+    channel_url: str
+    duration: int
+    view_count: int
+    average_rating: Any
+    age_limit: int
+    webpage_url: str
+    categories: list
+    tags: list
+    is_live: Any
+    automatic_captions: dict
+    subtitles: dict
+    chapters: list
+    channel: str
+    extractor: str
+    webpage_url_basename: str
+    extractor_key: str
+    playlist: Any
+    playlist_index: Any
+    thumbnail: str
+    display_id: str
+    requested_subtitles: Any
+    requested_formats: tuple
+    format: str
+    format_id: str
+    width: int
+    height: int
+    resolution: Any
+    fps: int
+    vcodec: str
+    vbr: float
+    stretched_ratio: Any
+    acodec: str
+    abr: float
+    ext: str
 
 #Some options for extracting the audio from YT
 YDL_OPTION =  {
-                "format": "bestaudio",
-                # 'restrictfilenames': True,
-                'noplaylist': True,
-                # 'nocheckcertificate': True,
-                # 'ignoreerrors': False,
-                # 'logtostderr': False,
-                "no_cache_dir" : True,
-                "rm_cache_dir" : True, #Links are only avaible for a short period of time, no point of doing cache
+    "format": "bestaudio",
+    # 'restrictfilenames': True,
+    'noplaylist': True,
+    # 'nocheckcertificate': True,
+    # 'ignoreerrors': False,
+    # 'logtostderr': False,
+    "no_cache_dir" : True,
+    "rm_cache_dir" : True, #Links are only avaible for a short period of time, no point of doing cache
 
-                "no_color": True,
-                # 'cachedir': "./cache",
-                'quiet': True,
-                'no_warnings': False,
-                'default_search': "url",#'auto',
-                'source_address': '0.0.0.0'
-                }
+    "no_color": True,
+    # 'cachedir': "./cache",
+    'quiet': True,
+    'no_warnings': False,
+    'default_search': "url",#'auto',
+    'source_address': '0.0.0.0'
+}
+
+DEFAULT_FFMPEG_OPTION = {
+    "before_options" : "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+    "options": "-vn"
+}
 
 class RawBytesAudioSource(discord.AudioSource):
     """This audio source reads from a bytes that has been pre-defined"""
@@ -54,13 +123,12 @@ class RawBytesAudioSource(discord.AudioSource):
 class FFmpegPCMAudio(discord.FFmpegPCMAudio):
     returncode : int = None
     def _kill_process(self) -> None:
-        logging.info("-------------Kill process-----------------")
         super()._kill_process()
         if not self._process is MISSING:
             self.returncode = self._process.returncode
 
     def __del__(self) -> None:
-        logging.info(f"Deleted : {self.__class__.__name__}")
+        logger.debug(f"Deleted : {self.__class__.__name__}")
 
 discord.FFmpegPCMAudio = FFmpegPCMAudio
 
@@ -134,12 +202,77 @@ class SeekableAudioSource(discord.PCMVolumeTransformer):
 
     #We cleaned the original source elsewhere. So we don't have to here
     def cleanup(self) -> None:
-        logging.info("Audio thread exited.")
+        logger.info("Audio thread exited.")
         self.audio_bytes.close()
     
     def __del__(self) -> None:
         if not self.audio_bytes.closed:
             self.audio_bytes.close()
+
+class LiveStreamAudioSource(discord.PCMVolumeTransformer):
+    """
+    
+    """
+    source_url      : str
+    audio_fragments : List[discord.FFmpegPCMAudio]
+    audio_index     : int # indicates which audio, we're wokring on
+
+    def __init__(
+        self, 
+        source_url : str, 
+        volume     : float = 1, 
+        ffmpeg_options : dict = DEFAULT_FFMPEG_OPTION,
+    ):
+        self.source_url  = source_url
+        self.volume      = volume
+        self.audio_index = 0 
+        self.ffmpeg_options = ffmpeg_options
+
+        self.collect_audio_fragments()
+
+    def collect_audio_fragments(self):
+        """
+        read 30 seconds total worth of audio from the source url, 
+        as 6 fragments with each of them being 5 seconds long
+        and set it to `self.audios`
+        """
+        response = requests.get(self.source_url)
+        content = response.content.decode("utf-8")
+
+        # Extract audio from the the urls
+        urls = re.findall(r"https://.+seg\.ts",content)
+        self.audio_fragments = [
+            discord.FFmpegPCMAudio(source=url, **self.ffmpeg_options)
+            for url in urls
+        ]
+
+    def read(self) -> bytes:
+        data = self.audio_fragments[self.audio_index].read()
+
+        # Moving on to the next fragment
+        if not data:
+
+            self.audio_fragments[self.audio_index].cleanup()
+            self.audio_index += 1
+
+            # reached the end of the current fragment 
+            if self.audio_index == len(self.audio_fragments):
+                self.next_fragment()
+
+            return self.read()
+
+        # Modify Volume
+        return audioop.mul(data, 2, min(self.volume, 2.0))
+
+    def next_fragment(self):
+        print("Thank you, next")
+        self.cleanup()
+        self.audio_index = 0
+        self.collect_audio_fragments() 
+
+    def cleanup(self) -> None:
+        for src in self.audio_fragments:
+            src.cleanup()
 
 class AutoPlayUser(discord.Member):
     mention = "Auto-play"
@@ -147,28 +280,41 @@ class AutoPlayUser(discord.Member):
     display_avatar="https://cdn.discordapp.com/attachments/954810071848742992/1026654075888078878/unknown.png"
 
 class SongTrack:
-    request_message : discord.Message
-    source          : SeekableAudioSource
-    # we have a completely different implentation for live streams
-    is_livestream   : bool 
-    time_lapse_frame = 0
-
-    recommendations : Deque[YoutubeVideo]
-
-    # Defaults
-    title = "Track title"
+    title = "title"
     duration = 0
-    thumbnail = "https://tse2.mm.bing.net/th?id=OIP.9hREDpFDH5QAwXMBfrD2yQHaHa&pid=Api"
-    webpage_url = "https://www.youtube.com"
-    source_url = "" # This must be defined before calling `SongTrack.play``
+    thumbnail = ""
 
+    # The url displayed on the embed
+    webpage_url = ""
+    # This must be defined before calling `SongTrack.play`
+    source_url  = ""  
 
-    def __init__(self,requester:discord.Member = AutoPlayUser,request_message : discord.Message = None, seekable = True):
+    sample_rate     : int
+    request_message : discord.Message
+    source          : Union[SeekableAudioSource,LiveStreamAudioSource] = None
+
+    def __init__(
+        self,
+        title: str,
+        duration: int,
+        thumbnail: str,
+        webpage_url : str,
+        source_url: str,
+        requester:discord.Member = AutoPlayUser,
+        request_message : discord.Message = None, 
+        seekable = True
+    ):
+        self.title = title
+        self.duration = duration
+        self.thumbnail = thumbnail
+
+        self.webpage_url = webpage_url
+        self.source_url = source_url
         
         self.requester = requester
         self.request_message = request_message
+
         self.source = None
-        self.recommendations = deque([])
 
         # In fact, every audio can be seekable using my implementation.
         # However i just don't want audio with long duarion taking tons of RAM away.
@@ -191,161 +337,124 @@ class SongTrack:
     def volume(self,new_vol : float):
         self.source.volume = new_vol
 
-    def recreate_source_url(self, failure : bool=False):
-        """Regenerate the source url for the song track, this is bulit for the 403 http error"""
-        #Pick the right format in which we can use ffmpeg on it.
-        if failure:
-            with YoutubeDL(YDL_OPTION) as ydl:
-                info = ydl.extract_info(self.webpage_url,download=False,process=False )
-                self.formats = info["formats"]
-
-        selected_format = None
-        for fm in self.formats:
-            if fm["url"].startswith("https://rr"):
-                selected_format = fm
-                break
-        selected_format = selected_format or self.formats[0]
-
-        if failure and self.source_url == selected_format["url"]:
-            logging.warning("Failure of recreation, repeated...")
-            return self.recreate_source_url(failure)
-
-        self.source_url   = selected_format["url"]
-        self.audio_asr    = selected_format.get("asr",48000)
-
-    @classmethod
-    def create_track(cls,query:str,requester:discord.Member,request_message : discord.Message = None) -> Self:
-
-        with YoutubeDL(YDL_OPTION) as ydl:
-            info = ydl.extract_info(query,download=False,process=False)
-
-        if 'entries' in info: 
-            info = info["entries"][0]  
-    
-        logging.info("YT-dl extraction successful.")
-        track = cls(requester,request_message, seekable = info["duration"] < 600)
-
-        yt_src_attrs = ("title","webpage_url","duration","thumbnails",
-                        "channel","channel_url",
-                        "uploader","uploader_url",
-                        "subtitles","formats")
-
-        for key,value in info.items():
-            if key in yt_src_attrs:
-                setattr(track,key,value)
-        
-        # configuring 
-        track.thumbnail = track.thumbnails[-1]["url"]
-
-        track.is_livestream = track.duration == 0
-        if track.is_livestream:
-            track.seekable = False
-
-        track.recreate_source_url()
-
-        return track
-    
-    @classmethod
-    def from_attachment(cls, attachment : discord.Attachment, requester : discord.Member):
-        track = cls(requester,seekable=False)
-        
-        track.title = attachment.filename
-        track.webpage_url = attachment.url
-        track.source_url = attachment.proxy_url
-
-        return track
+    def get_source(self, volume, ffmpeg_option) -> SeekableAudioSource:
+        return SeekableAudioSource(
+            seeking = self.seekable, 
+            original = discord.FFmpegPCMAudio(
+                source=self.source_url, 
+                **ffmpeg_option
+            ), 
+            volume = volume
+        )
 
     def play(self,
             voice_client:discord.VoiceClient,
-            after:callable(str)=None,
-            volume:float=1,
-            pitch:float = 1,
-            tempo:float = 1,
+            after :callable(str)=None,
+            volume :float=1,
+            pitch  :float = 1,
+            tempo  :float = 1,
+            force_apply = False # if true, the sample rate will be set to 48000 if it's unkwown
         ):
         if not self.source_url:
-            return logging.error("Source url not defined")
-
-        FFMPEG_OPTION = {
-            "before_options" : "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-            "options": "-vn"
-        }
-        
-        if getattr(self,"audio_asr",None):
-            FFMPEG_OPTION["options"] += f' -af asetrate={self.audio_asr * pitch},aresample={self.audio_asr},atempo={max(round(tempo/pitch,8),0.5)}'
-        else:
-            logging.info("Cannot modify pitch and speed if audio sample rate is not defined.")
-
-        if not self.is_livestream:
-            src = SeekableAudioSource(
-                seeking = self.seekable, 
-                original = discord.FFmpegPCMAudio(source=self.source_url, **FFMPEG_OPTION), 
-                volume = volume
-            )
-
-            self.source = src
-            voice_client.play(src,after=after)
-
-        else:
-
-            #we play live here
-            print("LIVE")
-
-            ready = threading.Event()
-            end   = threading.Event()
-
-            class TimeLaspeFPA(discord.FFmpegPCMAudio):
-                def read(_) -> bytes:
-                    self.time_lapse_frame += 1
-                    return super().read()
-
-            def stream() -> None:
-
-                response = requests.get(self.source_url)
-                content = response.content.decode("utf-8")
-                
-                # Extract the urls
-                urls = re.findall(r"https://.+seg\.ts",content)
-                audios = [
-                    discord.PCMVolumeTransformer(
-                        TimeLaspeFPA(source=url, **FFMPEG_OPTION),
-                        volume = volume
-                    ) 
-                    for url in urls
-                ]
-                
-                def playnext(index):
-                    # Not the first audio
-                    if self.source:
-                        self.source.cleanup()
-                        # Stopped
-                        if self.source.original.returncode == -9:
-                            end.set()
-                            return ready.set()
-
-                    # Last file
-                    if index >= len(audios):
-                        ready.set()
-                        return 
-
-                    audio = audios[index]
-                    self.source = audio
-                    voice_client.play(
-                        audio,
-                        after = lambda _: playnext(index+1)
-                    )
-                
-                playnext(0)
-
-                # every 30 seconds ?
-                ready.wait(60)
-                ready.clear()
-
-                if voice_client.is_connected() and not end.is_set():
-                    stream()
-                else:
-                    after()
+            return logger.error("Source url not defined")
+   
+        ffmpeg_option = DEFAULT_FFMPEG_OPTION.copy()
             
-            threading.Thread(target=stream).start()
+        # Modifying pitch & tempo, by applying ffmpeg options
+
+        sample_rate = self.sample_rate
+        
+        if not sample_rate and force_apply:
+            logger.info("Forcing the sample rate to be 48000")
+            sample_rate = DEFAULT_SAMPLE_RATE
+
+        if sample_rate:
+            ffmpeg_option["options"] += f' -af asetrate={self.sample_rate * pitch},aresample={self.sample_rate},atempo={max(round(tempo/pitch,8),0.5)}'
+        else:
+            logger.info("Audio sample rate is undefined.")
+
+        logger.info(f"FFMPEG option : {ffmpeg_option}")
+        self.source = self.get_source(volume,ffmpeg_option)
+        voice_client.play(self.source,after=after)
+        return
+
+    def to_dict(self) -> dict:
+        """Determinds how the track is going to be stored in a database"""
+        raise NotImplementedError
+
+class WebsiteSongTrack(SongTrack):
+    info : youtube_dl_info
+    webpage_url  : str
+    uploader     : tuple[str,str]
+    sample_rate  : int
+
+    def __init__(self, url, *args, **kwargs):
+        
+        with YoutubeDL(YDL_OPTION) as ydl:
+            info : youtube_dl_info = ydl.extract_info(url,download=False,process=False)
+        logger.debug("YT-dl extraction successful.")
+
+        self.info = info
+        audio_format = info["formats"][0]
+        
+
+        for fm in info["formats"]:
+            if fm["asr"] == DEFAULT_SAMPLE_RATE or fm["asr"] == 44100:
+                audio_format = info["formats"] = fm
+                break
+
+            # r = requests.get(audio_format["url"])
+            # data = r.text.replace("</BaseURL>","\n").replace("<BaseURL>","\n")
+            # urls = re.findall("(https://.+)",data)
+            # audio_format["url"] = audio_format["fragment_base_url"]
+
+        super().__init__(
+            info["title"], 
+            info["duration"], 
+            info.get("thumbnail",info["thumbnails"][-1]["url"]), 
+            info["webpage_url"],
+            audio_format["url"] if not audio_format["url"].startswith("https://manifest") else  audio_format["fragment_base_url"], 
+            *args, **kwargs
+        )
+        self.webpage_url = info["webpage_url"]
+        self.uploader = (info["uploader"],info["uploader_url"])
+        self.sample_rate = audio_format.get("asr")
+
+    def to_dict(self) -> dict:
+        return {
+            "title" : self.title,
+            "uploader" : self.uploader[0],
+            "uploader_url" : self.uploader[1],
+            "url" : self.webpage_url,
+            "duration" : self.duration,
+            "thumbnail": self.thumbnail,
+        }
+
+class YoutubeTrack(WebsiteSongTrack):
+    recommendations : Deque[YoutubeVideo]
+    channel : tuple[str,str]
+    is_live : bool
+
+    def __init__(
+        self, 
+        url : str, 
+        *args, **kwargs
+    ):
+        super().__init__(url, *args, **kwargs)
+        self.recommendations = deque([])
+        self.channel = (self.info["channel"],self.info["channel_url"])
+        self.is_live = bool(self.info["is_live"])
+
+
+    def get_source(self, volume, ffmpeg_option) -> Union[SeekableAudioSource, LiveStreamAudioSource]:
+        if self.is_live:
+            return LiveStreamAudioSource(
+                self.source_url,
+                volume,
+                ffmpeg_option
+            )
+        else:
+            return super().get_source(volume, ffmpeg_option)
 
     def _generate_rec(self):
         """generates the recommendation of this track"""
@@ -358,6 +467,137 @@ class SongTrack:
     def recommend(self) -> YoutubeVideo:
         try:
             return self.recommendations[0]
-        except IndexError:
+        except (IndexError, KeyError):
             self._generate_rec()
             return self.recommendations[0]
+
+    def to_dict(self) -> dict:
+        return {
+            "title" : self.title,
+            "channel" : self.channel[0],
+            "channel_url" : self.channel[1],
+            "url" : self.webpage_url,
+            "duration" : self.duration,
+            "thumbnail": self.thumbnail,
+        }
+
+class SoundcloudTrack(WebsiteSongTrack):
+    pass
+
+class SpotifyTrack(WebsiteSongTrack):
+    def __init__(self, spotify_url, *args, **kwargs):
+        title = get_spotify_track_title(spotify_url)
+        url = search_from_youtube(title,1)[0].url
+        super().__init__(url, *args, **kwargs)
+
+class WebFileTrack(SongTrack):
+    file_format : str
+    file_size   : int # in bytes
+    
+
+    def __init__(
+        self, 
+        title: str, 
+        source_url: str, 
+        file_format: str,
+        file_size : int,
+
+        duration: int = None, 
+        # we are likely to not have a thumbnail
+        thumbnail: str = "https://tse2.mm.bing.net/th?id=OIP.9hREDpFDH5QAwXMBfrD2yQHaHa&pid=Api", 
+        requester: discord.Member = AutoPlayUser, 
+        request_message: discord.Message = None, 
+        seekable=True
+    ):
+        self.file_format = file_format
+        self.file_size   = file_size
+        super().__init__(
+            title=title, 
+            duration=duration, 
+            thumbnail=thumbnail, 
+            webpage_url=source_url,  # we dont have a webpage
+            source_url =source_url, 
+            requester=requester, 
+            request_message=request_message, 
+            seekable=seekable
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "title" : self.title,
+            "url" : self.source_url,
+            "thumbnail": self.thumbnail,
+        }
+
+class UnknownSourceFileTrack(WebFileTrack):
+    def __init__(self,source_url : str, *args,**kwargs):
+        super().__init__(
+            title="Unknown",
+            source_url=source_url,
+            file_format="Unknown",
+            file_size="Unknown",
+            *args,**kwargs)
+
+class DiscordFileTrack(WebFileTrack):
+    def __init__(
+        self, 
+        url: str,
+        requester: discord.Member, 
+        request_message: discord.Message = None, 
+    ):
+
+        # The following implementation is only for discord attachments
+        if url_matcher(url)["domain"] != TrackDomain.DISCORD_ATTACHMENT.value:
+            return 
+
+        headers = requests.head(url).headers
+
+        file_name, extension = re.search(
+            r"filename=(.+)\.(.+)\Z",
+            headers["Content-Disposition"]
+        ).groups()
+
+        super().__init__(
+            title= file_name,
+            source_url=url,
+            file_size  =headers["Content-Length"],
+            file_format=headers["Content-Type"] or extension,
+
+            requester=requester, 
+            request_message=request_message, 
+            seekable=False
+        )
+        
+
+DOMAIN_TRACK_TYPE = {
+    TrackDomain.YOUTUBE:YoutubeTrack,
+    TrackDomain.SOUNDCLOUD:SoundcloudTrack,
+    TrackDomain.SPOTIFY:SpotifyTrack,
+
+    TrackDomain.DISCORD_ATTACHMENT:DiscordFileTrack,
+}
+
+def create_track_from_url(
+    url : str, 
+    requester: discord.Member = AutoPlayUser, 
+    request_message: discord.Message = None
+) -> SongTrack:
+
+    kwargs = {
+        "requester":requester,
+        "request_message":request_message
+    }
+    
+    matches = url_matcher(url)
+    if not matches:
+        raise ValueError(f"{url} is not a valid URL")
+
+    for domain, track_type in DOMAIN_TRACK_TYPE.items():
+        if domain.value == matches["domain"]:
+            logger.info(f"Track domain : {domain.value} | Track type : {track_type.__name__}")
+            return track_type(url,**kwargs)
+
+    try:
+        return WebsiteSongTrack(url,**kwargs)
+    except KeyError:
+        return UnknownSourceFileTrack(url,**kwargs)
