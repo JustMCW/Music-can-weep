@@ -16,7 +16,7 @@ class URLMatch(TypedDict):
     page : Optional[str]
 
 
-def url_matcher(url) -> Optional[URLMatch]:
+def url_matcher(url: str) -> Optional[URLMatch]:
     """return a match for a url, None for no matches"""
     matches = re.search(r"(https/|HTTP)?://(\w+\.)?(.+)\.(\w+)/([^/]+)?/?(.+)?", url)
 
