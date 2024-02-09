@@ -76,17 +76,19 @@ def generate_search_result_attachments(search_result : List[YoutubeVideo]) -> di
     }
 
 async def play_track_handler(
-    ctx: commands.Context, 
+    ctx: Union[commands.Context,discord.Interaction], 
     url: str, 
     reply_msg: discord.Message,
     position = TrackPosition.Last, 
-    author: Optional[Union[discord.Member,discord.User]] = None 
+    author: Optional[discord.Member] = None 
 ):
 
     if not author:
-        author = ctx.author
+        author = ctx.author #type: ignore
         if not author:
-            return
+            raise RuntimeError("No author found in ctx, and it's not passed in as parameter.")
+    if not isinstance(author, discord.Member):
+        raise RuntimeWarning("Why is the author not a member ?")
 
     guild = ensure_exist(ctx.guild)
     queue = music.get_song_queue(guild)
@@ -431,8 +433,7 @@ async def setup(bot: commands.Bot):
             return await interaction.response.send_message("This is a dm, you have to be in a server to play stuff.",ephemeral=True)
         author = interaction.user
 
-        
-
+    
         if not interaction.guild.voice_client:
             if not author.voice:
                 return await interaction.response.send_message("You gotta join a voice channel.",ephemeral=True)
@@ -440,18 +441,26 @@ async def setup(bot: commands.Bot):
         url = message.content
 
         if not url_matcher(message.content):
-            if not message.embeds or not url_matcher(message.embeds[0].url):
-                return await interaction.response.send_message("That message does not contain a url, or im just noob at finding links.",ephemeral=True)
-            url = message.embeds[0].url
+            embeds = message.embeds
+            if not embeds or not embeds[0].url or not url_matcher(embeds[0].url):
+                return await interaction.response.send_message("That message does not contain a URL, or im just noob at finding links.",ephemeral=True)
+            url = embeds[0].url
 
         await interaction.response.defer(ephemeral=True)
         msg = await message.reply("Playing this because why not")
-        await play_track_handler(interaction,url,msg,author=interaction.user)
+
+        await play_track_handler(
+            interaction,
+            url,
+            msg,
+            # it doesn't really make sense for it not to be a member (we are only ever working in guilds)
+            author= ensure_type(interaction.user, discord.Member) 
+        )
 
     @bot.tree.context_menu(name="Join their vc")
     async def join_user(interaction: discord.Interaction, member: discord.Member):
         voice = member.voice
-        if not voice:
+        if not voice or not voice.channel:
             return await interaction.response.send_message("That user is not in a voice channel.",ephemeral=True)
         await music.join_voice_channel(voice.channel)
         await interaction.response.send_message(f"{interaction.user.name} forced me to join the {member.name}'s voice channel.")
