@@ -2,21 +2,29 @@
 import json
 import discord
 
-from typing import Callable,Dict
+from typing import *
 from keys import USERPLAYLIST_DATABASE
 
-from music.song_track import SongTrack
+from music import SongTrack
 
 Indentation = 4
 
 
-class UserDatabase(Dict[str,dict]):
+
+class TrackJson(TypedDict):
+    """Track as json"""
+    title : str
+    thumbnail : str
+    url : str
+
+class UserDatabase(Dict[str,List[TrackJson]]):
     """The place where a user's playlist and tracks are stored"""
     pass
 
+
 # edit can return this to indicate the deletion of the entire user dir
 DEL = "Del"
-FAV_KEY = "__favourite__"
+FAVOURITE = "<Favourite>"
 
 """
 DESPERATE
@@ -49,20 +57,29 @@ userid : {
 ORDER DOESN'T MATTER ?
 """
 
+_User = Union[discord.User, discord.Member]
+
 def encode_usr_id(id : int):
     first_digit = int(str(id)[0])
     return hex(id * first_digit)
 
 
-def get_all_data() -> Dict[int,UserDatabase]:
+def get_all_data() -> Dict[str,UserDatabase]:
     with open(USERPLAYLIST_DATABASE) as jsonf:
         return json.load(jsonf)
 
-def get_data_for(user: discord.User) -> UserDatabase:
-    return get_all_data().get(encode_usr_id(user.id),{})
+
+def get_data_for(user: _User) -> UserDatabase:
+    return get_all_data().get(encode_usr_id(user.id),UserDatabase())
+
+def get_all_playlist(user: _User, exclude_favourite = False) -> UserDatabase:
+    playlists = get_data_for(user)
+    if playlists and exclude_favourite:
+        del playlists[FAVOURITE]
+    return playlists
 
 def edit_data(
-    user : discord.User, 
+    user : _User, 
     edit : Callable[[dict],dict]
 ) -> UserDatabase:
     """Edit a user's data with a function taken in as paramater
@@ -70,14 +87,17 @@ def edit_data(
     data = get_all_data()
     encoded_id = encode_usr_id(user.id)
 
-    output = edit(
+    edited_data = edit(
         data.get(encoded_id,{})
     )
 
-    if output == DEL:
+    if not isinstance(edited_data,dict):
+        raise TypeError(f"Expect dict from edit function, got `{type(edited_data)}`")
+
+    if edited_data == DEL:
         del data[encoded_id]
     else:
-        data[encoded_id] = output
+        data[encoded_id] = edited_data
 
     with open(USERPLAYLIST_DATABASE,"w") as jsondb:
         json.dump(data,jsondb,indent = 4)
@@ -98,8 +118,16 @@ def edit_data(
 
     return new_data
 
-def make_playlist(
+
+def get_playlist(
     user : discord.User,
+    pl_name : str = FAVOURITE
+):
+    return get_data_for(user)[pl_name]
+
+
+def make_playlist(
+    user    : _User,
     pl_name : str
 ):
     """Make a new playlist for a user, 
@@ -112,44 +140,58 @@ def make_playlist(
 
     edit_data(user, make_pl)
 
-def delete_playlist(
-    user : discord.User,
-    pl_name : str
+def delete_playlists(
+    user : _User,
+    pl_names : List[str]
 ):
     def del_pl(data) -> dict:
-        del data[pl_name]
+        for name in pl_names:
+            del data[name]
         return data
 
     edit_data(user, del_pl)
 
-
 def add_track(
-    user : discord.User, 
-    track : SongTrack,
-    playlist_name : str = FAV_KEY
+    user : _User, 
+    tracks : Union[SongTrack,List[SongTrack]],
+    playlists : Union[str,List[str]] = FAVOURITE
 ) -> UserDatabase:
     """Add a track to the user's playlist database, returns the new playlist """
+    if isinstance(playlists, str):
+        playlists = [playlists]
 
     def append(data: dict) -> dict:
-        if not data.get(playlist_name):
-            # make_playlist(user,playlist_name)
-            data[playlist_name] = []
 
-        data[playlist_name].append(track.to_dict())
+        def _apeend(playlistname):
+            if not data.get(playlistname):
+                data[playlistname] = []
+
+            if isinstance(tracks,list):
+                data[playlistname].extend([track.to_dict() for track in tracks])
+            else:
+                data[playlistname].append(tracks)
+
+        if isinstance(playlists,list):
+            for playlistname in playlists:
+                _apeend(playlistname)
+        else:
+            _apeend(playlists)
+
         return data
 
     return edit_data(user, append)
 
-def remove_track(
-    user : discord.User, 
-    index: int,
-    playlist_name : str = FAV_KEY
+def remove_tracks(
+    user : _User, 
+    index: List[int],
+    playlist_name : str = FAVOURITE
 ) -> UserDatabase:
 
     # If it is the last song in the track, just remove the json file
     
     def delete(data: dict) -> dict:
         key,url = get_track_by_index(user, index)
+        
         if data.get(playlist_name):
             raise KeyError(f"{playlist_name} is not a valid playlist for {user.name}")
 
@@ -161,7 +203,10 @@ def remove_track(
 
     return edit_data(user, delete)
 
-def get_track_by_index(user, index: int) -> tuple:
+def get_track_by_index(
+    user: _User, 
+    index: int
+) -> tuple:
     FavList = get_data_for(user)
 
     if index < 0 or index >= len(FavList):

@@ -3,19 +3,20 @@ import re
 import json
 import requests
 
-from typing import List,TypedDict,Tuple
+# from functools import cache
+from typing import List,TypedDict,Tuple,Optional
 from bs4    import BeautifulSoup,element
 
 class URLMatch(TypedDict):
-    protocol : str
-    subdomain : str
-    domain : str
-    top_level_domain : str
-    directory : str
-    page : str
+    protocol : Optional[str]
+    subdomain : Optional[str]
+    domain : Optional[str]
+    top_level_domain : Optional[str]
+    directory : Optional[str]
+    page : Optional[str]
 
 
-def url_matcher(url) -> URLMatch:
+def url_matcher(url) -> Optional[URLMatch]:
     """return a match for a url, None for no matches"""
     matches = re.search(r"(https/|HTTP)?://(\w+\.)?(.+)\.(\w+)/([^/]+)?/?(.+)?", url)
 
@@ -36,7 +37,6 @@ def url_matcher(url) -> URLMatch:
         "directory" : directory,
         "page" : page,
     }
-
 
 
 class YoutubeVideo:
@@ -68,7 +68,7 @@ def run_test():
     assert extract_yt_url_from(f"<{example_link}>")==example_link
     assert extract_yt_url_from("https://www.youtube.com/watch?v=x8VYWazR5mE&ab_channel=Ayase%2FYOASOBI")=="https://www.youtube.com/watch?v=x8VYWazR5mE"
 
-
+# @cache
 def search_from_youtube(query:str, ResultLengthLimit:int=5,DurationLimit:int=3*3600) -> List[YoutubeVideo]:
     """
     Search youtube videos with a given string.
@@ -134,7 +134,6 @@ def get_playlist_data(playlist_url) -> Tuple[str,dict]:
     found : list[element.Tag] = soup.find_all("div",attrs={'data-testid':"track-row"})
 
     playlist = []
-
     # print(soup)
     for f in found:
         span = f.find_all(
@@ -168,7 +167,6 @@ def get_playlist_data(playlist_url) -> Tuple[str,dict]:
 
     return title,playlist
     
-
 def get_recommendation(url) -> List[YoutubeVideo]:
     r = requests.get(url)
     soup = BeautifulSoup(r.text, features="lxml")
@@ -191,32 +189,3 @@ def get_recommendation(url) -> List[YoutubeVideo]:
             print(item)
     return return_result
 
-def test(q):
-    url = search_from_youtube(q)[0].url
-    print(url)
-    #ytInitialPlayerResponse
-    r = requests.get(url)
-    soup = BeautifulSoup(r.text, features="lxml")
-
-    script =[s for s in soup.findAll("script") if "var ytInitialPlayerResponse = " in str(s)][0]
-    json_data = json.loads(re.search('var ytInitialPlayerResponse = (.+)[,;]{1}',str(script)).group(1))
-    # with open("new3.json","w") as f:
-    #     json.dump(json_data,f,indent=4)
-    adptfmts = json_data.get("streamingData").get("adaptiveFormats")
-    good_fmts = []
-    print(len(adptfmts))
-    for fmt in adptfmts:
-        print(fmt.get("mimeType"))
-        if fmt.get("mimeType") == "audio/webm; codecs=\"opus\"":
-            good_fmts.append(fmt)
-    print(good_fmts[0])
-    return good_fmts[-1]["url"]
-
-if __name__ == "__main__":
-    print(
-        url_matcher(
-            "https://www.youtube.com/watch?v=jfKfPfyJRdk"
-        )
-    )
-    # print(test("neko hacker home sweet home"))
-    # print(get_recommendation("https://www.youtube.com/watch?v=BnkhBwzBqlQ")[1].title)

@@ -1,14 +1,14 @@
-import asyncio
 import logging
 
 import discord
 from discord.ext import commands
 
+from database.server import read_database_of
+from typechecking import *
 from keys import *
-import database.server as serverdb
 
 #Logging
-LOG_LEVEL = logging.INFO
+LOG_LEVEL = logging.WARNING
 formatter = discord.utils._ColourFormatter()
 
 root_logger = logging.getLogger()
@@ -29,12 +29,13 @@ if LOG_FILE:
 
 #Prefixs
 async def get_prefix(bot, message:discord.Message):
-    guild : discord.Guild = message.guild
-    default_prfx = serverdb.defaultdb["prefix"]
+    guild = message.guild
 
     if guild:
-        return commands.when_mentioned_or(guild.database.get("prefix", default_prfx))(bot, message)
-    return commands.when_mentioned_or(default_prfx)(bot, message)
+        return commands.when_mentioned_or(
+            read_database_of(guild)["prefix"]
+        )(bot, message)
+    return commands.when_mentioned_or(DEFAULT_PREFIX)(bot, message)
 
 #Bot itself
 from cogs.help import MCWHelpCommand
@@ -45,8 +46,8 @@ bot = commands.Bot(command_prefix=get_prefix,
 
 @bot.event
 async def on_ready():
-    print(f"Running as \"{bot.user.name}#{bot.user.discriminator}\" [{bot.user.id}]")
-
+    bot_user = ensure_exist(bot.user)
+    logging.warning(f"Running as \"{bot_user.name}#{bot_user.discriminator}\" [{bot_user.id}]")
 
     #Load the cogs for the bot
     cogs = [
@@ -67,37 +68,43 @@ async def on_ready():
     root_logger.info(f"Succuessfully loaded cogs : {cogs}")
 
     #Since we cannot edit it direactly
-    bot.get_command("help").description = "☁️ Send guides about this bot and it's commands"
-    bot.get_command("help").usage = "{}help play"
+    help_cmd = ensure_exist(bot.get_command("help"))
+    help_cmd.description = "☁️ Send guides about this bot and it's commands"
+    help_cmd.usage = "{}help play"
 
     # Start a background task  
-    event = bot.get_cog("Event")
-    bot.on_message = event.on_message
-    event.changeBotPresence.start()
+    event = bot.get_cog("Events") 
+    bot.on_message = event.on_message #type: ignore
+    event.changeBotPresence.start()#type: ignore
 
 
 def main():
-    root_logger.debug("Program started")
+    if TEST_MODE:
+        logging.warning("Test mode enabled.")
 
-    if not discord.opus.is_loaded():
+    # OPUS is required to decode audio
+    if not discord.opus.is_loaded() and not TEST_MODE:
         discord.opus.load_opus(OPUS_LIB)
         root_logger.info(f"Loaded opus from {OPUS_LIB}")
 
-    #Just overwrite the reply function to never mention author.
-
-    async def reply_without_mention(self : commands.Context, *args,**kwargs):
-        kwargs["mention_author"] = False
-        return await self.reply(*args,**kwargs)
-
-    commands.Context.replywm = reply_without_mention
+    #Just overwriting the reply function to never mention author.
+    async def reply_without_mention(self : commands.Context, *args, mention_author = False,**kwargs):
+        if self.interaction is None:
+            return await self.send(*args, reference=self.message, mention_author=mention_author, **kwargs)
+        else:
+            return await self.send(*args, mention_author=mention_author, **kwargs)
+        # return await self.reply(*args,**kwargs)
+    commands.Context.reply = reply_without_mention
     
     bot.run(
         BOT_TOKEN,
         log_handler=None,
         root_logger=False
     )
-    root_logger.debug("Program exited.")
+   
       
 
 if __name__ == "__main__":
+    root_logger.debug("Program started")
     main()
+    root_logger.debug("Program exited.")

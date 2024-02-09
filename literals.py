@@ -3,14 +3,15 @@
 import discord
 import math
 import convert
+from string import Template
 from typing import TYPE_CHECKING
 
-from discord import PartialEmoji, VoiceChannel
+from discord import PartialEmoji
 
 if TYPE_CHECKING:
-    from music.song_queue import SongQueue
-from music.song_track import YoutubeTrack,WebFileTrack,WebsiteSongTrack
-from music.voice_constants import PROGRESSBAR_SIZE
+    from music import SongQueue
+from music import YoutubeTrack,WebFileTrack,WebsiteSongTrack
+from music import PROGRESSBAR_SIZE
 
 class MyEmojis:
     youtube_icon = "<:youtube_icon:937854541666324581>"
@@ -43,12 +44,9 @@ class ReplyStrings:
     not_in_server_msg = "🏘 This command can only be used in servers ⚜️"
     not_playing_msg = "🔇 No audio playing right now 🎹"
 
-    @staticmethod
-    def JOIN(voice_channel: VoiceChannel) -> str:
-        return f"🎧 Successfully connected to {voice_channel.mention} 📡"
-    @staticmethod
-    def LEAVE(voice_channel: VoiceChannel) -> str:
-        return f"🔇 Successfully disconnected from {voice_channel.mention} 👋"
+
+    JOIN = "🎧 Successfully connected to {0.mention} 📡"
+    LEAVE = "🔇 Successfully disconnected from {0.mention} 👋"
 
     user_not_in_vc_msg = "🎻 You must be in a voice channel first 🔊"
     bot_not_in_vc_msg = "📻 I am currently not in any voice channel 🔊"
@@ -84,12 +82,14 @@ class ReplyStrings:
 
 # Errors_msg
     missing_perms_msg = "🚫 You are lacking the permissions to perform this command"
-    missing_arg_msg = "💭 You are missing `{}` for this command to work"
+    missing_arg_msg = Template("💭 You are missing `$param` for this command to work")
     command_not_found_msg = "💭 This command was not found ( {} )"
     user_not_found_msg = f"🔍 User was not found 👻"
     channel_not_found_msg = f"🔍 Channel was not found 💬"
 
-    invaild_bool_msg = "🪗 Enter a vaild value : `on / off`"
+    invaild_bool_msg = "🪗 Enter a vaild boolean : `on / off`"
+
+    invalid_paramater = Template("🪗 Bad value : `$param`")
     queue_empty_msg = "📦 Queue is empty ... play some songs !"
     queue_disabled_msg = "This server has queuing disabled, run \"{}config queue on\" to turn it on again (requires admin permission)"
 
@@ -105,10 +105,7 @@ class ReplyEmbeds:
     @staticmethod
     def audio_displayer(queue : 'SongQueue') -> discord.Embed:
         """returns  discord embed for displaying the audio that is playing"""
-        current_track = queue.current_track
-
-        if not current_track:
-            return
+        current_track = queue[0]
 
         #Init embed + requester header + thumbnail
         rembed = discord.Embed( title= current_track.title,
@@ -166,7 +163,7 @@ class ReplyEmbeds:
             duration_formmated = convert.length_format(current_track.duration)
             rembed.add_field(name="↔️ Length",
                                 value=f'`{duration_formmated}`')
-            rembed.set_footer(text=f"{convert.length_format(queue.time_position)} [ {progress_bar} ] {duration_formmated}")
+            rembed.set_footer(text=f"{convert.length_format(int(queue.time_position))} [ {progress_bar} ] {duration_formmated}")
 
             rembed.add_field(name="📝 Lyrics",
                                 value=f"*Available in {len(current_track.subtitles)} languages*" if getattr(current_track,"subtitles",None) else "*Unavailable*")

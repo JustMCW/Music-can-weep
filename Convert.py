@@ -9,8 +9,8 @@ def extract_int_from_str(string:str)->int:
     except IndexError:
         raise ValueError("No number was found from the string")
 
-def str_to_bool(string:str)->bool:
-    #XOR logicgate 
+def str_to_bool(string:str) -> bool:
+    #XOR logic, allow one but not both
     string = string.lower()
     _true = any([w in string for w in ["ye","ya","tr","on","op"]])
     _false = any([w in string for w in ["no","na","fa","of","cl"]])
@@ -36,8 +36,10 @@ def length_format(totalSeconds:int) -> str:
     
 def timestr_to_sec(string:str)->int:
     #Its just a number.
-    try: return int(string) 
-    except ValueError: pass
+    try: 
+        return int(string) 
+    except (TypeError,ValueError): 
+        pass
 
     try:
         #Hours
@@ -94,3 +96,10 @@ def timestr_to_sec_ms(time_string:str) -> int:
 
     #Give back the result
     return (hour * 3600) + (min*60) + (sec) + (millisec / 1000)
+
+from discord.ext import commands
+
+class TimeConverter(commands.Converter[int]):
+    """Converts a string in the format of time to seconds"""
+    async def convert(self, ctx: commands.Context, argument: str) -> int:
+        return timestr_to_sec(argument)

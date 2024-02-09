@@ -1,15 +1,19 @@
 import discord
 from discord    import ButtonStyle,Interaction
 from discord.ui import View,Button,Modal,TextInput, button
+from discord.ext import commands
 
 from typing   import TYPE_CHECKING
 from literals import ReplyStrings,MyEmojis
+
+import music
 from music    import voice_utils
 
 if TYPE_CHECKING:
-    from music.song_queue import SongQueue
+    from music import SongQueue
 
-from guildext import GuildExt
+from typechecking import *
+
 
 import convert
 import database.user_playlist as playlistdb
@@ -23,12 +27,12 @@ async def inform_changes(
 ):
     """Notify other users for the changes, such as pausing, skipping."""
 
-    if len(voice_utils.voice_members(interaction.guild)) > 1:
-        return await interaction.response.send_message(content=f"{message} by {interaction.user.display_name}")
     try:
         await interaction.response.defer()
     except (discord.errors.HTTPException,discord.errors.InteractionResponded): 
         pass
+    if len(voice_utils.voice_members(interaction.guild)) > 1:
+        return await interaction.channel.send(content=f"{message} by {interaction.user.display_name}",delete_after=30)
 
 
 class ConfigModal(Modal,title = "Configuration of the audio"):
@@ -38,8 +42,8 @@ class ConfigModal(Modal,title = "Configuration of the audio"):
     
     async def on_submit(_self, interaction: Interaction) -> None:
 
-        guild : GuildExt = interaction.guild
-        queue = guild.song_queue
+        guild= interaction.guild
+        queue = music.get_song_queue(guild)
 
         vol_changed,tempo_changed,pitch_changed = False,False,False
 
@@ -59,7 +63,7 @@ class ConfigModal(Modal,title = "Configuration of the audio"):
                 else:
                     vol_changed = not vol_changed
                     #Updating to the new value
-                    guild.song_queue.volume_percentage = volume_percentage
+                    music.get_song_queue(guild).volume_percentage = volume_percentage
 
         if new_tempo:
 
@@ -74,7 +78,7 @@ class ConfigModal(Modal,title = "Configuration of the audio"):
             except ValueError:
                 return await interaction.response.send_message("Invalid tempo.",ephemeral=True)
             else:
-                guild.song_queue.tempo = new_tempo
+                music.get_song_queue(guild).tempo = new_tempo
                 tempo_changed = not tempo_changed
 
         if new_pitch:
@@ -98,7 +102,7 @@ class ConfigModal(Modal,title = "Configuration of the audio"):
 
         await queue.update_audio_message()
         if pitch_changed or tempo_changed:
-            if guild.voice_client and guild.voice_client._player and guild.song_queue:
+            if guild.voice_client and guild.voice_client._player and music.get_song_queue(guild):
                 queue.replay_track()
 
         await inform_changes(interaction,"New configuration of the audio set")
@@ -110,7 +114,7 @@ class MusicButtons:
         @button(style=ButtonStyle.grey,emoji="🗑")
         async def on_clear(self,interaction:Interaction,btn):
             await inform_changes(interaction,"Queue has been cleared")
-            interaction.guild.song_queue.cleanup()
+            interaction.music.get_song_queue(interaction.guild).cleanup()
 
     class AudioControllerButtons(View):
         """Contains all the buttons needed for the audio control message"""
@@ -133,8 +137,8 @@ class MusicButtons:
         @button(style=ROW1_COLOUR,emoji=MyEmojis.PREVIOUS,row=0,custom_id="previous")
         async def on_previous(self, interaction:Interaction, btn : Button):
             
-            guild : GuildExt = interaction.guild
-            queue = guild.song_queue
+            guild= interaction.guild
+            queue = music.get_song_queue(guild)
             if queue.queue_looping:
                 queue.shift_track(-1)
             else:
@@ -146,16 +150,18 @@ class MusicButtons:
 
         @button(style=ROW1_COLOUR,emoji=MyEmojis.REWIND,row=0,custom_id="rewind")
         async def on_rewind(self, interaction:Interaction, btn : Button):
-            interaction.guild.song_queue.time_position -= 5
+            queue = music.get_song_queue(interaction.guild)
+            queue.time_position -= 5
             await inform_changes(interaction,"Rewinded for 5 seconds")
 
         @button(style=ROW1_COLOUR,emoji=MyEmojis.PAUSE,row=0,custom_id="playpause")
         async def on_playpause(self, interaction:Interaction, btn : Button):
-            is_paused = voice_utils.is_paused(interaction.guild)
+            guild = interaction.guild
+            is_paused = voice_utils.is_paused(guild)
             if is_paused:
-                voice_utils.resume_audio(interaction.guild)
+                voice_utils.resume_audio(guild)
             else:
-                voice_utils.pause_audio(interaction.guild)
+                voice_utils.pause_audio(guild)
 
             await inform_changes(interaction, ReplyStrings.PAUSE if not is_paused else ReplyStrings.RESUME)
             
@@ -164,13 +170,13 @@ class MusicButtons:
 
         @button(style=ROW1_COLOUR,emoji=MyEmojis.FASTFORWARD,row=0,custom_id="forward")
         async def on_forword(self, interaction:Interaction, btn : Button):
-            interaction.guild.song_queue.time_position += 5
+            queue = music.get_song_queue(interaction.guild)
+            queue.time_position += 5
             await inform_changes(interaction,"Fast-forwarded for 5 seconds")
     
         @button(style=ROW1_COLOUR,emoji=MyEmojis.SKIP,row=0,custom_id="skip")
         async def on_skip(self, interaction:Interaction, btn : Button):
-            guild : GuildExt = interaction.guild
-            queue = guild.song_queue
+            queue = music.get_song_queue(interaction.guild)
             if queue.queue_looping:
                 queue.shift_track()
             else:
@@ -180,13 +186,15 @@ class MusicButtons:
         ###Row 2
         @button(style=ButtonStyle.red,emoji=MyEmojis.FAVOURITE,row=1,custom_id="favourite")
         async def on_favourite(self, interaction:Interaction, btn : Button):
-            guild : GuildExt = interaction.guild
-            queue = guild.song_queue
+            queue = music.get_song_queue(interaction.guild)
             track = queue.current_track
+
+            if not track:
+                raise RuntimeError("Favouriting no track?")
             
             playlistdb.add_track(
                 interaction.user,
-                track,
+                [track],
             )
             await interaction.response.send_message(
                 ephemeral=True,
@@ -207,8 +215,13 @@ class MusicButtons:
                 ephemeral=True,
                 content="Processing ..."
             )
-            queue : SongQueue = interaction.guild.song_queue
+            queue = music.get_song_queue(interaction.guild)
             track = queue.current_track
+
+            if not track:
+                raise RuntimeError("No track to be downloaded")
+
+
             asr = track.sample_rate
             track_bytes = io.BytesIO()
             
@@ -242,7 +255,7 @@ class MusicButtons:
         # @button(style=ButtonStyle.grey,emoji=MyEmojis.QUEUE,row=1, custom_id="queue")
         # async def on_displayqueue(self, interaction:Interaction, btn : Button):
         #     import datetime
-        #     queue = interaction.guild.song_queue
+        #     queue = interaction.music.get_song_queue
         #     emo = "▶︎" if not voice_state.is_paused(interaction.guild) else "\\⏸"
         #     await interaction.response.send_message(ephemeral=True,
         #         embed=discord.Embed(title = f"🎧 Queue | Track Count : {len(queue)} | Full Length : {convert.length_format(queue.total_length)} | Repeat queue : {ReplyStrings.prettify_bool(queue.queue_looping)}",
@@ -255,8 +268,8 @@ class MusicButtons:
 
         @button(style=ButtonStyle.grey,emoji=MyEmojis.TRACKLOOP,row=1,custom_id="loop")
         async def on_trackloop(self, interaction:Interaction, btn : Button):
-            guild : GuildExt = interaction.guild
-            queue = guild.song_queue
+            guild = ensure_exist(interaction.guild)
+            queue = music.get_song_queue(guild)
             queue.looping = not queue.looping
 
             await inform_changes(interaction,ReplyStrings.TRACK_LOOP(queue.looping))
@@ -264,8 +277,8 @@ class MusicButtons:
         
         @button(style=ButtonStyle.grey,emoji=MyEmojis.QUEUELOOP,row=1,custom_id="queueloop")
         async def on_queueloop(self, interaction:Interaction, btn : Button):
-            guild : GuildExt = interaction.guild
-            queue = guild.song_queue
+            guild= ensure_exist(interaction.guild)
+            queue = music.get_song_queue(guild)
             queue.queue_looping = not queue.queue_looping
 
             await inform_changes(interaction,ReplyStrings.QUEUE_LOOP(queue.queue_looping))
@@ -280,7 +293,7 @@ class MusicButtons:
         # @button(style=ButtonStyle.grey,emoji="↪️",row=1)
         # async def on_nextrec(self, interaction:Interaction, btn : Button):
         #     guild = interaction.guild
-        #     queue = guild.song_queue
+        #     queue = music.get_song_queue
 
         #     if not queue.auto_play:
         #         return await interaction.response.send_message(ephemeral=True,content="This button changes the next track played by auto-play, however auto-play is currently off, turn it on with \"queue autoplay on\"")
@@ -292,32 +305,19 @@ class MusicButtons:
 
 
     @staticmethod
-    async def on_play_again_btn_press(btn : discord.Interaction,bot):
-        ctx = await bot.get_context(btn.message)
+    async def on_play_again_btn_press(btn : discord.Interaction,bot : commands.Bot):
+        ctx = await bot.get_context(ensure_exist(btn.message))
+
+        if not ctx.voice_client and not btn.user.voice:
+            return await btn.response.send_message(
+                ephemeral=True,
+                content=ReplyStrings.user_not_in_vc_msg
+            )
+        await btn.response.defer()
+        from cogs.play import play_track_handler
 
         URL = btn.message.embeds[0].url
-
-        #Play the music
-        # if "discord" in URL:
-        #     if not ctx.voice_client:
-        #         if btn.user.voice is None:
-        #             return await btn.response.send_message("Be in voice pls :)")
-        #         await btn.user.voice.channel.connect()
-
-
-        #     from music.song_track import SongTrack
-        #     t = SongTrack(btn.user,seekable=False)
-        #     t.title = btn.message.embeds[0].title
-        #     t.source_url = t.webpage_url = URL
-
-        #     q : 'SongQueue' = btn.guild.song_queue
-        #     q.append(t)
-        #     q.play_first()
-        #     await q.create_audio_message(ctx.channel)
-        # else:
-        await ctx.invoke(bot.get_command('play'),
-                        query=URL,
-                        _btn=btn)
+        await play_track_handler(ctx,URL, await ctx.reply(f"{btn.user.display_name} plays this again ~"),author=btn.user)
 
     PlayAgainButton = View().add_item(
         Button(label="Replay this song !",

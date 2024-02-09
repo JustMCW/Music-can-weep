@@ -20,3 +20,4 @@ class QueueDisabled(errors.CommandError):
 class AudioNotSeekable(errors.CommandError): 
     pass
 
+
