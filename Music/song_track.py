@@ -107,7 +107,7 @@ YDL_OPTION =  {
     #"rm_cache_dir" : True, #Links are only avaible for a short period of time, no point of doing cache
 
     # "no_color": True,
-    'cachedir': ".",
+    # 'cachedir': ".",
     'quiet': True,
     'no_warnings': True,
     'default_search': "url",#'auto',
