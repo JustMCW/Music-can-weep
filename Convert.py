@@ -1,15 +1,17 @@
 import re
-# I stored some useful function here :)
+from typing import Optional
+# I placed some useful function here :)
+
 def extract_int_from_str(string:str)->int:
-    """
-    Find the first number in a string, raises `ValueError` if not found
-    """
+    """Find the first number in a string, raises `ValueError` if not found"""
     try:
         return int(re.findall(r'\d+', string)[0])
     except IndexError:
         raise ValueError("No number was found from the string")
 
-def str_to_bool(string:str) -> bool:
+def str_to_bool(string:str) -> Optional[bool]:
+    """Returns `True` or `False` based on keywords. Returns `None` if both is found / none is not found"""
+    
     #XOR logic, allow one but not both
     string = string.lower()
     _true = any([w in string for w in ["ye","ya","tr","on","op"]])
@@ -22,6 +24,7 @@ def str_to_bool(string:str) -> bool:
     return None
     
 def length_format(totalSeconds:int) -> str:
+    """Format a time in seconds to a nicer looking string, such as 1:12 being 72 seconds."""
     if totalSeconds is None:
         return "Unknown"
     if totalSeconds < 3600:
@@ -35,7 +38,9 @@ def length_format(totalSeconds:int) -> str:
         return f"{Hours}:{Min:02d}:{Sec:02d}"
     
 def timestr_to_sec(string:str)->int:
-    #Its just a number.
+    """Try to match a time-like object from the string, returns `None` if not found"""
+    
+    # Just a number.
     try: 
         return int(string) 
     except (TypeError,ValueError): 
@@ -99,6 +104,7 @@ def timestr_to_sec_ms(time_string:str) -> int:
 
 from discord.ext import commands
 
+# for convenient access with type hinting 
 class TimeConverter(commands.Converter[int]):
     """Converts a string in the format of time to seconds"""
     async def convert(self, ctx: commands.Context, argument: str) -> int:
