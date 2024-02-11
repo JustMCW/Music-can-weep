@@ -6,6 +6,7 @@ import requests
 # from functools import cache
 from typing import List,TypedDict,Tuple,Optional
 from bs4    import BeautifulSoup,element
+from dataclasses import dataclass
 
 class URLMatch(TypedDict):
     protocol : Optional[str]
@@ -18,7 +19,7 @@ class URLMatch(TypedDict):
 
 def url_matcher(url: str) -> Optional[URLMatch]:
     """return a match for a url, None for no matches"""
-    matches = re.search(r"(https/|HTTP)?://(\w+\.)?(.+)\.(\w+)/([^/]+)?/?(.+)?", url)
+    matches = re.search(r"(https|HTTP)?://(\w+\.)?(.+)\.(\w+)/([^/]+)?/?(.+)?", url)
 
     if not matches:
         return None
@@ -28,6 +29,10 @@ def url_matcher(url: str) -> Optional[URLMatch]:
     if not page:
         page = directory
         directory = None
+    
+    # removing the dot
+    if subdomain and subdomain[-1] == ".":
+        subdomain = subdomain[:-1]
 
     return  {
         "protocol" : protocol,
@@ -38,7 +43,7 @@ def url_matcher(url: str) -> Optional[URLMatch]:
         "page" : page,
     }
 
-
+@dataclass
 class YoutubeVideo:
     """Provide most attributes a song track.
     It is returned by functions in `youtube_utils.py`"""
@@ -55,7 +60,7 @@ class YoutubeVideo:
         self.length = length
         self.thumbnail = thumbnail
 
-def extract_yt_url_from(string : str) -> str:
+def extract_yt_url_from(string : str) -> Optional[str]:
     matches = re.findall(r"(https|HTTP)://(youtu\.be|www.youtube.com)(/shorts)?/(watch\?v=)?([A-Za-z0-9\-_]{11})",string)
     if matches:
         return "https://www.youtube.com/watch?v="+matches[0][4]
