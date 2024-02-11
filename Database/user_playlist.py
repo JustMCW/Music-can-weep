@@ -57,7 +57,7 @@ userid : {
 ORDER DOESN'T MATTER ?
 """
 
-_User = Union[discord.User, discord.Member]
+_User = discord.User | discord.Member
 
 def encode_usr_id(id : int):
     first_digit = int(str(id)[0])
@@ -153,8 +153,8 @@ def delete_playlists(
 
 def add_track(
     user : _User, 
-    tracks : Union[SongTrack,List[SongTrack]],
-    playlists : Union[str,List[str]] = FAVOURITE
+    tracks : SongTrack|List[SongTrack],
+    playlists : str|List[str] = FAVOURITE
 ) -> UserDatabase:
     """Add a track to the user's playlist database, returns the new playlist """
     if isinstance(playlists, str):

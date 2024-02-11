@@ -4,7 +4,6 @@ from typing import (
     Optional,
     TypeVar,
     Type,
-    Union,
     Any,
 )
 
@@ -13,7 +12,7 @@ OBJECT_TYPE = TypeVar("OBJECT_TYPE", bound=Any)
 
 def ensure_exist(
     obj: Optional[OBJECT_TYPE], *,
-    error : Optional[ Union[Exception,Type[Exception]] ] = None,
+    error : Exception|None = None,
 ) -> OBJECT_TYPE:
     """
     Converts an optional object to a non-optional, 

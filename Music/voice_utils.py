@@ -6,7 +6,7 @@ from discord.ext import commands
 import custom_errors
 
 
-from typing import TYPE_CHECKING,Union,List
+from typing import TYPE_CHECKING,List
 from typechecking import *
 
 if TYPE_CHECKING:
@@ -75,7 +75,7 @@ def resume_audio(guild:discord.Guild,/):
     voicec.resume()
 
 async def clear_audio_message_for(
-    target: Union[discord.Message,'SongQueue']
+    target: 'discord.Message|SongQueue'
 ):
     """
     Edit the audio message to give it play again button and make the embed smaller

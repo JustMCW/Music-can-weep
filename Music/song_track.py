@@ -5,7 +5,7 @@ import requests
 import re
 
 from io import BytesIO
-from typing import Callable,Tuple,Deque,List,TypedDict,Any,Union,Optional,TYPE_CHECKING
+from typing import Callable,Tuple,Deque,List,TypedDict,Any,Optional,TYPE_CHECKING
 from collections import deque
 
 import discord
@@ -281,7 +281,7 @@ class LiveStreamAudio(TimeFrameAudio):
         self.next_ffmpeg_audio.cleanup()
 
 if TYPE_CHECKING:
-    AudioSource = Union[TimeFrameAudio,LiveStreamAudio]
+    AudioSource = TimeFrameAudio|LiveStreamAudio
 
 class AutoPlayUser(discord.Member):
     def __init__(self):
@@ -304,8 +304,8 @@ class SongTrack:
     source_url  = ""  
 
     sample_rate     : int
-    request_message : Optional[discord.Message]
-    source          : Union[TimeFrameAudio,LiveStreamAudio]
+    request_message : discord.Message | None
+    source          : TimeFrameAudio | LiveStreamAudio
 
     def __init__(
         self,
@@ -315,7 +315,7 @@ class SongTrack:
         webpage_url : str,
         source_url: str,
         requester: discord.Member = autoplay_user,
-        request_message : Optional[discord.Message] = None, 
+        request_message : discord.Message | None = None, 
         seekable = True
     ):
         self.title = title
@@ -634,8 +634,8 @@ DOMAIN_TO_TRACK = {
 
 def create_track_from_url(
     url : str, 
-    requester: Union[discord.Member,discord.User] = autoplay_user, 
-    request_message: Optional[discord.Message] = None
+    requester: discord.Member | discord.User = autoplay_user, 
+    request_message: discord.Message | None = None
 ) -> SongTrack:
 
     kwargs = {

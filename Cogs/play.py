@@ -76,7 +76,7 @@ def generate_search_result_attachments(search_result : List[YoutubeVideo]) -> di
     }
 
 async def play_track_handler(
-    ctx: Union[commands.Context,discord.Interaction], 
+    ctx: commands.Context|discord.Interaction, 
     url: str, 
     reply_msg: discord.Message,
     position = TrackPosition.Last, 

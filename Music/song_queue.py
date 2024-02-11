@@ -7,7 +7,6 @@ from typing import (
     Callable, 
     Dict, 
     Optional, 
-    Union,
 )
 
 import discord
@@ -26,7 +25,7 @@ logger = logging.getLogger(__name__)
 #TODO : music.get_song_queue.audio_message != self.audio_message
 
 
-class SongQueue(deque):
+class SongQueue(deque[SongTrack]):
     """
     A sub-class of `collections.deque`, for managing a list of `SongTracks`
     containing `SongTrack`s with different attributes and methods to work with.
@@ -88,7 +87,7 @@ class SongQueue(deque):
         return sum( map( lambda t: t.duration, self ) ) 
 
     @property
-    def time_position(self) -> Union[int,float]:
+    def time_position(self) -> float:
         """The time position, relative to the queue's tempo"""
         try:
             return self[0].time_position * self.tempo
@@ -123,7 +122,7 @@ class SongQueue(deque):
         return self.volume*100 / VOLUME_SCALE_FACTOR
 
     @volume_percentage.setter
-    def volume_percentage(self, perc : Union[int,float]):
+    def volume_percentage(self, perc : int|float):
         self.volume = perc/100 * VOLUME_SCALE_FACTOR
         # Applying
         if self.voice_client and self.source:
@@ -429,7 +428,7 @@ class SongQueue(deque):
         )
 
     async def create_audio_message(self,
-        target: Optional[Union[discord.abc.Messageable,discord.Message]] = None
+        target: discord.abc.Messageable | discord.Message
     ):
         """
         Create the discord message for displaying audio playing, including buttons and embed
@@ -466,7 +465,7 @@ class SongQueue(deque):
         #A thread that keeps updating the audio progress bar until the audio finishs
         t = self[0]
 
-        if  not t.duration: 
+        if not t.duration: 
             return 
 
         async def run():
