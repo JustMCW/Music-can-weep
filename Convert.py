@@ -9,19 +9,6 @@ def extract_int_from_str(string:str)->int:
     except IndexError:
         raise ValueError("No number was found from the string")
 
-def str_to_bool(string:str) -> Optional[bool]:
-    """Returns `True` or `False` based on keywords. Returns `None` if both is found / none is not found"""
-    
-    #XOR logic, allow one but not both
-    string = string.lower()
-    _true = any([w in string for w in ["ye","ya","tr","on","op"]])
-    _false = any([w in string for w in ["no","na","fa","of","cl"]])
-    
-    if _true and _false: 
-        return None
-    elif _true or _false: 
-        return _true or not _false
-    return None
     
 def length_format(totalSeconds:int) -> str:
     """Format a time in seconds to a nicer looking string, such as 1:12 being 72 seconds."""
@@ -75,7 +62,7 @@ def timestr_to_sec(string:str)->int:
                 return None
 
 def timestr_to_sec_ms(time_string:str) -> int:
-    """timestr to sec but includes ms in the time stringi"""
+    """timestr to sec but includes ms in the time string"""
     try:
         #Hour min and millisec are optional
         time_group:list = re.match(
