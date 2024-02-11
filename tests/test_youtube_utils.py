@@ -1,8 +1,8 @@
 import unittest
 import youtube_utils
 
-TEST_URL1 = "https://www.youtube.com/watch?v=A3MYTNxnTKY"
-TEST_URL2 = "https://youtu.be/A3MYTNxnTKY"
+TEST_URL1 = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+TEST_URL2 = "https://youtu.be/dQw4w9WgXcQ"
 
 class Test_YoutubeUtils(unittest.TestCase):
     def test_url_matcher(self):
@@ -14,7 +14,7 @@ class Test_YoutubeUtils(unittest.TestCase):
                 "domain" : "youtube",
                 "top_level_domain" : "com",
                 "directory" : None,
-                "page" : "watch?v=A3MYTNxnTKY",
+                "page" : "watch?v=dQw4w9WgXcQ",
             }
         )
 
@@ -26,7 +26,20 @@ class Test_YoutubeUtils(unittest.TestCase):
                 "domain" : "youtu",
                 "top_level_domain" : "be",
                 "directory" : None,
-                "page" : "A3MYTNxnTKY",
+                "page" : "dQw4w9WgXcQ",
+            }
+        )
+
+        # no protocol url
+        self.assertEqual(
+            youtube_utils.url_matcher("www.youtube.com/watch?v=dQw4w9WgXcQ"),
+            {
+                "protocol" : None,
+                "subdomain" : "www",
+                "domain" : "youtube",
+                "top_level_domain" : "com",
+                "directory" : None,
+                "page" : "watch?v=dQw4w9WgXcQ",
             }
         )
 
