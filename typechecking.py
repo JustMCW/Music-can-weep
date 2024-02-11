@@ -12,7 +12,7 @@ OBJECT_TYPE = TypeVar("OBJECT_TYPE", bound=Any)
 
 def ensure_exist(
     obj: Optional[OBJECT_TYPE], *,
-    error : Exception|None = None,
+    error : Exception|type[Exception]|None = None,
 ) -> OBJECT_TYPE:
     """
     Converts an optional object to a non-optional, 

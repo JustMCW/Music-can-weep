@@ -1,7 +1,6 @@
-# allow us to do type annotations easier, such as forward declaration
-from __future__ import annotations 
-
 import logging
+import pathlib
+import sys
 
 import discord
 from discord.ext import commands
@@ -10,8 +9,11 @@ from database.server import read_database_of
 from typechecking import *
 from keys import *
 
+ENTRY_DIR = pathlib.Path(sys.argv[0]).parent.absolute()
+RUN_PATH = str(pathlib.Path(__file__).parent.relative_to(ENTRY_DIR)) + "/"
+
 #Logging
-LOG_LEVEL = logging.WARNING
+LOG_LEVEL = logging.INFO
 formatter = discord.utils._ColourFormatter()
 
 root_logger = logging.getLogger()

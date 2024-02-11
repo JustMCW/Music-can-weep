@@ -10,7 +10,7 @@ from typing import (
 )
 
 import discord
-discord.VoiceClient
+
 from .song_track import *
 from .voice_utils import clear_audio_message_for
 from .voice_constants import *
@@ -65,7 +65,7 @@ class SongQueue(deque[SongTrack]):
         return self.guild.voice_client
 
     @property
-    def source(self):
+    def source(self) -> Optional[discord.AudioSource]:
         if not self.voice_client:
             return None
         src = self.voice_client.source
@@ -125,7 +125,7 @@ class SongQueue(deque[SongTrack]):
     def volume_percentage(self, perc : int|float):
         self.volume = perc/100 * VOLUME_SCALE_FACTOR
         # Applying
-        if self.voice_client and self.source:
+        if self.source != None:
             self.source.volume = self.volume
 
 ### Modifying the queue
@@ -147,20 +147,20 @@ class SongQueue(deque[SongTrack]):
         self[pos1] , self[pos2] = self[pos2] , self[pos1]
     
     def shuffle(self) -> None:
-
-        if not self.current_track: 
+        if not self: 
             raise custom_errors.QueueEmpty("No tracks in the queue to be shuffled")
-
-        is_playing = self.guild.voice_client is not None and self.voice_client.is_playing() # type: ignore   
         
+        playing = self.source != None
         #Exclude the first item ( currently playing )
-        playing_track = self.popleft()
+        if playing:
+            playing_track = self.popleft()
         
         from random import shuffle
         shuffle(self)
         
         #Add it back after shuffling
-        self.appendleft(playing_track) 
+        if playing:
+            self.appendleft(playing_track) 
 
     def poplefttohistory(self) -> SongTrack:
         """Extension of popleft, the track popped is added to the history list, 
@@ -365,7 +365,7 @@ class SongQueue(deque[SongTrack]):
             async def finish():
                 await self.make_next_audio_message()
 
-                if not self.current_track:
+                if not self:
                     await self.guild.voice_client.disconnect() #type: ignore
 
             return self._event_loop.create_task(finish())
