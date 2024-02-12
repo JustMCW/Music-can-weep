@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 def playing_audio(vcfunc):
     def wrapper(*args,**kwargs):
         guild : discord.Guild = args[0]
-        voice_client = ensure_type_optional(guild.voice_client, VoiceClient)
+        voice_client = ensure_type_optional(guild.voice_client, discord.VoiceClient)
 
         if voice_client is None:
             raise custom_errors.NotInVoiceChannel(f"Function {vcfunc.__name__} requires the bot to be in a voice channel.")
@@ -73,46 +73,3 @@ def pause_audio(guild:discord.Guild,/):
 def resume_audio(guild:discord.Guild,/):
     voicec = ensure_type(guild.voice_client, VoiceClient)
     voicec.resume()
-
-async def clear_audio_message_for(
-    target: 'discord.Message|SongQueue'
-):
-    """
-    Edit the audio message to give it play again button and make the embed smaller
-    """
-    from music import SongQueue
-    is_queue = isinstance(target, SongQueue)
-
-    # song queue
-    if is_queue:
-        audio_message = target.audio_message
-        
-        if audio_message is None:
-            return logger.warning("Audio message not found when trying to clean.")
-    # message
-    else:
-        audio_message = target
-
-
-    # Modifying the embed ~ 
-    updated_embed = audio_message.embeds[0].remove_footer()
-    updated_embed.description = ''
-
-    for _ in range(8):
-        updated_embed.remove_field(2)
-
-    if updated_embed.image:
-        updated_embed.set_thumbnail(url=updated_embed.image.url)
-        updated_embed.set_image(url=None)
-
-    from my_buttons  import MusicButtons
-    await audio_message.edit(
-        embed=updated_embed,
-        view=MusicButtons.PlayAgainButton
-    )
-    
-    logger.info("Cleared audio messsage.")
-
-    if is_queue: 
-        target.audio_message = None
-

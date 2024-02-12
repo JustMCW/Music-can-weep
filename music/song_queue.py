@@ -12,7 +12,7 @@ from typing import (
 import discord
 
 from .song_track import *
-from .voice_utils import clear_audio_message_for
+from .audio_message import clear_audio_message_for
 from .voice_constants import *
 
 from typechecking import ensure_exist

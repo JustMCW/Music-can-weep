@@ -5,7 +5,7 @@ from discord.ext import commands
 
 import  convert
 import music
-from music import voice_utils
+from music import audio_message
 from literals import ReplyStrings
 
 TIMEOUT_SECONDS = 60 * 2
@@ -55,7 +55,7 @@ class MusicUtilityCommands(commands.Cog):
                 return await queue.create_audio_message(ctx.channel)
             return await ctx.reply("No audio message present at the moment.")
 
-        await voice_utils.clear_audio_message_for(queue)
+        await audio_message.clear_audio_message_for(queue)
         await queue.create_audio_message(ctx.channel)
 
     @commands.guild_only()

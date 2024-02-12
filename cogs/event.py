@@ -11,7 +11,7 @@ import custom_errors
 
 import music
 import webhook_logger
-from music import voice_utils
+from music import audio_message, voice_utils
 
 from typechecking import *
 from keys import *
@@ -152,7 +152,7 @@ class Events(commands.Cog):
                 await interaction.response.defer()
             except (discord.errors.InteractionResponded,discord.errors.HTTPException):
                 pass
-            return await voice_utils.clear_audio_message_for(message)
+            return await audio_message.clear_audio_message_for(message)
 
 
     #Voice update
