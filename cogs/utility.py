@@ -55,7 +55,7 @@ class MusicUtilityCommands(commands.Cog):
                 return await queue.create_audio_message(ctx.channel)
             return await ctx.reply("No audio message present at the moment.")
 
-        await audio_message.clear_audio_message_for(queue)
+        await audio_message.clear_audio_message_for_queue(queue)
         await queue.create_audio_message(ctx.channel)
 
     @commands.guild_only()

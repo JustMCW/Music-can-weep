@@ -152,7 +152,7 @@ class Events(commands.Cog):
                 await interaction.response.defer()
             except (discord.errors.InteractionResponded,discord.errors.HTTPException):
                 pass
-            return await audio_message.clear_audio_message_for(message)
+            return await audio_message.clear_audio_message(message)
 
 
     #Voice update

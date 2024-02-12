@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import random
 
 from collections import deque
 
@@ -12,7 +13,9 @@ from typing import (
 import discord
 
 from .song_track import *
-from .audio_message import clear_audio_message_for
+
+from .voice_utils import  playing_audio
+from .audio_message import clear_audio_message_for_queue,clear_audio_message
 from .voice_constants import *
 
 from typechecking import ensure_exist
@@ -45,8 +48,9 @@ class SongQueue(deque[SongTrack]):
 
         self.history :list[SongTrack] = []
 
-        self._event_loop = asyncio.get_running_loop()
+        self._event_loop = asyncio.get_event_loop()
         self._call_after :Optional[Callable] = None
+        self._after_flag :bool = False
 
         super().__init__()
 
@@ -60,12 +64,12 @@ class SongQueue(deque[SongTrack]):
     
     @property
     def voice_client(self) -> Optional[discord.VoiceClient]:
-        if not isinstance(self.guild.voice_client, discord.VoiceClient):
+        if not isinstance(self.guild.voice_client, discord.VoiceClient) and self.guild.voice_client != None:
             raise RuntimeError("New voice protocol class is used.")
         return self.guild.voice_client
 
     @property
-    def source(self) -> Optional[discord.AudioSource]:
+    def source(self) -> Optional['AudioSource']:
         if not self.voice_client:
             return None
         src = self.voice_client.source
@@ -100,6 +104,8 @@ class SongQueue(deque[SongTrack]):
             raise RuntimeWarning("Attempt to set time position without any tracks playing.")
         if isinstance(self.source, LiveStreamAudio):
             raise custom_errors.AudioNotSeekable("Audio is a live stream")
+        if not isinstance(self.source, AudioSource):
+            raise RuntimeError("Not time frame audio as source, don't call")
 
         if new_tp > self.time_position:
             #Fast forwarding, loading unloaded audio
@@ -128,25 +134,20 @@ class SongQueue(deque[SongTrack]):
         if self.source != None:
             self.source.volume = self.volume
 
+    def set_flag(self) -> None:
+        """Set a flag to let the after call acknowledge that the logic has been handled and it doesn't need to apply anymore"""
+        self._after_flag = True
+
 ### Modifying the queue
 
-    def swap(self,pos1:int,pos2:int) -> None:
-        
+    def swap(self, i: int, j: int) -> None:
         if not self: 
             raise custom_errors.QueueEmpty("No tracks in the queue to be swapped")
 
-        if pos1 == pos2:
-            raise IndexError("Why try to swap the same item")
-
-        if pos1 >= len(self) or pos1 == 0:
-            raise IndexError(f"pos1 : {pos1} is invaild")
-        
-        if pos2 >= len(self) or pos2 == 0:
-            raise IndexError(f"pos2 : {pos2} is invaild")
-
-        self[pos1] , self[pos2] = self[pos2] , self[pos1]
+        self[i], self[j] = self[j], self[i]
     
     def shuffle(self) -> None:
+        """this shuffle function is different in the sense that if the first track is playing, it does not change its position"""
         if not self: 
             raise custom_errors.QueueEmpty("No tracks in the queue to be shuffled")
         
@@ -155,8 +156,7 @@ class SongQueue(deque[SongTrack]):
         if playing:
             playing_track = self.popleft()
         
-        from random import shuffle
-        shuffle(self)
+        random.shuffle(self)
         
         #Add it back after shuffling
         if playing:
@@ -174,11 +174,15 @@ class SongQueue(deque[SongTrack]):
         self.history.append(track)
         return track
 
+    
     def shift_track(self, count=1):
         """Shifts track around, but does not remove any track.
         [1,2,3,4] => [2,3,4,1]
         
         Could also take negative input to shift in opposite direction"""
+        if not self.source:
+            return self.rotate(count * -1)
+
         def rotate_queue():
             self.rotate(count * -1)
             self.play_first()
@@ -186,14 +190,13 @@ class SongQueue(deque[SongTrack]):
         self._call_after = rotate_queue
         self.guild.voice_client.stop() # type: ignore
 
+    @playing_audio
     def rewind_track(self, count=1):
         """Add the latest history track to the front of the queue for an ammount, 
         does not raise any error when paramater `count` is greater than the length of the queue history"""
 
         if self.queue_looping and self[-1].source:
             return self.shift_track(count * -1)
-        if not self.guild.voice_client:
-            raise custom_errors.NotInVoiceChannel
 
         def rewind_after():
             for _ in range(count):
@@ -204,11 +207,12 @@ class SongQueue(deque[SongTrack]):
         self._call_after = rewind_after
         self.guild.voice_client.stop() #type: ignore
 
+    @playing_audio
     def skip_track(self, count=1):
         if self.queue_looping:
             return self.shift_track(count)
-        if not self.guild.voice_client:
-            raise custom_errors.NotInVoiceChannel
+        # if not self.guild.voice_client:
+        #     raise custom_errors.NotInVoiceChannel
         
         def skip_after():
             for _ in range(count):
@@ -223,6 +227,7 @@ class SongQueue(deque[SongTrack]):
         self._call_after = skip_after 
         self.guild.voice_client.stop() #type: ignore
 
+    @playing_audio
     def replay_track(self):
         self._call_after = self.play_first
         self.guild.voice_client.stop() #type: ignore
@@ -272,7 +277,7 @@ class SongQueue(deque[SongTrack]):
         
         #Not in voice channel
         if not voice_client or not voice_client.is_connected():
-            await clear_audio_message_for(self)
+            await clear_audio_message_for_queue(self)
 
             if not self.enabled:
                 self.poplefttohistory()
@@ -292,7 +297,7 @@ class SongQueue(deque[SongTrack]):
         elif not self.enabled:
             self.poplefttohistory()
             await voice_client.disconnect()
-            await clear_audio_message_for(self)
+            await clear_audio_message_for_queue(self)
             return logger.info("Queue disabled")
 
         #The rest of the situation, lol.
@@ -311,7 +316,7 @@ class SongQueue(deque[SongTrack]):
             #No track left in the queue
             if next_track is None:
                 # await text_channel.send("\\☑️ All tracks in the queue has been played (if you want to repeat the queue, run \" >>queue repeat on \")",delete_after=30)
-                await clear_audio_message_for(self)
+                await clear_audio_message_for_queue(self)
                 await voice_client.disconnect()
 
                 return logger.info("Queue is empty")
@@ -397,11 +402,11 @@ class SongQueue(deque[SongTrack]):
 
                 if not is_reply:
                     if next_track.request_message:
-                        await clear_audio_message_for(next_track.request_message)
+                        await clear_audio_message(next_track.request_message)
                         next_track.request_message = None
                     return await self.create_audio_message(audio_message)
         
-        await clear_audio_message_for(self)
+        await clear_audio_message_for_queue(self)
         
         if next_track:
             
