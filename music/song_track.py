@@ -280,8 +280,8 @@ class LiveStreamAudio(TimeFrameAudio):
         self.current_ffmpeg_audio.cleanup()
         self.next_ffmpeg_audio.cleanup()
 
-if TYPE_CHECKING:
-    AudioSource = TimeFrameAudio|LiveStreamAudio
+
+AudioSource = TimeFrameAudio|LiveStreamAudio
 
 class AutoPlayUser(discord.Member):
     def __init__(self):
