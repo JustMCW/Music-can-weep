@@ -206,7 +206,7 @@ class AdminCommands(commands.Cog,command_attrs=dict(hidden=True)):
             q.append(t)
             if len(q)==1:
                 q.play_first()
-                await q.create_audio_message(await ctx.reply("Okay."))
+                await music.create_audio_message(q,await ctx.reply("Okay."))
         else:
             await ctx.reply("No spotify nub.")
         

@@ -100,7 +100,7 @@ class ConfigModal(Modal,title = "Configuration of the audio"):
         if not (vol_changed or tempo_changed or pitch_changed):
             return await interaction.response.defer()
 
-        await queue.update_audio_message()
+        await music.update_audio_message(queue)
         if pitch_changed or tempo_changed:
             if guild.voice_client and guild.voice_client._player and music.get_song_queue(guild):
                 queue.replay_track()
@@ -273,7 +273,7 @@ class MusicButtons:
             queue.looping = not queue.looping
 
             await inform_changes(interaction,ReplyStrings.TRACK_LOOP(queue.looping))
-            await queue.update_audio_message()
+            await music.update_audio_message(queue)
         
         @button(style=ButtonStyle.grey,emoji=MyEmojis.QUEUELOOP,row=1,custom_id="queueloop")
         async def on_queueloop(self, interaction:Interaction, btn : Button):
@@ -282,7 +282,7 @@ class MusicButtons:
             queue.queue_looping = not queue.queue_looping
 
             await inform_changes(interaction,ReplyStrings.QUEUE_LOOP(queue.queue_looping))
-            await queue.update_audio_message()
+            await music.update_audio_message(queue)
         
         @button(style=ButtonStyle.grey,emoji=MyEmojis.CONFIG,row=1,custom_id="config")
         async def on_config(self, interaction:Interaction, btn : Button):
@@ -301,7 +301,7 @@ class MusicButtons:
         #         return await interaction.response.send_message(ephemeral=True,content="This button changes the next track played by auto-play, however auto-play can never be reached when queue looping is on, turn it off with \"queue loop off\"")
         #     await interaction.response.defer()
         #     queue[0].recommendations.rotate(-1)
-        #     await queue.update_audio_message()
+        #     await music.update_audio_message(queue)
 
 
     @staticmethod

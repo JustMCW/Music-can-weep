@@ -433,7 +433,7 @@ class PlaylistCommands(commands.Cog):
             if ctx.voice_client is None:
                 await ctx.author.voice.channel.connect()
                 play_after()
-                await queue.create_audio_message(mes)
+                await music.create_audio_message(queue, mes)
             else:
                 ctx.voice_client.stop()
                 queue._call_after = play_after

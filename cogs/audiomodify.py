@@ -25,10 +25,11 @@ class AudioModifierCommands(commands.Cog):
         # Attempt on earraping
         if volume_percentage > MAX_VOLUME_PERCENTAGE and ctx.author.id != ctx.bot.owner_id:
             return await ctx.reply(f"🚫 Please enter a volume below {MAX_VOLUME_PERCENTAGE}% (to protect yours and other's ears 👍🏻)")
-        music.get_song_queue(ctx.guild).volume_percentage = volume_percentage
+        queue = music.get_song_queue(ctx.guild)
+        queue.volume_percentage = volume_percentage
         
         await ctx.reply(f"🔊 Volume has been set to {round(volume_percentage,3)}%")
-        await music.get_song_queue(ctx.guild).update_audio_message()
+        await music.update_audio_message(queue)
 
     @commands.guild_only()
     @commands.hybrid_command(
@@ -49,7 +50,7 @@ class AudioModifierCommands(commands.Cog):
             
         # if not queue.audio_message:
         await ctx.reply(f"Successful changed the pitch to `{new_pitch}`.")
-        await queue.update_audio_message()
+        await music.update_audio_message(queue)
 
     @commands.guild_only()
     @commands.hybrid_command(
@@ -75,7 +76,7 @@ class AudioModifierCommands(commands.Cog):
 
         # if not queue.audio_message:
         await ctx.reply(f"Successful changed the tempo to `{new_tempo}`.")
-        await queue.update_audio_message()
+        await music.update_audio_message(queue)
 
 async def setup(bot : commands.Bot):
     await bot.add_cog(AudioModifierCommands(bot))

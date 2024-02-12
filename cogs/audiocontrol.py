@@ -70,7 +70,7 @@ class AudioControllerCommands(commands.Cog):
                     raise resume_error
 
             #Play the track
-            await queue.create_audio_message(await ctx.send("▶️ Continue to play tracks in the queue"))
+            await music.create_audio_message(queue,await ctx.send("▶️ Continue to play tracks in the queue"))
 
             queue.play_first()
         
@@ -182,10 +182,9 @@ class AudioControllerCommands(commands.Cog):
     )
     async def loop(self, ctx:commands.Context, mode: Optional[bool] = None):
         queue = music.get_song_queue(ctx.guild)
-        print(queue.looping)
         queue.looping = not queue.looping if mode is None else mode
         await ctx.reply(ReplyStrings.TRACK_LOOP(queue.looping))
-        await queue.update_audio_message()
+        await music.update_audio_message(queue)
 
 async def setup(bot : commands.Bot):
     await bot.add_cog(AudioControllerCommands(bot))

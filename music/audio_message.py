@@ -15,58 +15,6 @@ if TYPE_CHECKING:
 ### Audio messages
 
 
-
-async def make_next_audio_message(queue: 'SongQueue'):
-    """Remove the current audio message and make a new one, can be editing or sending a new one."""
-
-    audio_message = queue.audio_message
-    if not audio_message:
-        return logger.warning("No audio message")
-
-    next_track = queue.current_track
-
-    is_reply = audio_message.reference
-
-    if next_track:
-
-        if audio_message.embeds[0].url == next_track.webpage_url:
-            return logger.debug("Track is the same, not updating")
-        
-        if (queue.looping or queue.queue_looping):
-
-            if not is_reply:
-                if next_track.request_message:
-                    await clear_audio_message(next_track.request_message)
-                    next_track.request_message = None
-                return await queue.create_audio_message(audio_message)
-    
-    await clear_audio_message_for_queue(queue)
-    
-    if next_track:
-        
-        if next_track.request_message:
-            await queue.create_audio_message(next_track.request_message)   
-            next_track.request_message = None
-        elif is_reply:
-            await queue.create_audio_message(audio_message.channel) #type: ignore
-        else:
-            await queue.create_audio_message(audio_message)
-
-async def update_audio_message(queue: 'SongQueue'):
-    audio_msg = queue.audio_message
-
-    if not audio_msg: 
-        return logger.warning("Audio message adsent when trying to update it.")
-
-    from my_buttons import MusicButtons
-    from literals   import ReplyEmbeds
-
-    await audio_msg.edit(
-        embed = ReplyEmbeds.audio_displayer(queue),
-        view = MusicButtons.AudioControllerButtons(queue)
-    )
-
-
 async def create_audio_message(queue: 'SongQueue',
     target: discord.abc.Messageable | discord.Message
 ):
@@ -119,13 +67,65 @@ async def create_audio_message(queue: 'SongQueue',
                 break
 
             if not queue.guild.voice_client.is_paused(): #type: ignore
-                await queue.update_audio_message()
+                await update_audio_message(queue)
 
             await asyncio.sleep(UPDATE_DELAY)
 
         logger.info("Exited update loop")
 
     queue._event_loop.create_task(run())
+
+
+async def make_next_audio_message(queue: 'SongQueue'):
+    """Remove the current audio message and make a new one, can be editing or sending a new one."""
+
+    audio_message = queue.audio_message
+    if not audio_message:
+        return logger.warning("No audio message")
+
+    next_track = queue.current_track
+
+    is_reply = audio_message.reference
+
+    if next_track:
+
+        if audio_message.embeds[0].url == next_track.webpage_url:
+            return logger.debug("Track is the same, not updating")
+        
+        if (queue.looping or queue.queue_looping):
+
+            if not is_reply:
+                if next_track.request_message:
+                    await clear_audio_message(next_track.request_message)
+                    next_track.request_message = None
+                return await create_audio_message(queue,audio_message)
+    
+    await clear_audio_message_for_queue(queue)
+    
+    if next_track:
+        
+        if next_track.request_message:
+            await create_audio_message(queue,next_track.request_message)   
+            next_track.request_message = None
+        elif is_reply:
+            await create_audio_message(queue,audio_message.channel) #type: ignore
+        else:
+            await create_audio_message(queue, audio_message)
+
+async def update_audio_message(queue: 'SongQueue'):
+    audio_msg = queue.audio_message
+
+    if not audio_msg: 
+        return logger.warning("Audio message adsent when trying to update it.")
+
+    from my_buttons import MusicButtons
+    from literals   import ReplyEmbeds
+
+    await audio_msg.edit(
+        embed = ReplyEmbeds.audio_displayer(queue),
+        view = MusicButtons.AudioControllerButtons(queue)
+    )
+
 
 async def clear_audio_message(audio_message: discord.Message):
     """Clears the message directly, does not require the queue"""

@@ -24,7 +24,7 @@ class AutoPlayCommands(commands.Cog):
         queue.auto_play = not queue.auto_play if mode is None else mode
 
         await ctx.reply(f"Auto-playing is switched to {ReplyStrings.prettify_bool(queue.auto_play)}")
-        await queue.update_audio_message()
+        await music.update_audio_message(queue)
 
     @commands.guild_only()
     @autoplay.command(
@@ -48,7 +48,7 @@ class AutoPlayCommands(commands.Cog):
             return await ctx.reply("Recommendation is only supported for Youtube Videos.")
 
         track.recommendations.rotate(-1)
-        await queue.update_audio_message()
+        await music.update_audio_message(queue)
 
     @commands.guild_only()
     @autoplay.command(
@@ -63,7 +63,7 @@ class AutoPlayCommands(commands.Cog):
             return await ctx.reply("Recommendation is only supported for Youtube Videos.")
         
         track.recommendations.rotate(-1)
-        await queue.update_audio_message()
+        await music.update_audio_message(queue)
 
 async def setup(bot : commands.Bot):
     await bot.add_cog(AutoPlayCommands())

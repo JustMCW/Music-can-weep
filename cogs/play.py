@@ -174,7 +174,7 @@ async def play_track_handler(
             queue.appendleft(NewTrack)
             queue.play_first()
 
-        return await queue.create_audio_message(reply_msg or ctx.channel)
+        return await music.create_audio_message(queue, reply_msg or ctx.channel)
 
     # There is a track playing already
     if queue.get(1) and queue.enabled and position != TrackPosition.Now:
@@ -197,7 +197,7 @@ async def play_track_handler(
         )
 
         # Since there is a field in the audio message indcating the next track to be played
-        await queue.update_audio_message() 
+        await music.update_audio_message(queue) 
         
         # we still want to play the first track
         NewTrack.request_message = reply_msg#await ctx.fetch_message(reply_msg.id)
@@ -205,11 +205,11 @@ async def play_track_handler(
         if voice_client.source:
             return
 
-        await queue.create_audio_message(ctx.channel)
+        await music.create_audio_message(queue, ctx.channel)
         NewTrack = queue[0]
     else:
     # #Make our audio message
-        await queue.create_audio_message(reply_msg or ctx.channel)
+        await music.create_audio_message(queue, reply_msg or ctx.channel)
 
     # Let ffmpeg initialize itself
     # await asyncio.sleep(1.5)

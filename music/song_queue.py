@@ -15,7 +15,12 @@ import discord
 from .song_track import *
 
 from .voice_utils import  playing_audio
-from .audio_message import clear_audio_message_for_queue,clear_audio_message
+from .audio_message import (
+    update_audio_message,
+    clear_audio_message_for_queue,
+    clear_audio_message,
+    make_next_audio_message
+)
 from .voice_constants import *
 
 from typechecking import ensure_exist
@@ -121,7 +126,7 @@ class SongQueue(deque[SongTrack]):
             raise custom_errors.AudioNotSeekable("Audio is not seekable.")
         
         self[0].time_position = new_tp/self.tempo
-        asyncio.get_running_loop().create_task(self.update_audio_message())
+        asyncio.get_running_loop().create_task(update_audio_message(self))
 
     @property
     def volume_percentage(self):
@@ -267,7 +272,6 @@ class SongQueue(deque[SongTrack]):
         )
         logger.info(f"Playing \"{track.title}\".")
 
-
     async def after_playing_inner(self):
         """The logic when the rest of the condition is met (in vc, not return code 1)"""
         logging.debug("Entered inner function.")
@@ -323,7 +327,7 @@ class SongQueue(deque[SongTrack]):
 
             #To prevent sending the same audio message again
             if next_track != finshed_track:
-                await self.make_next_audio_message()
+                await make_next_audio_message(self)
             
             
     ### Finally, play the audio
@@ -368,7 +372,7 @@ class SongQueue(deque[SongTrack]):
             self._call_after = None
 
             async def finish():
-                await self.make_next_audio_message()
+                await make_next_audio_message(self)
 
                 if not self:
                     await self.guild.voice_client.disconnect() #type: ignore
@@ -378,119 +382,6 @@ class SongQueue(deque[SongTrack]):
         #Wrapped here for coroutine functions to run.   
         #Didn't wrap the code above because create_task has a great delay but cleanup actions has to be done ASAP
         self._event_loop.create_task(self.after_playing_inner())
-
-
-### Audio messages
-
-    async def make_next_audio_message(self):
-        """Remove the current audio message and make a new one, can be editing or sending a new one."""
-
-        audio_message = self.audio_message
-        if not audio_message:
-            return logger.warning("No audio message")
-
-        next_track = self.current_track
-
-        is_reply = audio_message.reference
-
-        if next_track:
-
-            if audio_message.embeds[0].url == next_track.webpage_url:
-                return logger.debug("Track is the same, not updating")
-            
-            if (self.looping or self.queue_looping):
-
-                if not is_reply:
-                    if next_track.request_message:
-                        await clear_audio_message(next_track.request_message)
-                        next_track.request_message = None
-                    return await self.create_audio_message(audio_message)
-        
-        await clear_audio_message_for_queue(self)
-        
-        if next_track:
-            
-            if next_track.request_message:
-                await self.create_audio_message(next_track.request_message)   
-                next_track.request_message = None
-            elif is_reply:
-                await self.create_audio_message(audio_message.channel) #type: ignore
-            else:
-                await self.create_audio_message(audio_message)
-
-    async def update_audio_message(self):
-        audio_msg = self.audio_message
-
-        if not audio_msg: 
-            return logger.warning("Audio message adsent when trying to update it.")
-
-        from my_buttons import MusicButtons
-        from literals   import ReplyEmbeds
-
-        await audio_msg.edit(
-            embed = ReplyEmbeds.audio_displayer(self),
-            view = MusicButtons.AudioControllerButtons(self)
-        )
-
-    async def create_audio_message(self,
-        target: discord.abc.Messageable | discord.Message
-    ):
-        """
-        Create the discord message for displaying audio playing, including buttons and embed
-        accecpt a text channel or a message to be edited
-        """
-        if not self.current_track:
-            return 
-        
-        from my_buttons import MusicButtons
-        from literals   import ReplyEmbeds
-
-        message_info = {
-            "embed": ReplyEmbeds.audio_displayer(self),
-            "view" : MusicButtons.AudioControllerButtons(self)
-        }
-
-
-        if isinstance(target,discord.Message):
-            await target.edit(**message_info)
-            self.audio_message = await target.channel.fetch_message(target.id)
-
-        if isinstance(target,discord.TextChannel):
-            self.current_track.request_message
-            try:
-                self.audio_message = await target.send(**message_info)
-            except discord.errors.Forbidden:
-                channels = [ 
-                    chan
-                    for chan in await target.guild.fetch_channels()
-                    if  isinstance(chan,discord.TextChannel)
-                ]
-                self.audio_message = await channels[-1].send(**message_info)
-
-        #A thread that keeps updating the audio progress bar until the audio finishs
-        t = self[0]
-
-        if not t.duration: 
-            return 
-
-        async def run():
-            while self.get(0) == t: 
-
-                if not self[0].source:
-                    await asyncio.sleep(UPDATE_DELAY)
-                    continue
-
-                if not self.guild.voice_client:
-                    break
-
-                if not self.guild.voice_client.is_paused(): #type: ignore
-                    await self.update_audio_message()
-
-                await asyncio.sleep(UPDATE_DELAY)
-
-            logger.info("Exited update loop")
-
-        self._event_loop.create_task(run())
 
 
 

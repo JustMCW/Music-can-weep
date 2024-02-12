@@ -52,11 +52,11 @@ class MusicUtilityCommands(commands.Cog):
 
         if not audio_msg:
             if queue and queue.voice_client and queue.source:
-                return await queue.create_audio_message(ctx.channel)
+                return await music.create_audio_message(queue, ctx.channel)
             return await ctx.reply("No audio message present at the moment.")
 
         await audio_message.clear_audio_message_for_queue(queue)
-        await queue.create_audio_message(ctx.channel)
+        await music.create_audio_message(queue, ctx.channel)
 
     @commands.guild_only()
     @commands.hybrid_command(description="Send the current audio as a file which is available for downloading.")

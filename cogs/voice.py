@@ -48,7 +48,7 @@ class VoiceCommands(commands.Cog):
         print("or not...")
         await ctx.reply(ReplyStrings.JOIN.format(voice_channel))
         queue = music.get_song_queue(ctx.guild)
-        await queue.update_audio_message()
+        await music.update_audio_message(queue)
 
         # Ask the user to resume the queue, if there is.
         if queue:

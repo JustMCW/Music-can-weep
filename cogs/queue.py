@@ -271,15 +271,14 @@ class QueueCommands(commands.Cog):
                             "toggleloop", "toggle_looping", 'changelooping', 'lop'],
                    usage="{}queue repeat on")
     async def repeat(self, ctx: commands.Context, mode: Optional[bool] = None):
-        guild = ctx.guild
+        
         queue: SongQueue = music.get_song_queue(ctx.guild)
-        new_qloop: bool = commands.converter._convert_to_bool(
-            mode) if mode else not queue.queue_looping
-
+        new_qloop: bool = commands.converter._convert_to_bool(mode) if mode else not queue.queue_looping
+        
         queue.queue_looping = new_qloop
         if not queue.audio_message:
             await ctx.reply(ReplyStrings.QUEUE_LOOP(new_qloop))
-        await queue.update_audio_message()
+        await music.update_audio_message(queue)
 
     #----------------------------------------------------------------#
 
