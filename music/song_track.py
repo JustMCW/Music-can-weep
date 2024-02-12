@@ -3,6 +3,7 @@ import audioop
 import threading
 import requests
 import re
+import time
 
 from io import BytesIO
 from typing import Callable,Tuple,Deque,List,TypedDict,Any,Optional,TYPE_CHECKING
@@ -158,7 +159,7 @@ class TimeFrameAudio(discord.PCMVolumeTransformer):
     frame_counter  : int
     _audio_bytes   : BytesIO
 
-    def __init__(self, original: _FFmpegPCMAudio, volume: float = 1, seeking: bool = True):
+    def __init__(self, original: _FFmpegPCMAudio|discord.FFmpegAudio, volume: float = 1, seeking: bool = True):
         self.frame_counter = 0
         self.seekable      = seeking
         if seeking:
@@ -204,6 +205,7 @@ class TimeFrameAudio(discord.PCMVolumeTransformer):
 
 class LiveStreamAudio(TimeFrameAudio):
     """Streams by constantly requesting data from `source_url`"""
+    original : discord.FFmpegPCMAudio
     fragment_index  : int # indicates which audio, we're wokring on
     audio_fragments : List[str]
     current_ffmpeg_audio : discord.FFmpegPCMAudio
@@ -229,8 +231,6 @@ class LiveStreamAudio(TimeFrameAudio):
             seeking=False,
         )
 
-    
-
     def collect_audio_fragments(self):
         """
         read 30 seconds total worth of audio from the source url, 
@@ -243,7 +243,7 @@ class LiveStreamAudio(TimeFrameAudio):
         # Extract audio from the the urls
         urls = re.findall(r"https://.+seg\.ts",content)
         self.audio_fragments = urls
-        # logger.warn(str(urls))
+
         self.fragment_index = 0
         self.current_ffmpeg_audio = discord.FFmpegPCMAudio(source=self.audio_fragments[self.fragment_index], **self._ffmpeg_options)
         self.next_ffmpeg_audio = discord.FFmpegPCMAudio(source=self.audio_fragments[self.fragment_index + 1], **self._ffmpeg_options)
@@ -251,8 +251,6 @@ class LiveStreamAudio(TimeFrameAudio):
     def load_next_frag(self):
         self.next_ffmpeg_audio = discord.FFmpegPCMAudio(source=self.audio_fragments[self.fragment_index], **self._ffmpeg_options)
         self.fragment_index += 1
-        # del self.audio_fragments[0]
-
 
     def read(self) -> bytes:
         
@@ -267,13 +265,13 @@ class LiveStreamAudio(TimeFrameAudio):
             logger.info("Moving on to the next fragment.")
 
         # Otherwise it's just the end of the current fragment, load up the next one.
-        # self.current_ffmpeg_audio.cleanup()
+        self.current_ffmpeg_audio.cleanup()
         self.current_ffmpeg_audio = self.next_ffmpeg_audio
 
+        # Preload the next fragment
         threading.Thread(self.load_next_frag()).start()
         
         self.original = self.current_ffmpeg_audio
-
         return self.original.read()
 
     def cleanup(self) -> None:
@@ -393,8 +391,9 @@ class SongTrack:
         logger.info(f"FFMPEG option : {ffmpeg_option}")
         self.source = self.get_source(volume,ffmpeg_option)
         
-        # E
-        # time.sleep(2)
+        # maybe we let the stream initialise first ?
+        # voice_client.ws.speak()
+        time.sleep(1)
         voice_client.play(self.source,after=after)
         return
 
