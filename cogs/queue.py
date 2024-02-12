@@ -58,7 +58,7 @@ class QueueCommands(commands.Cog):
     async def shift(self, ctx: commands.Context, count: int = 1):
 
         music.get_song_queue(ctx.guild).shift_track(count)
-        await ctx.reply("Shifted.")
+        await ctx.reply(":arrows_counterclockwise:  Shifted.")
 
     @commands.guild_only()
     @commands.hybrid_group(
