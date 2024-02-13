@@ -358,11 +358,11 @@ class AdminCommands(commands.Cog,command_attrs=dict(hidden=True)):
         from youtube_utils import search_from_youtube
         def A():
             for i,t in enumerate(playlist):
-                print(i,t["title"])
+                print(i,t)
                 if i == 1:
                     queue.play_first()
                 song_track = create_track_from_url(
-                    search_from_youtube(t["title"])[0].url,
+                    t,
                     ctx.author,
                     ctx.message,
                 )

@@ -130,47 +130,21 @@ def get_spotify_track_title(url : str) -> str:
     title_tag : element.Tag = htmlSoup.find_all("title")[0]
     return title_tag.text.replace(" | Spotify","")
 
-def get_playlist_data(playlist_url) -> Tuple[str,dict]:
+pattern = re.compile(r'https://open\.spotify\.com/track/\w+')
+
+def get_playlist_data(playlist_url) -> Tuple[str,list[str]]:
     r = requests.get(playlist_url)
+    
+    tracks = re.findall(
+        r'https://open\.spotify\.com/track/.{22}',
+        r.text,
+    )
+    
     soup = BeautifulSoup(r.text,features="lxml")
-
     title = soup.find("title").contents[0]
+    return str(title),tracks
 
-    found : list[element.Tag] = soup.find_all("div",attrs={'data-testid':"track-row"})
 
-    playlist = []
-
-    for f in found:
-        span = f.find_all(
-            "span",
-            attrs={
-                "data-encore-id":"type",
-                "dir":"auto"
-            }
-        )
-        data1 : element.Tag = span[0].contents[0]
-        track_title = data1.contents[0]
-        track_url   = data1.get("href")
-
-        artist : element.Tag = [
-            (item.contents[0],'https://open.spotify.com'+item.get("href")) 
-            for item in span[1].contents if isinstance(item,element.Tag)
-        ]
-        
-        playlist.append(
-            {
-                "title" : track_title,
-                "url" : track_url,
-                "artist" : dict(artist),
-            }
-        )
-    import json
-
-    # with open("myplaylist.json","w") as pljson:
-    #     json.dump(playlist,pljson,indent=4)
-    # print(f"This is {title}.")
-
-    return title,playlist
     
 def get_recommendation(url) -> List[YoutubeVideo]:
     r = requests.get(url)

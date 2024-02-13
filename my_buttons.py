@@ -114,7 +114,7 @@ class MusicButtons:
         @button(style=ButtonStyle.grey,emoji="🗑")
         async def on_clear(self,interaction:Interaction,btn):
             await inform_changes(interaction,"Queue has been cleared")
-            interaction.music.get_song_queue(interaction.guild).cleanup()
+            await music.get_song_queue(interaction.guild).cleanup()
 
     class AudioControllerButtons(View):
         """Contains all the buttons needed for the audio control message"""
