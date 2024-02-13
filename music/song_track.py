@@ -26,6 +26,9 @@ from youtube_utils import (
     get_spotify_track_title,
 )
 
+if TYPE_CHECKING:
+    from database.user_playlist import TrackJson
+
 
 logger = logging.getLogger(__name__)
 
@@ -397,7 +400,7 @@ class SongTrack:
         voice_client.play(self.source,after=after)
         return
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> 'TrackJson':
         """Determinds how the track is going to be stored in a database"""
         raise NotImplementedError
 

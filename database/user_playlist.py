@@ -5,7 +5,8 @@ import discord
 from typing import *
 from keys import USERPLAYLIST_DATABASE
 
-from music import SongTrack
+if TYPE_CHECKING:
+    from music import SongTrack
 
 Indentation = 4
 
@@ -22,8 +23,11 @@ class UserDatabase(Dict[str,List[TrackJson]]):
     pass
 
 
+class DEL:
+    """When returned by edit_data, it deletes the entire list object & removing the key"""
+    pass
+
 # edit can return this to indicate the deletion of the entire user dir
-DEL = "Del"
 FAVOURITE = "<Favourite>"
 
 """
@@ -80,7 +84,7 @@ def get_all_playlist(user: _User, exclude_favourite = False) -> UserDatabase:
 
 def edit_data(
     user : _User, 
-    edit : Callable[[dict],dict]
+    edit : Callable[[UserDatabase],UserDatabase|DEL]
 ) -> UserDatabase:
     """Edit a user's data with a function taken in as paramater
     returns the data after the edit."""
@@ -88,7 +92,7 @@ def edit_data(
     encoded_id = encode_usr_id(user.id)
 
     edited_data = edit(
-        data.get(encoded_id,{})
+        data.get(encoded_id,UserDatabase())
     )
 
     if not isinstance(edited_data,dict):
@@ -132,19 +136,19 @@ def make_playlist(
 ):
     """Make a new playlist for a user, 
     raises `ValueError` if playlist already exist"""
-    def make_pl(data) -> dict:
+    def make_pl(data: UserDatabase) -> UserDatabase:
         if data.get(pl_name):
             raise ValueError(f"Playlist : {pl_name} already exist for {user.name}.")
-        data[pl_name] = {}
+        data[pl_name] = []
         return data
 
     edit_data(user, make_pl)
 
 def delete_playlists(
     user : _User,
-    pl_names : List[str]
+    pl_names : str | List[str]
 ):
-    def del_pl(data) -> dict:
+    def del_pl(data: UserDatabase) -> UserDatabase:
         for name in pl_names:
             del data[name]
         return data
@@ -153,14 +157,14 @@ def delete_playlists(
 
 def add_track(
     user : _User, 
-    tracks : SongTrack|List[SongTrack],
+    tracks : 'SongTrack'|List['SongTrack'],
     playlists : str|List[str] = FAVOURITE
 ) -> UserDatabase:
     """Add a track to the user's playlist database, returns the new playlist """
     if isinstance(playlists, str):
         playlists = [playlists]
 
-    def append(data: dict) -> dict:
+    def append(data: UserDatabase) -> UserDatabase:
 
         def _apeend(playlistname):
             if not data.get(playlistname):
@@ -169,7 +173,7 @@ def add_track(
             if isinstance(tracks,list):
                 data[playlistname].extend([track.to_dict() for track in tracks])
             else:
-                data[playlistname].append(tracks)
+                data[playlistname].append(tracks.to_dict())
 
         if isinstance(playlists,list):
             for playlistname in playlists:
@@ -183,22 +187,23 @@ def add_track(
 
 def remove_tracks(
     user : _User, 
-    index: List[int],
+    indexs: List[int],
     playlist_name : str = FAVOURITE
 ) -> UserDatabase:
 
     # If it is the last song in the track, just remove the json file
     
-    def delete(data: dict) -> dict:
-        key,url = get_track_by_index(user, index)
-        
-        if data.get(playlist_name):
-            raise KeyError(f"{playlist_name} is not a valid playlist for {user.name}")
+    def delete(data: UserDatabase) -> UserDatabase|DEL:
+        for index in indexs:
+            key,url = get_track_by_index(user, index)
+            
+            if data.get(playlist_name):
+                raise KeyError(f"{playlist_name} is not a valid playlist for {user.name}")
 
-        del data[playlist_name][key]
+            del data[playlist_name][key]
 
         if not data:
-            return DEL
+            return DEL()
         return data
 
     return edit_data(user, delete)
