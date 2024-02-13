@@ -1,5 +1,8 @@
 import discord
 import json
+import logging
+
+logger = logging.getLogger('database')
 
 from keys import *
 from typing import TYPE_CHECKING,TypedDict,Dict
@@ -36,7 +39,7 @@ def check_server_database(bot) -> None:
             if ID in data.keys():
                 if data[ID].keys() != defaultdb.keys():
                     data[ID] = dict(defaultdb, **data[ID])
-                    print(guild, "has incorrect key")
+                    logger.warn(f"{guild} has incorrect key. It has been updated")
 
         jsonf.seek(0)
         json.dump(data, jsonf, indent=4)

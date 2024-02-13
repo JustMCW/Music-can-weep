@@ -438,15 +438,6 @@ class WebFileTrack(SongTrack):
             seekable=seekable
         )
 
-        # if not self.thumbnail:
-        #     @property
-        #     def random_thumbnail(self):
-        #         from random import choice
-        #         img = choice(DEFAULT_IMAGES)
-        #         logger.warning(img)
-        #         return img
-        #     self.thumbnail = random_thumbnail
-        #     print(self.thumbnail)
 
     def to_dict(self) -> dict:
         return {

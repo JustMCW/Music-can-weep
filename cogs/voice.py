@@ -43,9 +43,7 @@ class VoiceCommands(commands.Cog):
         if len(voice_channel.members) == 0:
             return await ctx.reply("Cannot join vc that has no one in it")
 
-        print("Joining... stuck?")
         await music.join_voice_channel(voice_channel)
-        print("or not...")
         await ctx.reply(ReplyStrings.JOIN.format(voice_channel))
         queue = music.get_song_queue(ctx.guild)
         await music.update_audio_message(queue)

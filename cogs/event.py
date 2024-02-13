@@ -115,7 +115,7 @@ class Events(commands.Cog):
         elif custom_id == "import":
             await interaction.response.defer(thinking=True)
             data: list[str] = (await message.attachments[0].read()).decode("utf-8").split("+")
-            
+
             for line in data:
                 if not line:
                     continue
@@ -126,7 +126,7 @@ class Events(commands.Cog):
                         requester=message.author,
                     )
                 except Exception as yt_dl_error:
-                    print(f"Failed to add {line} to the queue because `{yt_dl_error}`")
+                    await message.reply(f"Failed to add {line} to the queue because `{yt_dl_error}`")
                 else:
                     queue.append(t)
 

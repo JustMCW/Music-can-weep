@@ -168,7 +168,6 @@ async def clear_audio_message_for_queue(
 
 
     # Modifying the embed ~ 
-    print(audio_message)
     await clear_audio_message(audio_message)
     
     logger.info("Cleared audio messsage.")

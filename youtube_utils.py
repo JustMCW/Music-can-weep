@@ -139,7 +139,7 @@ def get_playlist_data(playlist_url) -> Tuple[str,dict]:
     found : list[element.Tag] = soup.find_all("div",attrs={'data-testid':"track-row"})
 
     playlist = []
-    # print(soup)
+
     for f in found:
         span = f.find_all(
             "span",
@@ -190,7 +190,6 @@ def get_recommendation(url) -> List[YoutubeVideo]:
                                                 # length  = item["lengthText"]["simpleText"],
                                                 thumbnail = item["thumbnail"]["thumbnails"][-1]["url"]))
         except KeyError as ke:
-            print(ke)
-            print(item)
+            raise
     return return_result
 
