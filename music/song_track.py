@@ -364,7 +364,7 @@ class SongTrack:
     def play(
         self,
         voice_client: discord.VoiceClient,
-        after: Optional[Callable]= None,
+        after: Optional[Callable[[Exception|None], Any]]= None,
         volume: float=1,
         pitch: float = 1,
         tempo: float = 1,

@@ -333,7 +333,7 @@ class SongQueue(deque[SongTrack]):
     ### Finally, play the audio
         self.play_first()
 
-    def after_playing(self, voice_error :Optional[str] = None):
+    def after_playing(self, voice_error :Optional[Exception] = None):
         """Handles everything that happenes after an audio track has ended"""
 
     ### Stuff that must be done after an audio ended : cleaning up the process and handling error(s)
