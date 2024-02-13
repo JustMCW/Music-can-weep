@@ -1,19 +1,141 @@
 import asyncio
 import logging
-
 import discord
+import math
 
-from .voice_constants import UPDATE_DELAY
+import convert
+from literals import MyEmojis,ReplyStrings
+from my_buttons import MusicButtons
 
-logger = logging.getLogger(__name__)
+from .song_track import YoutubeTrack,WebFileTrack,WebsiteSongTrack
+from .voice_constants import UPDATE_DELAY, PROGRESSBAR_SIZE
+
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .song_queue import SongQueue
+    
+    
+logger = logging.getLogger(__name__)
 
 ### Audio messages
 
+def audio_displayer(queue : 'SongQueue') -> discord.Embed:
+    """returns  discord embed for displaying the audio that is playing"""
+    if not queue.voice_client:
+        raise RuntimeError("Attempted to create an audio_message while not connected to a voice channel")
+    
+    current_track = queue[0]
+
+    #Init embed + requester header + thumbnail
+    rembed = discord.Embed( title= current_track.title,
+                            url= current_track.webpage_url or current_track.source_url,
+                            color=discord.Color.from_rgb(255, 255, 255) ) \
+            .set_author(name=f"Requested by {current_track.requester.display_name}" ,
+                        icon_url=current_track.requester.display_avatar ) \
+            .set_image( url=current_track.thumbnail )
+
+    # Creator field
+    if isinstance(current_track,WebsiteSongTrack):
+
+        if isinstance(current_track,YoutubeTrack):
+            #Author field
+            channel,channel_url = current_track.channel
+            rembed.add_field(
+                name=f"{MyEmojis.youtube_icon} YT channel",
+                value=f"[{channel}]({channel_url})"
+            )
+
+        else:
+            uploader, uploader_url = current_track.uploader
+            rembed.add_field(
+                name=f"💡 Creator",
+                value=f"[{uploader}]({uploader_url})"
+            )
+
+    duration_formmated = convert.length_format(current_track.duration) if current_track.duration else "N/A"
+    # File size field
+    if isinstance(current_track, WebFileTrack):
+        rembed.add_field(
+            name=f"File format",
+            value=f"{current_track.file_format}"
+        ).add_field(
+            name=f"File size",
+            value=f"{current_track.file_size}"
+        )
+    else:
+        rembed.add_field(name="↔️ Length",
+                         value=f'`{duration_formmated}`')
+    
+    subtitles = getattr(current_track,"subtitles",None)
+    rembed.add_field(name="📝 Lyrics",
+                     value=f"*Available in {len(subtitles)} languages*" if subtitles else "*Unavailable*")
+        
+    emoji_before = "━" or '🟥' 
+    emoji_mid = "●"
+    emoji_after = "━" or '⬜️'
+    #Durartion field + Progress bar
+    
+    
+    
+    if current_track.duration:
+        try:
+            progress = max(
+                math.floor(
+                    (queue.time_position / current_track.duration) * PROGRESSBAR_SIZE
+                ),
+                1
+            )
+        except AttributeError:
+            progress = 1
+
+        progress_bar = (emoji_before * (progress-1)) + emoji_mid + emoji_after * (PROGRESSBAR_SIZE-progress)
+        
+        
+        
+        
+        
+        rembed.set_footer(text=f"{convert.length_format(int(queue.time_position))} [ {progress_bar} ] {duration_formmated}")
+
+
+    # General stuff
+    rembed.add_field(
+        name="📶 Volume ",
+        value=f"`{queue.volume_percentage}%`"
+    ).add_field(
+        name="⏩ Tempo",
+        value=f"`{queue.tempo:.2f}`"
+    ).add_field(
+        name="ℹ️ Pitch",
+        value=f'`{queue.pitch:.2f}`'
+    )
+    
+    
+    
+    rembed.add_field(
+        name="🔊 Voice Channel",
+        value=f"{queue.voice_client.channel.mention}"
+    ).add_field(
+        name="🔂 Looping",
+        value=f'**{ReplyStrings.prettify_bool(queue.looping)}**' 
+    ).add_field(
+        name="🔁 Queue looping",
+        value=f'**{ReplyStrings.prettify_bool(queue.queue_looping)}**'
+    )
+            
+    if queue.get(1):
+        rembed.add_field(
+            name="🎶 Upcoming track",
+            value=queue[1].title
+        )
+    elif queue.auto_play and isinstance(current_track, YoutubeTrack) and not queue.queue_looping:
+        rembed.add_field(
+            name="🎶 Upcoming track (Auto play)",
+            value= current_track.recommend.title
+        )
+
+    return rembed
 
 async def create_audio_message(
     queue: 'SongQueue',
@@ -26,11 +148,9 @@ async def create_audio_message(
     if not queue.current_track:
         return 
     
-    from my_buttons import MusicButtons
-    from literals   import ReplyEmbeds
 
     message_info = {
-        "embed": ReplyEmbeds.audio_displayer(queue),
+        "embed": audio_displayer(queue),
         "view" : MusicButtons.AudioControllerButtons(queue)
     }
 
@@ -120,11 +240,9 @@ async def update_audio_message(queue: 'SongQueue'):
     if not audio_msg: 
         return logger.warning("Audio message adsent when trying to update it.")
 
-    from my_buttons import MusicButtons
-    from literals   import ReplyEmbeds
 
     await audio_msg.edit(
-        embed = ReplyEmbeds.audio_displayer(queue),
+        embed = audio_displayer(queue),
         view = MusicButtons.AudioControllerButtons(queue)
     )
 
@@ -141,7 +259,6 @@ async def clear_audio_message(audio_message: discord.Message):
         updated_embed.set_thumbnail(url=updated_embed.image.url)
         updated_embed.set_image(url=None)
 
-    from my_buttons  import MusicButtons
     await audio_message.edit(
         embed=updated_embed,
         view=MusicButtons.PlayAgainButton
