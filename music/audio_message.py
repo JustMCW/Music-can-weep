@@ -15,7 +15,8 @@ if TYPE_CHECKING:
 ### Audio messages
 
 
-async def create_audio_message(queue: 'SongQueue',
+async def create_audio_message(
+    queue: 'SongQueue',
     target: discord.abc.Messageable | discord.Message
 ):
     """
@@ -38,7 +39,7 @@ async def create_audio_message(queue: 'SongQueue',
         await target.edit(**message_info)
         queue.audio_message = await target.channel.fetch_message(target.id)
 
-    if isinstance(target,discord.TextChannel):
+    elif isinstance(target,discord.TextChannel):
         queue.current_track.request_message
         try:
             queue.audio_message = await target.send(**message_info)
@@ -49,7 +50,8 @@ async def create_audio_message(queue: 'SongQueue',
                 if  isinstance(chan,discord.TextChannel)
             ]
             queue.audio_message = await channels[-1].send(**message_info)
-
+    else:
+        raise ValueError("Unhandled type passed in create_audio_message function")
     #A thread that keeps updating the audio progress bar until the audio finishs
     t = queue[0]
 

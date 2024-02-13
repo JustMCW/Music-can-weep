@@ -205,7 +205,7 @@ async def play_track_handler(
         if voice_client.source:
             return
 
-        await music.create_audio_message(queue, ctx.channel)
+        await music.create_audio_message(queue, ensure_type(ctx.channel, discord.TextChannel))
         NewTrack = queue[0]
     else:
     # #Make our audio message
@@ -220,18 +220,20 @@ async def play_track_handler(
     
     # Happens when 2 user try to play tracks at the same time, or something else idk
     except discord.errors.ClientException as cl_exce:
-            if cl_exce.args[0] == 'Already playing audio.':
-                if queue.enabled:
-                    return await reply_msg.edit(embed=discord.Embed(title = f"\"{NewTrack.title}\" has been added to the queue",
-                                            color=discord.Color.from_rgb(255, 255, 255))
-                                .add_field(name="Length ↔️",
-                                            value=f"`{convert.length_format(NewTrack.duration)}`")
-                                .add_field(name = "Position in queue 🔢",
-                                            value=len(queue)-1)
-                            .set_thumbnail(url = NewTrack.thumbnail))
-                    
-                return await ctx.reply("Unable to play this track because another tracks was requested at the same time")
-            raise cl_exce
+        if cl_exce.args[0] == 'Already playing audio.':
+            if queue.enabled:
+                return await reply_msg.edit(embed=discord.Embed(title = f"\"{NewTrack.title}\" has been added to the queue",
+                                        color=discord.Color.from_rgb(255, 255, 255))
+                            .add_field(name="Length ↔️",
+                                        value=f"`{convert.length_format(NewTrack.duration)}`")
+                            .add_field(name = "Position in queue 🔢",
+                                        value=len(queue)-1)
+                        .set_thumbnail(url = NewTrack.thumbnail))
+            
+            if isinstance(ctx,discord.Interaction):
+                return ctx.response.send_message("Unable to play this track because another tracks was requested at the same time")
+            return await ctx.reply("Unable to play this track because another tracks was requested at the same time")
+        raise cl_exce
 
 
 #COMMANDS
@@ -317,8 +319,12 @@ class PlayCommands(commands.Cog):
 
             # idk prop have some weird ass error that happens when the url has extra info in the back
             if url_match["domain"] in TrackDomain.YOUTUBE.value:
-                
                 destination_url = extract_yt_url_from(destination_url)
+                
+                # a domain was extracted but the url isn't completed 
+                # ie something like www.youtube.com
+                if not destination_url:
+                    return await ctx.reply("Your URL isn't complete ! (Missing something like https)")
                 
             for domain in list(TrackDomain):
                 if url_match["domain"] in domain.value:
@@ -431,7 +437,7 @@ async def setup(bot: commands.Bot):
     async def play(interaction: discord.Interaction, message: discord.Message):
         if not interaction.guild:
             return await interaction.response.send_message("This is a dm, you have to be in a server to play stuff.",ephemeral=True)
-        author = interaction.user
+        author = ensure_type(interaction.user, discord.Member)
 
     
         if not interaction.guild.voice_client:
