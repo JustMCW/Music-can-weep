@@ -24,7 +24,7 @@ def length_format(totalSeconds:int) -> str:
         Sec = int(totalSeconds % 60)
         return f"{Hours}:{Min:02d}:{Sec:02d}"
     
-def timestr_to_sec(string:str)->int:
+def timestr_to_sec(string:str)-> Optional[int]:
     """Try to match a time-like object from the string, returns `None` if not found"""
     
     # Just a number.
@@ -61,18 +61,21 @@ def timestr_to_sec(string:str)->int:
             except IndexError:
                 return None
 
-def timestr_to_sec_ms(time_string:str) -> int:
+def timestr_to_sec_ms(time_string: str) -> float:
     """timestr to sec but includes ms in the time string, the ms *must* have exactly 3 decimal places."""
-    try:
+    
         #Hour min and millisec are optional
-        time_group:list = re.match(
-            #           hour       min      sec     millisec
-            pattern=r"(\d{1,2}:)?(\d{1,2}:)?(\d{1,2})(\.\d{3})?",
-            string=time_string
-        ).groups(None)
-    except AttributeError:
-        #No groups means no match found
-        return None
+    time_group = re.match(
+        #           hour       min      sec     millisec
+        pattern=r"(\d{1,2}:)?(\d{1,2}:)?(\d{1,2})(\.\d{3})?",
+        string=time_string
+    )
+    
+    #No groups means no match found
+    if time_group is None:
+        raise ValueError("timestr_to_sec_ms only takes string in the format of 'hh:mm:ss.iii'")
+
+    time_group = time_group.groups(None)
 
     #Turn them into int and give each of them a variable
     hour,min,sec,millisec = map(lambda x: int(x.replace(":","").replace(".","")) if x is not None else x, time_group) 
@@ -84,6 +87,7 @@ def timestr_to_sec_ms(time_string:str) -> int:
     
     hour = hour or 0
     min = min or 0
+    sec = sec or 0
     millisec = millisec or 0
 
     #Give back the result
@@ -94,5 +98,5 @@ from discord.ext import commands
 # for convenient access with type hinting 
 class TimeConverter(commands.Converter[int]):
     """Converts a string in the format of time to seconds"""
-    async def convert(self, ctx: commands.Context, argument: str) -> int:
+    async def convert(self, ctx: commands.Context, argument: str) -> Optional[int]:
         return timestr_to_sec(argument)

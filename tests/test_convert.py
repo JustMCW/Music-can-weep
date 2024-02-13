@@ -24,6 +24,8 @@ class Test_Convert(unittest.TestCase):
         self.assertEqual(convert.timestr_to_sec("5:12"),5*60 + 12)
         self.assertEqual(convert.timestr_to_sec("12:05:12"),12*3600 + 5*60 + 12)
 
+        
+        self.assertRaises(ValueError, convert.timestr_to_sec_ms, "ez")
         self.assertAlmostEqual(convert.timestr_to_sec_ms("9"),9)
         self.assertAlmostEqual(convert.timestr_to_sec_ms("9:00.100"),9*60+0.1)
         self.assertAlmostEqual(convert.timestr_to_sec_ms("5:12.690"),5*60 + 12 + 0.69)
