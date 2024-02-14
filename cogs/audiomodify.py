@@ -70,7 +70,7 @@ class AudioModifierCommands(commands.Cog):
             return await ctx.reply("Tempo can only range between `0.5-5`.")
 
         queue.tempo = float(new_tempo)
-        if guild.voice_client and queue.source and queue:
+        if queue.source:
             music.pause_audio(guild)
             queue.replay_track()
 

@@ -32,6 +32,11 @@ logger = logging.getLogger(__name__)
 
 #TODO : music.get_song_queue.audio_message != self.audio_message
 
+# how to call stuff after the queue
+# 1. set an event to wait for finish (complains about blocking, could use threading but heh)
+# 2. could continue using old method call_after thingy, but we could face potiential problem of recursion 
+
+# decision : 2, but handle the recursion thing
 
 class SongQueue(deque[SongTrack]):
     """
@@ -55,7 +60,6 @@ class SongQueue(deque[SongTrack]):
 
         self._event_loop = asyncio.get_event_loop()
         self._call_after :Optional[Callable] = None
-        self._after_flag :bool = False
 
         super().__init__()
 
@@ -139,10 +143,6 @@ class SongQueue(deque[SongTrack]):
         if self.source != None:
             self.source.volume = self.volume
 
-    def set_flag(self) -> None:
-        """Set a flag to let the after call acknowledge that the logic has been handled and it doesn't need to apply anymore"""
-        self._after_flag = True
-
 ### Modifying the queue
 
     def swap(self, i: int, j: int) -> None:
@@ -214,10 +214,9 @@ class SongQueue(deque[SongTrack]):
 
     @playing_audio
     def skip_track(self, count=1):
+
         if self.queue_looping:
             return self.shift_track(count)
-        # if not self.guild.voice_client:
-        #     raise custom_errors.NotInVoiceChannel
         
         def skip_after():
             for _ in range(count):
@@ -230,12 +229,13 @@ class SongQueue(deque[SongTrack]):
                 self.play_first()
 
         self._call_after = skip_after 
-        self.guild.voice_client.stop() #type: ignore
+        self.voice_client.stop() #type: ignore
 
     @playing_audio
     def replay_track(self):
         self._call_after = self.play_first
-        self.guild.voice_client.stop() #type: ignore
+        self.voice_client.stop() #type: ignore
+
 
     async def cleanup(self) -> None:
         """Removes every track from the queue after some time, including the first one and disconnects from the voice."""
@@ -261,9 +261,12 @@ class SongQueue(deque[SongTrack]):
 
         if not track:
             return logger.error("No song track is in the queue")
+        if not self.voice_client:
+            raise custom_errors.NotInVoiceChannel
 
+            
         track.play(
-            self.guild.voice_client, #type: ignore
+            self.voice_client,
             after  = self.after_playing,
 
             volume = self.volume,
@@ -341,26 +344,26 @@ class SongQueue(deque[SongTrack]):
         #AudioPlayer thread error, no trackback tho.
         if voice_error: 
             logger.exception("Voice error :",voice_error)
+        
+        finished_track = self.current_track
 
-        finshed_track = self.current_track
-
-        if finshed_track is None:
+        if finished_track is None:
             return logger.warning("Track finished not found")
 
-        logger.info(f"Track finshed : {finshed_track.title}")
+        logger.info(f"Track finshed : {finished_track.title}")
 
-        #Moved cleanup here in order to access returncode of the ffmepg process.
-        if not isinstance(finshed_track.source,LiveStreamAudio):
-            finshed_track.source.original.cleanup()
-            returncode = finshed_track.source.original.returncode
+        # Return code is 1, which is likely the case that the source url is invalid,
+        # therefore we re-extract the source url and try again
+        if not isinstance(finished_track.source,LiveStreamAudio):
+            returncode = finished_track.source.original.returncode
+            logger.info(f"Return code of the ffmpeg process : {returncode}")
 
-            # Recreate the source and process if ffmpeg returned 1
             if returncode == 1:
                 logger.warning("FFmpeg process returned 1, retrying...") 
                 self[0] = create_track_from_url(
-                    finshed_track.webpage_url, 
-                    finshed_track.requester, 
-                    finshed_track.request_message
+                    finished_track.webpage_url, 
+                    finished_track.requester, 
+                    finished_track.request_message
                 )
                 return self.play_first()
 
@@ -373,9 +376,10 @@ class SongQueue(deque[SongTrack]):
 
             async def finish():
                 await make_next_audio_message(self)
+                # the entire queue is empty
+                if not self and self.voice_client:
+                    await self.voice_client.disconnect()
 
-                if not self:
-                    await self.guild.voice_client.disconnect() #type: ignore
 
             return self._event_loop.create_task(finish())
 
@@ -383,8 +387,7 @@ class SongQueue(deque[SongTrack]):
         #Didn't wrap the code above because create_task has a great delay but cleanup actions has to be done ASAP
         self._event_loop.create_task(self.after_playing_inner())
 
-
-
+        
 #Multi-instances
 queue_hash : Dict[int, SongQueue] = {} 
 

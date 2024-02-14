@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 ### Audio messages
 
-def audio_displayer(queue : 'SongQueue') -> discord.Embed:
+def audio_display_embed(queue : 'SongQueue') -> discord.Embed:
     """returns  discord embed for displaying the audio that is playing"""
     if not queue.voice_client:
         raise RuntimeError("Attempted to create an audio_message while not connected to a voice channel")
@@ -150,7 +150,7 @@ async def create_audio_message(
     
 
     message_info = {
-        "embed": audio_displayer(queue),
+        "embed": audio_display_embed(queue),
         "view" : MusicButtons.AudioControllerButtons(queue)
     }
 
@@ -242,7 +242,7 @@ async def update_audio_message(queue: 'SongQueue'):
 
 
     await audio_msg.edit(
-        embed = audio_displayer(queue),
+        embed = audio_display_embed(queue),
         view = MusicButtons.AudioControllerButtons(queue)
     )
 

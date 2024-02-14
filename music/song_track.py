@@ -137,6 +137,7 @@ class _FFmpegPCMAudio(discord.FFmpegPCMAudio):
 
     def __del__(self) -> None:
         logger.debug(f"Deleted : {self.__class__.__name__}")
+        self.cleanup()
 
 class TimeFrameAudio(discord.PCMVolumeTransformer):
     """PCMVolumeTransformer added with seeking control on top.
@@ -199,6 +200,7 @@ class TimeFrameAudio(discord.PCMVolumeTransformer):
     def cleanup(self) -> None:
         logger.info("Audio thread exited.")
         self._audio_bytes.close()
+        super().cleanup()
     
     def __del__(self) -> None:
         if not self.seekable:
