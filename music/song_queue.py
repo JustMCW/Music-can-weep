@@ -145,6 +145,63 @@ class SongQueue(deque[SongTrack]):
 
 ### Modifying the queue
 
+    def poplefttohistory(self) -> SongTrack:
+        """Extension of popleft, the track popped is added to the history list, 
+        also adds recommended track if no track is left fot some reason"""
+        track = self.popleft()
+
+        # Adding auto play tracks
+        if len(self) == 0 and self.auto_play:
+            if isinstance(track,YoutubeTrack):
+                self.append(create_track_from_url(track.recommend.url))
+        self.history.append(track)
+        return track
+
+    def shift(self, count=1):
+        """Shifts tracks around without removing them. Example for 1 shift: `[a,b,c,d] => [b,c,d,a]`
+
+        Args:
+            count (int, optional): the track number of tracks to move, can be negative and it will move in the other direction. Defaults to 1.
+        """
+        self.rotate(count * -1)
+        
+    def skip(self, count=1):
+        """Skip tracks and append to history
+
+        Args:
+            count (int, optional): Number of tracks to skip. Defaults to 1.
+
+        Raises:
+            ValueError: if the an invalid count is passed: negative / greater than the length of the queue
+        """
+        if count < 0 or count > len(self):
+            raise ValueError("Invalid count is passed !")
+        
+        for _ in range(count):
+            self.poplefttohistory()
+                
+    def retrieve(self, count=1):
+        """Retrieve tracks from history
+
+        Args:
+            count (int, optional): Number of tracks to skip. Defaults to 1.
+
+        Raises:
+            ValueError: if the an invalid count is passed: negative / greater than the length of the queue
+        """
+        if count < 0 or count > len(self.history):
+            raise ValueError("Invalid count is passed !")
+        
+        for _ in range(count):
+            self.appendleft(self.history.pop(-1))
+    
+    def next(self, count=1):
+        if self.queue_looping:
+            self.shift(count)
+        else:
+            self.skip(count)
+    
+    
     def swap(self, i: int, j: int) -> None:
         if not self: 
             raise custom_errors.QueueEmpty("No tracks in the queue to be swapped")
@@ -167,19 +224,7 @@ class SongQueue(deque[SongTrack]):
         if playing:
             self.appendleft(playing_track) 
 
-    def poplefttohistory(self) -> SongTrack:
-        """Extension of popleft, the track popped is added to the history list, 
-        also adds recommended track if no track is left fot some reason"""
-        track = self.popleft()
-
-        # Adding auto play tracks
-        if len(self) == 0 and self.auto_play:
-            if isinstance(track,YoutubeTrack):
-                self.append(create_track_from_url(track.recommend.url))
-        self.history.append(track)
-        return track
-
-    
+ 
     def shift_track(self, count=1):
         """Shifts track around, but does not remove any track.
         [1,2,3,4] => [2,3,4,1]
@@ -204,9 +249,9 @@ class SongQueue(deque[SongTrack]):
             return self.shift_track(count * -1)
 
         def rewind_after():
-            for _ in range(count):
-                try: self.appendleft(self.history.pop(-1))
-                except IndexError: break
+            for _ in range(min(count, len(self.history))):
+                self.appendleft(self.history.pop(-1))
+                
             self.play_first()
 
         self._call_after = rewind_after
@@ -219,11 +264,8 @@ class SongQueue(deque[SongTrack]):
             return self.shift_track(count)
         
         def skip_after():
-            for _ in range(count):
-                try: 
-                    self.poplefttohistory()
-                except IndexError: 
-                    break 
+            for _ in range(min(count, len(self))):
+                self.poplefttohistory()
             
             if self.current_track:
                 self.play_first()

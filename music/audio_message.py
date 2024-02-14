@@ -261,7 +261,7 @@ async def clear_audio_message(audio_message: discord.Message):
 
     await audio_message.edit(
         embed=updated_embed,
-        view=MusicButtons.PlayAgainButton
+        view=MusicButtons.AfterButtons()
     )
 
 async def clear_audio_message_for_queue(

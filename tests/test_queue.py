@@ -13,7 +13,6 @@ class Fake:
 MOCK_GUILD = discord.Guild.__new__(discord.Guild)
 MOCK_GUILD.name = "Test"
 MOCK_GUILD.id = 69
-MOCK_GUILD._state = Fake()
 
 
 
@@ -41,13 +40,66 @@ class Test_Queue(unittest.TestCase):
         self.assertEqual(bool(self.queue),True)
         self.assertGreater(len(self.queue),0)
 
-    def test_shifting(self):
+    def test_shift(self):
         self.append_tracks()
 
         item0 = self.queue[0]
         self.queue.shift_track(1)
 
         self.assertEqual(self.queue[-1],item0)
+
+    def test_skip(self):
+        self.append_tracks(5)
+        item0 = self.queue[0]
+        
+        self.queue.skip()
+        self.assertEqual(len(self.queue),4)
+        self.assertEqual(self.queue.history[0],item0)
+        
+        with self.assertRaises(ValueError):
+            self.queue.skip(69)
+    
+    def test_next(self):  
+        self.append_tracks(5)
+        item0 = self.queue[0]
+        
+        self.queue.next()
+        self.assertEqual(len(self.queue),4)
+        self.assertEqual(self.queue.history[0],item0)
+        
+        with self.assertRaises(ValueError):
+            self.queue.next(69)
+         
+        self.queue.queue_looping = True
+        self.queue.next(2)
+        self.assertEqual(len(self.queue), 4)
+
+    def test_retrieve(self):
+        self.assertEqual(self.queue.queue_looping, False)
+        
+        with self.assertRaises(ValueError):
+            self.queue.retrieve()
+        
+        self.append_tracks(5)
+        
+        item0 = self.queue.poplefttohistory()
+        self.assertEqual(self.queue.history[0], item0)
+
+        self.queue.retrieve()
+        self.assertEqual(self.queue[0], item0)
+        
+        self.queue.skip(3)
+        self.assertEqual(len(self.queue.history), 3)
+        
+        self.queue.retrieve(2)
+        self.assertEqual(len(self.queue.history),1)
+        self.assertEqual(self.queue.history[0],item0)
+
+        with self.assertRaises(ValueError):
+            self.queue.retrieve(69)
+            
+        self.queue.retrieve(1)
+        self.assertEqual(len(self.queue),5)
 
     def test_swap(self):
         self.assertRaises(QueueEmpty,self.queue.swap,1,1)

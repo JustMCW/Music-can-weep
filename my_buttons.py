@@ -319,12 +319,15 @@ class MusicButtons:
         URL = btn.message.embeds[0].url
         await play_track_handler(ctx,URL, await ctx.reply(f"{btn.user.display_name} plays this again ~"),author=btn.user)
 
-    PlayAgainButton = View().add_item(
-        Button(label="Replay this song !",
+
+    # Handled elsewhere
+    class AfterButtons(View):
+        @button(label="Replay this song !",
                 custom_id="play_again",
                 style=ButtonStyle.primary,
                 emoji="🎧")
-    )
+        async def _(self, interaction, btn):
+            pass
 
 
 class UtilityButtons(View):
@@ -335,7 +338,7 @@ class UtilityButtons(View):
 CONTROLLER_IDS = []
 
 if not CONTROLLER_IDS:
-    for row in MusicButtons.AudioControllerButtons().to_components():
-        CONTROLLER_IDS.extend(
-            [item["custom_id"] for item in row["components"]]
-        )
+    for row in MusicButtons.AudioControllerButtons.__view_children_items__:
+        custom_id = row.__discord_ui_model_kwargs__["custom_id"]
+        if custom_id in CONTROLLER_IDS: continue
+        CONTROLLER_IDS.append(custom_id)
